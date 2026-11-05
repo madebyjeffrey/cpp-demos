@@ -94,6 +94,7 @@ pub(crate) struct Description {
     pub text: String,
     pub children: Vec<View>,
     pub action: Option<Rc<dyn Fn()>>,
+    pub cancel: Option<Rc<dyn Fn()>>,
     pub data: Data,
     pub style: Style,
     pub enabled: bool,
@@ -117,6 +118,7 @@ impl View {
             text,
             children,
             action: None,
+            cancel: None,
             data: Data::None,
             style: Style::default(),
             enabled: true,
@@ -181,6 +183,10 @@ impl View {
             .align(Align::Start);
         Rc::make_mut(&mut v.0).anchor = Some(anchor.into());
         v
+    }
+    pub fn on_cancel(mut self, action: impl Fn() + 'static) -> Self {
+        Rc::make_mut(&mut self.0).cancel = Some(Rc::new(action));
+        self
     }
     pub fn autofocus(mut self, value: bool) -> Self {
         Rc::make_mut(&mut self.0).autofocus = value;

@@ -130,3 +130,28 @@ fn inspector_picks_real_nodes_and_restores_style_overrides() {
     host.layout(Size::new(400., 200.), &Metrics).unwrap();
     assert_eq!(inspector.selected.get().unwrap().bounds.width, original);
 }
+
+#[test]
+fn percentage_heights_resolve_against_allocated_parent_bounds() {
+    let host = Host::new(|| {
+        view! {column(gap:0){
+            button("Half",height:percent(50.),on_click:||{});
+            button("Quarter",position:Position::Absolute,left:0,top:0,width:percent(25.),height:percent(25.),on_click:||{});
+        }}
+    });
+    host.layout(Size::new(400., 200.), &Metrics).unwrap();
+    let nodes = host.snapshot().unwrap();
+    assert_eq!(
+        nodes
+            .iter()
+            .find(|n| n.text == "Half")
+            .unwrap()
+            .bounds
+            .height,
+        100.
+    );
+    assert_eq!(
+        nodes.iter().find(|n| n.text == "Quarter").unwrap().bounds,
+        Rect::new(0., 0., 100., 50.)
+    );
+}

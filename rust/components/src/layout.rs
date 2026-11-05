@@ -152,6 +152,9 @@ impl Host {
             model.set_viewport(offset, height);
         }
         self.reconcile_modal()?;
+        if let Some(id) = self.0.autofocus.take().filter(|id| self.in_scope(*id)) {
+            self.focus(id)?;
+        }
         if self.focused().is_none() {
             let id = {
                 let m = self.0.mounted.borrow();
@@ -526,7 +529,12 @@ impl Tree<'_> {
                         .iter()
                         .map(|c| {
                             let d = self.desired[&nodes[*c].id];
-                            if horiz { d.width } else { d.height }
+                            let style = nodes[*c].style;
+                            if horiz {
+                                style.width.resolve(main_limit).unwrap_or(d.width)
+                            } else {
+                                style.height.resolve(main_limit).unwrap_or(d.height)
+                            }
                         })
                         .collect();
                     let margins: f64 = line.iter().map(|c| 2. * nodes[*c].style.margin).sum();
@@ -601,6 +609,7 @@ impl Tree<'_> {
                         let desired = self.desired[&nodes[*child].id];
                         let natural_cross = if horiz { desired.height } else { desired.width };
                         let explicit = if horiz { cs.height } else { cs.width };
+                        let natural_cross = explicit.resolve(cross_limit).unwrap_or(natural_cross);
                         let cross = if s.align == Align::Stretch && explicit == Length::Auto {
                             (line_cross - 2. * cs.margin).max(0.)
                         } else {
@@ -650,14 +659,14 @@ impl Tree<'_> {
                 {
                     (content.width - l - r).max(0.)
                 } else {
-                    d.width
+                    cs.width.resolve(content.width).unwrap_or(d.width)
                 };
                 let h = if cs.height == Length::Auto
                     && let (Some(t), Some(b)) = (t, b)
                 {
                     (content.height - t - b).max(0.)
                 } else {
-                    d.height
+                    cs.height.resolve(content.height).unwrap_or(d.height)
                 };
                 self.arrange(
                     child,

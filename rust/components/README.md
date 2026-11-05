@@ -245,4 +245,6 @@ outlines a real mounted node and reports its key, kind and bounds. Width overrid
 are keyed by mounted identity and can be reset; invalid style values return layout
 errors. Escape exits picking. `Host::pick` also works without the inspector panel.
 Use `autofocus: true` on a control to focus it when the host has no valid focus;
-newly mounted later autofocus controls take precedence (useful for inline editing).
+a newly mounted autofocus control also takes focus, with later controls taking
+precedence (useful for inline editing). `on_cancel` runs on Escape after any IME
+composition has first been cancelled.

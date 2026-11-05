@@ -77,6 +77,7 @@ pub(crate) struct Inner {
     pub theme: Cell<Theme>,
     pub viewport: Cell<Size>,
     pub interaction: RefCell<crate::input::Interaction>,
+    pub autofocus: Cell<Option<NodeId>>,
     pub inspector: RefCell<crate::Inspector>,
     pub scroll: RefCell<HashMap<NodeId, f64>>,
     pub deadlines: RefCell<Vec<crate::deadlines::Deadline>>,
@@ -101,6 +102,7 @@ impl Host {
             deadlines: RefCell::new(Vec::new()),
             scroll: RefCell::new(HashMap::new()),
             inspector: RefCell::new(crate::Inspector::new()),
+            autofocus: Cell::new(None),
         }))
     }
     pub fn on_invalidate(&self, wake: impl Fn() + 'static) {
@@ -161,6 +163,21 @@ impl Host {
         self.0.observer.epoch.set(epoch);
         // User getters and destructors never run under a mounted-tree borrow.
         let old = self.0.mounted.replace(next);
+        if let Some(id) = {
+            let m = self.0.mounted.borrow();
+            m.nodes
+                .iter()
+                .rev()
+                .find(|n| {
+                    m.descriptions[&n.id].autofocus
+                        && n.enabled
+                        && !n.hidden
+                        && !old.descriptions.contains_key(&n.id)
+                })
+                .map(|n| n.id)
+        } {
+            self.0.autofocus.set(Some(id));
+        }
         self.0
             .generation
             .set(self.0.generation.get().wrapping_add(1));

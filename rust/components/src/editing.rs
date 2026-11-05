@@ -88,10 +88,13 @@ impl Editor {
         }
     }
     fn checkpoint(&mut self) {
+        self.record((self.text.clone(), self.selection));
+    }
+    fn record(&mut self, snapshot: (String, Selection)) {
         if self.undo.len() >= 100 {
             self.undo.remove(0);
         }
-        self.undo.push((self.text.clone(), self.selection));
+        self.undo.push(snapshot);
         self.redo.clear();
     }
     fn replace(&mut self, value: &str, range: Range<usize>) -> Range<usize> {
@@ -110,12 +113,14 @@ impl Editor {
         start..end
     }
     fn unmark(&mut self, commit: bool) {
-        if !commit && let Some((text, selection)) = self.base.take() {
-            self.text = text;
-            self.selection = selection;
-            self.undo.pop();
+        if let Some((text, selection)) = self.base.take() {
+            if !commit {
+                self.text = text;
+                self.selection = selection;
+            } else if text != self.text {
+                self.record((text, selection));
+            }
         }
-        self.base = None;
         self.marked = None;
     }
 }
@@ -239,7 +244,6 @@ impl Host {
             let mut editors = self.0.editors.borrow_mut();
             let e = editors.get_mut(&input.id).unwrap();
             if e.base.is_none() {
-                e.checkpoint();
                 e.base = Some((e.text.clone(), e.selection));
             }
             let range = replacement
@@ -378,7 +382,21 @@ impl Host {
             );
         }
         if command == TextCommand::Escape {
-            return self.unmark_text(false);
+            if self.unmark_text(false)? {
+                return Ok(true);
+            }
+            let action = self
+                .0
+                .mounted
+                .borrow()
+                .descriptions
+                .get(&input.id)
+                .and_then(|d| d.cancel.clone());
+            if let Some(action) = action {
+                action();
+                return Ok(true);
+            }
+            return Ok(false);
         }
         if command == TextCommand::Enter {
             self.unmark_text(true)?;
@@ -446,9 +464,11 @@ impl Host {
                     } else {
                         caret..next
                     };
-                    e.checkpoint();
-                    e.replace("", range);
-                    changed = true;
+                    if !range.is_empty() {
+                        e.checkpoint();
+                        e.replace("", range);
+                        changed = true;
+                    }
                     e.selection.caret
                 }
                 _ => return Ok(false),

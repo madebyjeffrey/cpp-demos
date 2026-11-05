@@ -103,8 +103,11 @@ fn item(input: ParseStream<'_>) -> Result<Item> {
         children,
     })
 }
-fn children(items: Vec<Item>) -> Result<Tokens> {
-    let entries = items.into_iter().map(expand).collect::<Result<Vec<_>>>()?;
+fn children(items: Vec<Item>, root: &Tokens) -> Result<Tokens> {
+    let entries = items
+        .into_iter()
+        .map(|item| expand(item, root))
+        .collect::<Result<Vec<_>>>()?;
     let output = output();
     Ok(quote!({
         let mut #output = ::std::vec::Vec::new();
@@ -115,12 +118,12 @@ fn children(items: Vec<Item>) -> Result<Tokens> {
 fn output() -> Ident {
     Ident::new("__scars_children", proc_macro2::Span::mixed_site())
 }
-fn expand(item: Item) -> Result<Tokens> {
+fn expand(item: Item, root: &Tokens) -> Result<Tokens> {
     let output = output();
     match item {
         Item::If { condition, yes, no } => {
-            let yes = children(yes)?;
-            let no = children(no)?;
+            let yes = children(yes, root)?;
+            let no = children(no, root)?;
             Ok(quote! {if #condition {#output.extend(#yes);}else{#output.extend(#no);}})
         }
         Item::For {
@@ -128,7 +131,7 @@ fn expand(item: Item) -> Result<Tokens> {
             values,
             body,
         } => {
-            let body = children(body)?;
+            let body = children(body, root)?;
             Ok(quote! {for #pattern in #values {#output.extend(#body);}})
         }
         Item::Element {
@@ -198,12 +201,15 @@ fn expand(item: Item) -> Result<Tokens> {
                     })
             };
             let value = if is_container {
-                let body = children(body.ok_or_else(|| {
-                    syn::Error::new(name.span(), "container needs a child block")
-                })?)?;
+                let body = children(
+                    body.ok_or_else(|| {
+                        syn::Error::new(name.span(), "container needs a child block")
+                    })?,
+                    root,
+                )?;
                 if matches!(kind.as_str(), "section" | "group_box") {
                     let title = one(&mut positional)?;
-                    quote!(::scars_ui::View::#name(#title,#body))
+                    quote!(#root::View::#name(#title,#body))
                 } else {
                     if !positional.is_empty() {
                         return Err(syn::Error::new(
@@ -211,7 +217,7 @@ fn expand(item: Item) -> Result<Tokens> {
                             "container properties must be named",
                         ));
                     }
-                    quote!(::scars_ui::View::#name(#body))
+                    quote!(#root::View::#name(#body))
                 }
             } else {
                 match kind.as_str() {
@@ -221,37 +227,37 @@ fn expand(item: Item) -> Result<Tokens> {
                     }
                     "label" | "text" => {
                         let text = one(&mut positional)?;
-                        quote!(::scars_ui::View::label(#text))
+                        quote!(#root::View::label(#text))
                     }
                     "button" | "command_button" => {
                         let text = one(&mut positional)?;
                         let action = action.as_ref().ok_or_else(|| {
                             syn::Error::new(name.span(), "button needs on_click: handler")
                         })?;
-                        quote!(::scars_ui::View::button(#text,#action))
+                        quote!(#root::View::button(#text,#action))
                     }
                     "checkbox" | "tri_checkbox" | "toggle" | "switch" | "text_field"
                     | "password_field" | "text_editor" | "search_field" => {
                         let text = one(&mut positional)?;
                         let b = need_binding()?;
-                        quote!(::scars_ui::View::#name(#text,#b))
+                        quote!(#root::View::#name(#text,#b))
                     }
                     "slider" => {
                         let b = need_binding()?;
                         let min = min.as_ref().map_or(quote!(0.), |v| quote!((#v)as f64));
                         let max = max.as_ref().map_or(quote!(1.), |v| quote!((#v)as f64));
                         let step = step.as_ref().map_or(quote!(0.01), |v| quote!((#v)as f64));
-                        quote!(::scars_ui::View::slider(#b,#min,#max,#step))
+                        quote!(#root::View::slider(#b,#min,#max,#step))
                     }
                     "progress" => {
                         if binding.is_some() {
                             let b = need_binding()?;
-                            quote!(::scars_ui::View::progress(#b))
+                            quote!(#root::View::progress(#b))
                         } else if positional.is_empty() {
-                            quote!(::scars_ui::View::indeterminate_progress())
+                            quote!(#root::View::indeterminate_progress())
                         } else {
                             let v = one(&mut positional)?;
-                            quote!({let value=(#v)as f64;::scars_ui::View::progress(::scars_ui::Binding::new(move||value,|_|{}))})
+                            quote!({let value=(#v)as f64;#root::View::progress(#root::Binding::new(move||value,|_|{}))})
                         }
                     }
                     "radio_group" | "segmented" => {
@@ -264,19 +270,19 @@ fn expand(item: Item) -> Result<Tokens> {
                         })?;
                         if kind == "radio_group" {
                             let title = one(&mut positional)?;
-                            quote!(::scars_ui::View::radio_group(#title,#b,#options))
+                            quote!(#root::View::radio_group(#title,#b,#options))
                         } else {
-                            quote!(::scars_ui::View::segmented(#b,#options))
+                            quote!(#root::View::segmented(#b,#options))
                         }
                     }
                     "image" => {
                         let image = one(&mut positional)?;
                         let mode = mode
                             .as_ref()
-                            .map_or(quote!(::scars_ui::ContentMode::Fit), |v| quote!(#v));
-                        quote!(::scars_ui::View::image((#image).clone(),#mode))
+                            .map_or(quote!(#root::ContentMode::Fit), |v| quote!(#v));
+                        quote!(#root::View::image((#image).clone(),#mode))
                     }
-                    "separator" | "spacer" => quote!(::scars_ui::View::#name()),
+                    "separator" | "spacer" => quote!(#root::View::#name()),
                     _ => quote!(#name(#(#positional),*)),
                 }
             };
@@ -360,7 +366,7 @@ fn expand(item: Item) -> Result<Tokens> {
                     {
                         quote!(#expr)
                     }
-                    "on_submit"
+                    "on_submit" | "on_cancel"
                         if matches!(
                             kind.as_str(),
                             "text_field" | "password_field" | "text_editor" | "search_field"
@@ -382,12 +388,33 @@ fn expand(item: Item) -> Result<Tokens> {
     }
 }
 
+fn runtime_path() -> Tokens {
+    use proc_macro_crate::{FoundCrate, crate_name};
+    if let Ok(found) = crate_name("scars-ui") {
+        return match found {
+            FoundCrate::Itself => quote!(::scars_ui),
+            FoundCrate::Name(name) => {
+                let name = Ident::new(&name, proc_macro2::Span::call_site());
+                quote!(::#name)
+            }
+        };
+    }
+    match crate_name("scars-window") {
+        Ok(FoundCrate::Name(name)) => {
+            let name = Ident::new(&name, proc_macro2::Span::call_site());
+            quote!(::#name::ui)
+        }
+        _ => quote!(::scars_ui),
+    }
+}
+
 /// Rust-like descriptions with expression arguments, `if`/`else`, and keyed `for` children.
 #[proc_macro]
 pub fn view(input: TokenStream) -> TokenStream {
     let Tree(tree) = parse_macro_input!(input as Tree);
-    match children(tree) {
-        Ok(children) => quote!(::scars_ui::View::fragment(#children)).into(),
+    let root = runtime_path();
+    match children(tree, &root) {
+        Ok(children) => quote!(#root::View::fragment(#children)).into(),
         Err(error) => error.into_compile_error().into(),
     }
 }

@@ -235,7 +235,9 @@ pub fn run() {
     assert!(window.is_visible());
     assert!(
         frames.get() > 0,
-        "No visible Metal frame delivered; use an awake foreground desktop"
+        "No visible Metal frame delivered; use an awake foreground desktop (active={}, occlusion={:?})",
+        app_kit::NSApplication::sharedApplication(MainThreadMarker::new().unwrap()).isActive(),
+        window.native_window().occlusionState(),
     );
     let before_resize = frames.get();
     window.set_content_size(Size::new(760., 540.)).unwrap();
