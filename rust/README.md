@@ -191,11 +191,10 @@ windows, utility panels and dialogs do not offer full-screen entry.
 | Interoperability with other renderers/native extensions | `raw-window-handle` 0.6, `native_window`, `native_view`, `metal_layer`, `Frame` |
 
 AppKit provides accessibility for native windows, menus and the titlebar buttons.
-Widget semantics belong with the future widget layer.
+Mounted components supply their own accessibility semantics.
 
-This crate supplies native windowing and a Skia canvas, ready for a component
-layer. It does not port the SCARS control engine or the older declarative C++ UI
-engine. GPU-capture diagnostics remain future work.
+The Rust component layer provides layout, interactive basic controls and text input.
+See [component contracts and examples](components/README.md). GPU-capture diagnostics remain future work.
 
 ## Ownership, callbacks and modal behavior
 

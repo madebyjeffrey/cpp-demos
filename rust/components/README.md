@@ -1,8 +1,8 @@
-# SCARS components — stage 1
+# SCARS components
 
 The portable foundation is implemented: reactive `State`/`Binding`, immutable
 descriptions, `view!`, mounted identity, action dispatch and ICU4X text services.
-Layout, native widget input and widget accessibility begin in stage 2.
+Layout, interactive controls and native widget accessibility are implemented in stage 2.
 
 From `rust/`:
 
@@ -45,9 +45,7 @@ let nodes = host.snapshot()?;
 
 Custom component functions return `View` and can be called inside `view!`.
 `if`/`else if`/`else` and `for` accept ordinary Rust expressions. Repeated children
-should declare stable `key:` values. In this stage containers accept `key:`;
-labels accept text and `key:`; buttons also require `on_click:`. Unsupported
-properties produce a compiler error. Binding-backed fields arrive in stage 2.
+should declare stable `key:` values. Unsupported properties produce a compiler error. Controls accept typed bindings; see stage 2 below.
 
 ## Contracts
 
@@ -79,3 +77,49 @@ crate's paragraph test uses source-built Skia and a bundled font to check
 geometry and index conversions without a window or Metal device. The window crate
 re-exports shared Skia types outside its native backend; all native implementation
 continues to live under its platform folder.
+
+## Stage 2 — usable controls
+
+`cargo run --example stage2` opens interactive preferences. Tab/Shift-Tab moves
+focus; arrow keys adjust sliders and grouped selections. `--render /tmp/ui.png`
+writes a CPU-rendered preview; `--smoke` closes automatically.
+
+```rust,ignore
+use scars_window::{Window, ui::*};
+let name = State::new(String::new());
+Window::builder("Profile").view(move || view! {
+    column(padding: 24, gap: 12) {
+        text_field("Your name", bind: name, accessible_label: "Name");
+        label(format!("Hello, {}", name.get()));
+        button("Clear", on_click: name.action(|name| name.set(String::new())));
+    }
+});
+```
+
+Available controls: labels, buttons, toggles, bool/tri-state checkboxes, switches,
+radio groups, segmented selection, sliders, determinate/indeterminate progress,
+encoded/RGBA images and a single-line text field. Containers include column, row,
+block, wrapping inline, layer, section, group box and panel. Common properties
+include padding/gap/margin, width/height (points or `percent`), min/max, grow/shrink,
+alignment/justification, wrapping, absolute anchors, z-index, colors, font and radius.
+The single top-level description fills the viewport; `hidden` retains layout but
+removes paint/input/semantics; `visible: false` removes the description.
+
+`State::action` captures a shared state handle without application-side `Rc`.
+Bindings accept either `State` or `Binding`. Builders stay pure. Keep expensive
+resources, including images, outside them. All coordinates are logical points.
+
+`WindowBuilder::view` installs rendering, pointer/keyboard dispatch, native IME,
+clipboard shortcuts and accessibility semantics. `Surface::set_view` replaces a
+mount transactionally; `clear_view` detaches it. Existing drawing is an underlay;
+unhandled events reach the previous callback. Closing/detaching invalidates cached
+accessibility elements. The portable `Host` can also use any pure `Measure` provider;
+`scars_window::ui::Renderer` supplies SkParagraph shaping and Skia painting.
+
+Editing uses byte indices internally and checked UTF-16 conversion at AppKit.
+IME drafts do not reach the binding until committed; external binding changes
+cancel drafts. Selection/deletion use ICU4X grapheme boundaries. This milestone
+has no undo history or multiline/password/numeric editing; those belong to stage 3.
+
+Tests: `cargo test --workspace`; native protocol/actions additionally use
+`SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test components` on an awake desktop.

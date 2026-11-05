@@ -14,6 +14,14 @@ define_class!(
     pub(super) struct ContentView;
     unsafe impl NSObjectProtocol for ContentView {}
     impl ContentView {
+        #[unsafe(method_id(accessibilityChildren))]
+        fn component_children(&self)->Option<Retained<NSArray<AnyObject>>> {with_surface(&self.weak(),components::children).flatten()}
+        #[unsafe(method_id(accessibilityFocusedUIElement))]
+        fn component_focus(&self)->Option<Retained<AnyObject>> {with_surface(&self.weak(),components::focused).flatten()}
+        #[unsafe(method_id(accessibilityHitTest:))]
+        fn component_hit(&self,p:NSPoint)->Option<Retained<AnyObject>> {with_surface(&self.weak(),|s|components::hit_test(s,p)).flatten()}
+        #[unsafe(method(isAccessibilityElement))]
+        fn component_element(&self)->bool {false}
         #[unsafe(method(isFlipped))]
         fn is_flipped(&self) -> bool { true }
         #[unsafe(method(acceptsFirstResponder))]

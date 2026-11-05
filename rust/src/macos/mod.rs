@@ -3,6 +3,7 @@
 
 mod builder;
 mod callbacks;
+mod components;
 mod input;
 mod rendering;
 mod text;
@@ -64,6 +65,7 @@ struct AppState {
 }
 
 struct SurfaceState {
+    components: RefCell<Option<Rc<components::Mounted>>>,
     app: Weak<AppState>,
     parent: Weak<SurfaceState>,
     children: RefCell<Vec<Weak<SurfaceState>>>,
@@ -699,6 +701,7 @@ impl Surface {
         if !self.is_open() {
             return;
         }
+        self.clear_view();
         let previous = self.state.callbacks.replace(callbacks);
         drop(previous);
         self.state.failed.set(false);
@@ -1147,6 +1150,7 @@ fn create_surface(
         view.setWantsLayer(true);
         native.setContentView(Some(&view));
         let state = Rc::new(SurfaceState {
+            components: RefCell::new(None),
             app: Rc::downgrade(app),
             parent: parent.map(Rc::downgrade).unwrap_or_default(),
             children: RefCell::new(vec![]),
@@ -1216,6 +1220,7 @@ fn close_surface(s: &Rc<SurfaceState>, result: DialogResult) {
     if !s.open.replace(false) {
         return;
     }
+    components::closed(s);
     sync_fullscreen_controls(s);
     s.animating.set(false);
     s.previous.set(None);

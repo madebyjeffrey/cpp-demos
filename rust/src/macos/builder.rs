@@ -21,6 +21,7 @@ pub struct WindowBuilder {
     close_request: Option<WindowCloseRequest>,
     closed: Option<WindowClosed>,
     menu: Option<(Vec<MenuItem>, WindowCommand)>,
+    view: Option<Rc<dyn Fn() -> crate::ui::View>>,
 }
 
 impl Window {
@@ -38,11 +39,17 @@ impl Window {
             close_request: None,
             closed: None,
             menu: None,
+            view: None,
         }
     }
 }
 
 impl WindowBuilder {
+    /// Mount a reactive component tree. Drawing, input, IME and accessibility are wired internally.
+    pub fn view(mut self, builder: impl Fn() -> crate::ui::View + 'static) -> Self {
+        self.view = Some(Rc::new(builder));
+        self
+    }
     pub fn size(mut self, width: f64, height: f64) -> Self {
         self.options.size = Size::new(width, height);
         self
@@ -171,6 +178,9 @@ impl WindowBuilder {
             on_close_request,
             on_closed,
         });
+        if let Some(view) = self.view {
+            window.set_view(move || view())?;
+        }
         Ok(window)
     }
 }

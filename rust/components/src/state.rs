@@ -22,6 +22,12 @@ impl Observer {
         let old = self.wake.replace(Some(wake));
         drop(old);
     }
+    pub fn redraw(&self) {
+        let wake = self.wake.borrow().clone();
+        if let Some(wake) = wake {
+            wake();
+        }
+    }
     fn invalidate(&self) -> Option<Wake> {
         if !self.dirty.replace(true) {
             self.wake.borrow().clone()
@@ -159,6 +165,11 @@ impl<T: 'static> State<T> {
         let write = self.clone();
         Binding::new(move || read.get(), move |value| write.set(value))
     }
+    /// Capture an owned state handle in an event action.
+    pub fn action(&self, action: impl Fn(&Self) + 'static) -> impl Fn() + 'static {
+        let state = self.clone();
+        move || action(&state)
+    }
 }
 
 /// Owned two-way access. A custom setter may reject or normalize an input;
@@ -176,6 +187,9 @@ impl<T> Clone for Binding<T> {
     }
 }
 impl<T> Binding<T> {
+    pub fn binding(&self) -> Self {
+        self.clone()
+    }
     pub fn new(read: impl Fn() -> T + 'static, write: impl Fn(T) + 'static) -> Self {
         Self {
             read: Rc::new(read),

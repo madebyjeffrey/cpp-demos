@@ -1,6 +1,7 @@
 use crate::{
-    Kind, View,
+    Bitmap, ContentMode, Kind, Rect, Size, Style, TextLayout, TextStyle, Theme, Value, View,
     state::{Observer, Tracking},
+    view::{Data, Description},
 };
 use std::{
     cell::{Cell, RefCell},
@@ -10,7 +11,6 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-/// Opaque mounted identity. Removed IDs are never recycled, including across hosts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct NodeId(u64);
 impl fmt::Display for NodeId {
@@ -18,9 +18,7 @@ impl fmt::Display for NodeId {
         self.0.fmt(f)
     }
 }
-
-/// Owned inspection data; never a borrowed pointer into a mutable tree.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Node {
     pub id: NodeId,
     pub parent: Option<NodeId>,
@@ -28,6 +26,21 @@ pub struct Node {
     pub kind: Kind,
     pub key: Option<String>,
     pub text: String,
+    pub value: Value,
+    pub bounds: Rect,
+    pub clip: Rect,
+    pub text_bounds: Rect,
+    pub text_style: TextStyle,
+    pub style: Style,
+    pub enabled: bool,
+    pub hidden: bool,
+    pub read_only: bool,
+    pub label: String,
+    pub focused: bool,
+    pub pressed: bool,
+    pub hovered: bool,
+    pub range: Option<(f64, f64, f64)>,
+    pub image: Option<(Bitmap, ContentMode)>,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Error(pub String);
@@ -37,7 +50,6 @@ impl fmt::Display for Error {
     }
 }
 impl std::error::Error for Error {}
-
 #[derive(Clone, Hash, PartialEq, Eq)]
 enum Segment {
     Key(String),
@@ -45,24 +57,27 @@ enum Segment {
 }
 type Path = Vec<(Segment, Kind)>;
 #[derive(Default)]
-struct Mounted {
+pub(crate) struct Mounted {
     identities: HashMap<Path, NodeId>,
-    nodes: Vec<Node>,
-    actions: HashMap<NodeId, Rc<dyn Fn()>>,
+    pub nodes: Vec<Node>,
+    pub descriptions: HashMap<NodeId, Rc<Description>>,
+    pub layouts: HashMap<NodeId, TextLayout>,
 }
-struct Inner {
+pub(crate) struct Inner {
     builder: Box<dyn Fn() -> View>,
     observer: Rc<Observer>,
-    mounted: RefCell<Mounted>,
+    pub mounted: RefCell<Mounted>,
     building: Cell<bool>,
     generation: Cell<u64>,
+    pub theme: Cell<Theme>,
+    pub viewport: Cell<Size>,
+    pub interaction: RefCell<crate::input::Interaction>,
+    pub editors: RefCell<HashMap<NodeId, crate::editing::Editor>>,
 }
-
-/// Main-thread-style reactive host, independent of windowing or rendering.
-/// State updates coalesce until `refresh`/`snapshot`/`activate`. Builders are pure;
-/// actions run outside all host borrows and may update state or query this host.
+/// Reactive descriptions, layout and input in logical points. The host is !Send/!Sync.
+/// Call layout with a pure renderer before geometric input/semantic queries.
 #[derive(Clone)]
-pub struct Host(Rc<Inner>);
+pub struct Host(pub(crate) Rc<Inner>);
 impl Host {
     pub fn new(builder: impl Fn() -> View + 'static) -> Self {
         Self(Rc::new(Inner {
@@ -71,106 +86,287 @@ impl Host {
             mounted: RefCell::new(Mounted::default()),
             building: Cell::new(false),
             generation: Cell::new(0),
+            theme: Cell::new(Theme::default()),
+            viewport: Cell::new(Size::default()),
+            interaction: RefCell::new(Default::default()),
+            editors: RefCell::new(HashMap::new()),
         }))
     }
-    /// Connect invalidation to a redraw scheduler. Repeated writes coalesce.
     pub fn on_invalidate(&self, wake: impl Fn() + 'static) {
         self.0.observer.set_wake(Rc::new(wake));
     }
+    pub(crate) fn redraw(&self) {
+        self.0.observer.redraw();
+    }
     pub fn generation(&self) -> u64 {
         self.0.generation.get()
+    }
+    pub fn theme(&self) -> Theme {
+        self.0.theme.get()
+    }
+    pub fn set_theme(&self, theme: Theme) {
+        if self.0.theme.replace(theme) != theme {
+            self.redraw();
+        }
     }
     pub fn refresh(&self) -> Result<bool, Error> {
         if self.0.building.replace(true) {
             return Err(Error("Host cannot rebuild during view construction".into()));
         }
-        struct Building<'a>(&'a Cell<bool>);
-        impl Drop for Building<'_> {
+        struct Guard<'a>(&'a Cell<bool>);
+        impl Drop for Guard<'_> {
             fn drop(&mut self) {
-                self.0.set(false);
+                self.0.set(false)
             }
         }
-        let _building = Building(&self.0.building);
+        let _guard = Guard(&self.0.building);
         if !self.0.observer.dirty.get() {
             return Ok(false);
         }
         let tracking = Tracking::begin();
         let view = (self.0.builder)();
-        let deps = tracking.finish();
-        // Stage the complete tree before publishing either identity or subscriptions.
+        let identities = self.0.mounted.borrow().identities.clone();
         let mut next = Mounted::default();
         mount(
             &view,
             Vec::new(),
             None,
             0,
-            &self.0.mounted.borrow(),
+            true,
+            false,
+            &identities,
             &mut next,
         )?;
+        let deps = tracking.finish();
         let epoch = self.0.observer.epoch.get().wrapping_add(1);
         for dep in deps {
             dep.subscribe(&self.0.observer, epoch);
         }
         self.0.observer.epoch.set(epoch);
+        // User getters and destructors never run under a mounted-tree borrow.
         let old = self.0.mounted.replace(next);
         self.0
             .generation
             .set(self.0.generation.get().wrapping_add(1));
         self.0.observer.dirty.set(false);
+        {
+            let mounted = self.0.mounted.borrow();
+            let mut editors = self.0.editors.borrow_mut();
+            editors.retain(|id, _| {
+                mounted
+                    .descriptions
+                    .get(id)
+                    .is_some_and(|d| d.kind == Kind::TextField)
+            });
+            for n in &mounted.nodes {
+                if let Value::Text(value) = &n.value {
+                    editors.entry(n.id).or_default().sync(value);
+                }
+            }
+            let mut i = self.0.interaction.borrow_mut();
+            if i.focus.is_some_and(|id| {
+                !mounted
+                    .nodes
+                    .iter()
+                    .any(|n| n.id == id && n.enabled && !n.hidden && focusable(n.kind))
+            }) {
+                i.focus = None;
+            }
+            if i.pressed.is_some_and(|id| {
+                !mounted
+                    .nodes
+                    .iter()
+                    .any(|n| n.id == id && n.enabled && !n.hidden)
+            }) {
+                i.pressed = None;
+            }
+        }
         drop(old);
         Ok(true)
     }
     pub fn snapshot(&self) -> Result<Vec<Node>, Error> {
         self.refresh()?;
-        Ok(self.0.mounted.borrow().nodes.clone())
+        let i = self.0.interaction.borrow();
+        let editors = self.0.editors.borrow();
+        let mut nodes = self.0.mounted.borrow().nodes.clone();
+        for n in &mut nodes {
+            n.focused = i.focus == Some(n.id) && i.active;
+            n.pressed = i.pressed == Some(n.id);
+            n.hovered = i.hovered == Some(n.id);
+            if let Some(e) = editors.get(&n.id) {
+                n.value = Value::Text(e.text.clone());
+            }
+        }
+        Ok(nodes)
     }
-    /// Dispatch a current action. A stale, removed or foreign ID returns false.
     pub fn activate(&self, id: NodeId) -> Result<bool, Error> {
         self.refresh()?;
-        let action = self.0.mounted.borrow().actions.get(&id).cloned();
-        if let Some(action) = action {
-            action();
-            Ok(true)
-        } else {
-            Ok(false)
+        let target = {
+            let m = self.0.mounted.borrow();
+            m.nodes
+                .iter()
+                .find(|n| n.id == id && n.enabled && !n.hidden)
+                .and_then(|n| {
+                    m.descriptions
+                        .get(&id)
+                        .map(|d| (d.clone(), n.value.clone()))
+                })
+        };
+        let Some((d, value)) = target else {
+            return Ok(false);
+        };
+        match (&d.data, value) {
+            (Data::Bool(b), Value::Bool(v)) => {
+                b.set(if matches!(d.kind, Kind::Radio | Kind::Segment) {
+                    true
+                } else {
+                    !v
+                })
+            }
+            (Data::Check(b), Value::Check(v)) => b.set(if v == crate::CheckState::Checked {
+                crate::CheckState::Unchecked
+            } else {
+                crate::CheckState::Checked
+            }),
+            (Data::Text(_), _) => {
+                self.focus(id)?;
+            }
+            _ => {
+                if let Some(action) = &d.action {
+                    action()
+                } else {
+                    return Ok(false);
+                }
+            }
         }
+        self.redraw();
+        Ok(true)
+    }
+    pub fn set_number(&self, id: NodeId, value: f64) -> Result<bool, Error> {
+        self.refresh()?;
+        if !value.is_finite() {
+            return Ok(false);
+        }
+        let data = {
+            let m = self.0.mounted.borrow();
+            m.nodes
+                .iter()
+                .find(|n| {
+                    n.id == id && n.enabled && !n.hidden && !n.read_only && n.kind == Kind::Slider
+                })
+                .and_then(|_| m.descriptions.get(&id))
+                .map(|d| d.data.clone())
+        };
+        let Some(Data::Number(binding, min, max, step)) = data else {
+            return Ok(false);
+        };
+        let value = if step > 0. {
+            min + ((value - min) / step).round() * step
+        } else {
+            value
+        };
+        binding.set(value.clamp(min, max));
+        self.redraw();
+        Ok(true)
+    }
+    pub fn needs_animation(&self) -> bool {
+        self.0.interaction.borrow().active
+            && self.0.mounted.borrow().nodes.iter().any(|n| {
+                n.kind == Kind::Progress && n.value == Value::None && !n.hidden && n.enabled
+            })
     }
 }
-
+pub(crate) fn focusable(kind: Kind) -> bool {
+    matches!(
+        kind,
+        Kind::Button
+            | Kind::Toggle
+            | Kind::CheckBox
+            | Kind::Radio
+            | Kind::Segment
+            | Kind::Switch
+            | Kind::Slider
+            | Kind::TextField
+    )
+}
+#[allow(clippy::too_many_arguments)]
 fn mount(
     view: &View,
     path: Path,
     parent: Option<NodeId>,
     index: usize,
-    old: &Mounted,
+    enabled: bool,
+    hidden: bool,
+    old: &HashMap<Path, NodeId>,
     next: &mut Mounted,
 ) -> Result<(), Error> {
-    static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+    static NEXT: AtomicU64 = AtomicU64::new(1);
     let d = &view.0;
+    if !d.visible {
+        return Ok(());
+    }
     let segment = match &d.key {
-        Some(key) if key.is_empty() => return Err(Error("Keys must not be empty".into())),
-        Some(key) => Segment::Key(key.clone()),
+        Some(k) if k.is_empty() => return Err(Error("Keys must not be empty".into())),
+        Some(k) => Segment::Key(k.clone()),
         None => Segment::Index(index),
     };
-    let mut identity = path;
-    identity.push((segment, d.kind));
+    validate(d)?;
+    let mut path = path;
+    path.push((segment, d.kind));
     let id = old
-        .identities
-        .get(&identity)
+        .get(&path)
         .copied()
-        .unwrap_or_else(|| NodeId(NEXT_ID.fetch_add(1, Ordering::Relaxed)));
-    next.identities.insert(identity.clone(), id);
+        .unwrap_or_else(|| NodeId(NEXT.fetch_add(1, Ordering::Relaxed)));
+    let value = d.data.value();
+    if let Value::Number(v) = value
+        && !v.is_finite()
+    {
+        return Err(Error("Numeric values must be finite".into()));
+    }
+    let range = if let Data::Number(_, a, b, s) = &d.data {
+        Some((*a, *b, *s))
+    } else {
+        None
+    };
+    let image = if let Data::Image(b, m) = &d.data {
+        Some((b.clone(), *m))
+    } else {
+        None
+    };
+    next.identities.insert(path.clone(), id);
+    next.descriptions.insert(id, d.clone());
     next.nodes.push(Node {
         id,
         parent,
-        depth: identity.len() - 1,
+        depth: path.len() - 1,
         kind: d.kind,
         key: d.key.clone(),
         text: d.text.clone(),
+        value,
+        bounds: Rect::default(),
+        clip: Rect::default(),
+        text_bounds: Rect::default(),
+        text_style: TextStyle {
+            size: 15.,
+            color: 0xff000000,
+            bold: false,
+            wrap: false,
+        },
+        style: d.style,
+        enabled: enabled && d.enabled,
+        hidden: hidden || d.hidden,
+        read_only: d.read_only,
+        label: if d.accessible.is_empty() {
+            d.text.clone()
+        } else {
+            d.accessible.clone()
+        },
+        focused: false,
+        pressed: false,
+        hovered: false,
+        range,
+        image,
     });
-    if let Some(action) = &d.action {
-        next.actions.insert(id, action.clone());
-    }
     let mut keys = HashSet::new();
     for (index, child) in d.children.iter().enumerate() {
         if let Some(key) = &child.0.key
@@ -178,7 +374,59 @@ fn mount(
         {
             return Err(Error(format!("Duplicate sibling key: {key}")));
         }
-        mount(child, identity.clone(), Some(id), index, old, next)?;
+        mount(
+            child,
+            path.clone(),
+            Some(id),
+            index,
+            enabled && d.enabled,
+            hidden || d.hidden,
+            old,
+            next,
+        )?;
+    }
+    Ok(())
+}
+fn validate(d: &Description) -> Result<(), Error> {
+    let s = d.style;
+    if [
+        s.padding,
+        s.margin,
+        s.gap,
+        s.grow,
+        s.shrink,
+        s.min_width,
+        s.min_height,
+        s.radius,
+    ]
+    .iter()
+    .any(|v| !v.is_finite() || *v < 0.)
+        || s.max_width.is_nan()
+        || s.max_height.is_nan()
+        || s.max_width < s.min_width
+        || s.max_height < s.min_height
+        || s.font_size.is_some_and(|v| !v.is_finite() || v <= 0.)
+    {
+        return Err(Error("Invalid layout/style value".into()));
+    }
+    for length in [s.width, s.height] {
+        if let crate::Length::Points(v) | crate::Length::Percent(v) = length
+            && (!v.is_finite() || v < 0.)
+        {
+            return Err(Error("Dimensions must be finite and nonnegative".into()));
+        }
+    }
+    for length in [s.left, s.right, s.top, s.bottom] {
+        if let crate::Length::Points(v) | crate::Length::Percent(v) = length
+            && !v.is_finite()
+        {
+            return Err(Error("Offsets must be finite".into()));
+        }
+    }
+    if let Data::Number(_, min, max, step) = &d.data
+        && (!min.is_finite() || !max.is_finite() || !step.is_finite() || min > max || *step < 0.)
+    {
+        return Err(Error("Invalid numeric range".into()));
     }
     Ok(())
 }

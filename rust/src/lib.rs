@@ -8,6 +8,7 @@
 
 mod platform;
 mod types;
+pub mod ui;
 
 // Unsupported targets expose only the shared contracts until a backend exists.
 #[allow(unused_imports)]

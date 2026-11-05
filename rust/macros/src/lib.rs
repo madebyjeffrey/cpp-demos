@@ -121,7 +121,7 @@ fn expand(item: Item) -> Result<Tokens> {
         Item::If { condition, yes, no } => {
             let yes = children(yes)?;
             let no = children(no)?;
-            Ok(quote! { if #condition { #output.extend(#yes); } else { #output.extend(#no); } })
+            Ok(quote! {if #condition {#output.extend(#yes);}else{#output.extend(#no);}})
         }
         Item::For {
             pattern,
@@ -129,7 +129,7 @@ fn expand(item: Item) -> Result<Tokens> {
             body,
         } => {
             let body = children(body)?;
-            Ok(quote! { for #pattern in #values { #output.extend(#body); } })
+            Ok(quote! {for #pattern in #values {#output.extend(#body);}})
         }
         Item::Element {
             name,
@@ -137,82 +137,222 @@ fn expand(item: Item) -> Result<Tokens> {
             children: body,
         } => {
             let mut positional = Vec::new();
-            let mut key = None;
-            let mut action = None;
+            let mut properties: Vec<(Ident, Expr)> = Vec::new();
             for (property, value) in args {
-                match property {
-                    None => positional.push(value),
-                    Some(property) => {
-                        let slot = match property.to_string().as_str() {
-                            "key" => &mut key,
-                            "on_click" if name == "button" => &mut action,
-                            _ => {
-                                return Err(syn::Error::new(
-                                    property.span(),
-                                    "unsupported property in this stage",
-                                ));
-                            }
-                        };
-                        if slot.replace(value).is_some() {
-                            return Err(syn::Error::new(property.span(), "duplicate property"));
-                        }
+                if let Some(property) = property {
+                    if properties.iter().any(|(p, _)| p == &property) {
+                        return Err(syn::Error::new(property.span(), "duplicate property"));
                     }
+                    properties.push((property, value));
+                } else {
+                    positional.push(value);
                 }
             }
             let kind = name.to_string();
-            let value = match kind.as_str() {
-                "column" | "row" => {
+            let take = |props: &mut Vec<(Ident, Expr)>, key: &str| {
+                props
+                    .iter()
+                    .position(|(p, _)| p == key)
+                    .map(|i| props.remove(i).1)
+            };
+            let binding = take(&mut properties, "bind");
+            let action = take(&mut properties, "on_click");
+            let options = take(&mut properties, "options");
+            let mode = take(&mut properties, "content_mode");
+            let min = take(&mut properties, "min");
+            let max = take(&mut properties, "max");
+            let step = take(&mut properties, "step");
+            let containers = [
+                "column",
+                "row",
+                "block",
+                "inline",
+                "layer",
+                "panel",
+                "section",
+                "group_box",
+            ];
+            let is_container = containers.contains(&kind.as_str());
+            if !is_container && body.is_some() {
+                return Err(syn::Error::new(
+                    name.span(),
+                    "only containers take child blocks; call custom components as functions",
+                ));
+            }
+            let one = |args: &mut Vec<Expr>| -> Result<Expr> {
+                if args.len() != 1 {
+                    return Err(syn::Error::new(
+                        name.span(),
+                        "expected one text/value expression",
+                    ));
+                }
+                Ok(args.remove(0))
+            };
+            let need_binding = || {
+                binding
+                    .as_ref()
+                    .map(|b| quote!((#b).binding()))
+                    .ok_or_else(|| {
+                        syn::Error::new(name.span(), "this control needs bind: state_or_binding")
+                    })
+            };
+            let value = if is_container {
+                let body = children(body.ok_or_else(|| {
+                    syn::Error::new(name.span(), "container needs a child block")
+                })?)?;
+                if matches!(kind.as_str(), "section" | "group_box") {
+                    let title = one(&mut positional)?;
+                    quote!(::scars_ui::View::#name(#title,#body))
+                } else {
                     if !positional.is_empty() {
                         return Err(syn::Error::new(
                             name.span(),
-                            "container arguments must be named properties",
+                            "container properties must be named",
                         ));
                     }
-                    let body = children(body.ok_or_else(|| {
-                        syn::Error::new(name.span(), "container needs a child block")
-                    })?)?;
                     quote!(::scars_ui::View::#name(#body))
                 }
-                "label" | "button" => {
-                    if body.is_some() {
-                        return Err(syn::Error::new(
-                            name.span(),
-                            "this element cannot contain children",
-                        ));
-                    }
-                    if positional.len() != 1 {
-                        return Err(syn::Error::new(name.span(), "expected one text expression"));
-                    }
-                    let text = positional.remove(0);
-                    if kind == "button" {
-                        let action = action.ok_or_else(|| {
-                            syn::Error::new(name.span(), "button needs on_click: handler")
-                        })?;
-                        quote!(::scars_ui::View::button(#text, #action))
-                    } else {
+            } else {
+                match kind.as_str() {
+                    "label" | "text" => {
+                        let text = one(&mut positional)?;
                         quote!(::scars_ui::View::label(#text))
                     }
+                    "button" | "command_button" => {
+                        let text = one(&mut positional)?;
+                        let action = action.as_ref().ok_or_else(|| {
+                            syn::Error::new(name.span(), "button needs on_click: handler")
+                        })?;
+                        quote!(::scars_ui::View::button(#text,#action))
+                    }
+                    "checkbox" | "tri_checkbox" | "toggle" | "switch" | "text_field" => {
+                        let text = one(&mut positional)?;
+                        let b = need_binding()?;
+                        quote!(::scars_ui::View::#name(#text,#b))
+                    }
+                    "slider" => {
+                        let b = need_binding()?;
+                        let min = min.as_ref().map_or(quote!(0.), |v| quote!((#v)as f64));
+                        let max = max.as_ref().map_or(quote!(1.), |v| quote!((#v)as f64));
+                        let step = step.as_ref().map_or(quote!(0.01), |v| quote!((#v)as f64));
+                        quote!(::scars_ui::View::slider(#b,#min,#max,#step))
+                    }
+                    "progress" => {
+                        if binding.is_some() {
+                            let b = need_binding()?;
+                            quote!(::scars_ui::View::progress(#b))
+                        } else if positional.is_empty() {
+                            quote!(::scars_ui::View::indeterminate_progress())
+                        } else {
+                            let v = one(&mut positional)?;
+                            quote!({let value=(#v)as f64;::scars_ui::View::progress(::scars_ui::Binding::new(move||value,|_|{}))})
+                        }
+                    }
+                    "radio_group" | "segmented" => {
+                        let b = need_binding()?;
+                        let options = options.as_ref().ok_or_else(|| {
+                            syn::Error::new(
+                                name.span(),
+                                "selection control needs options: Vec<OptionItem>",
+                            )
+                        })?;
+                        if kind == "radio_group" {
+                            let title = one(&mut positional)?;
+                            quote!(::scars_ui::View::radio_group(#title,#b,#options))
+                        } else {
+                            quote!(::scars_ui::View::segmented(#b,#options))
+                        }
+                    }
+                    "image" => {
+                        let image = one(&mut positional)?;
+                        let mode = mode
+                            .as_ref()
+                            .map_or(quote!(::scars_ui::ContentMode::Fit), |v| quote!(#v));
+                        quote!(::scars_ui::View::image((#image).clone(),#mode))
+                    }
+                    "separator" | "spacer" => quote!(::scars_ui::View::#name()),
+                    _ => quote!(#name(#(#positional),*)),
                 }
-                _ => {
-                    if let Some(body) = body {
+            };
+            if matches!(
+                kind.as_str(),
+                "slider" | "segmented" | "separator" | "spacer"
+            ) && !positional.is_empty()
+            {
+                return Err(syn::Error::new(
+                    name.span(),
+                    "this element only accepts named properties",
+                ));
+            }
+            if binding.is_some()
+                && !matches!(
+                    kind.as_str(),
+                    "checkbox"
+                        | "tri_checkbox"
+                        | "toggle"
+                        | "switch"
+                        | "text_field"
+                        | "slider"
+                        | "progress"
+                        | "radio_group"
+                        | "segmented"
+                )
+            {
+                return Err(syn::Error::new(
+                    name.span(),
+                    "bind is not supported by this element",
+                ));
+            }
+            if action.is_some() && !matches!(kind.as_str(), "button" | "command_button") {
+                return Err(syn::Error::new(
+                    name.span(),
+                    "on_click is only supported by buttons",
+                ));
+            }
+            if options.is_some() && !matches!(kind.as_str(), "radio_group" | "segmented") {
+                return Err(syn::Error::new(
+                    name.span(),
+                    "options is only supported by selection controls",
+                ));
+            }
+            if (min.is_some() || max.is_some() || step.is_some()) && kind != "slider" {
+                return Err(syn::Error::new(
+                    name.span(),
+                    "min/max/step are slider properties",
+                ));
+            }
+            if mode.is_some() && kind != "image" {
+                return Err(syn::Error::new(
+                    name.span(),
+                    "content_mode is an image property",
+                ));
+            }
+            let mut value = value;
+            for (property, expr) in properties {
+                let p = property.to_string();
+                let expr = match p.as_str() {
+                    "padding" | "margin" | "gap" | "grow" | "shrink" | "min_width"
+                    | "max_width" | "min_height" | "max_height" | "font_size" | "radius" => {
+                        quote!((#expr)as f64)
+                    }
+                    "key" | "width" | "height" | "wrap" | "align" | "justify" | "bold"
+                    | "foreground" | "background" | "enabled" | "visible" | "hidden"
+                    | "position" | "left" | "right" | "top" | "bottom" | "z_index"
+                    | "accessible_label" => quote!(#expr),
+                    "read_only" if matches!(kind.as_str(), "text_field" | "slider") => {
+                        quote!(#expr)
+                    }
+                    "on_submit" if kind == "text_field" => quote!(#expr),
+                    _ => {
                         return Err(syn::Error::new(
-                            name.span(),
-                            if body.is_empty() {
-                                "call a component function with parentheses"
-                            } else {
-                                "custom component functions cannot take child blocks yet"
-                            },
+                            property.span(),
+                            "unknown property for this element",
                         ));
                     }
-                    quote!(#name(#(#positional),*))
-                }
-            };
-            let value = if let Some(key) = key {
-                quote!((#value).key(#key))
-            } else {
-                value
-            };
-            Ok(quote! { #output.push(#value); })
+                };
+                value = quote!((#value).#property(#expr));
+            }
+            Ok(quote! {#output.push(#value);})
         }
     }
 }
