@@ -324,15 +324,12 @@ impl Host {
         if n.clip.inset(4.).contains(i.pointer) {
             return None;
         }
-        let selection = self.0.editors.borrow().get(&id)?.selection;
-        let caret = self.text_index(id, i.pointer);
-        (caret != selection.caret).then_some((
-            id,
-            crate::Selection {
-                anchor: i.text_anchor,
-                caret,
-            },
-        ))
+        let point = i.pointer;
+        drop(m);
+        drop(i);
+        let current = self.0.editors.borrow().get(&id)?.selection;
+        let selection = self.drag_selection(id, point)?;
+        (selection != current).then_some((id, selection))
     }
     pub(crate) fn update_drag_deadline(&self, now: std::time::Instant) {
         let scrolling = self.drag_target().is_some();
@@ -367,7 +364,8 @@ impl Host {
         }
         self.0.interaction.borrow_mut().drag_tick = None;
         if let Some((id, selection)) = self.drag_target() {
-            let _ = self.select_text(id, selection);
+            let point = self.0.interaction.borrow().pointer;
+            let _ = self.select_pointer_text(id, point, selection);
         }
     }
     pub(crate) fn reconcile_capture(&self) {

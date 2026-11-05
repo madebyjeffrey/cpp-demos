@@ -4,6 +4,7 @@ struct Metrics;
 impl Measure for Metrics {
     fn text(&self, text: &str, style: TextStyle, _: f64) -> TextLayout {
         TextLayout {
+            lines: Vec::new(),
             placeholders: Vec::new(),
             size: Size::new(text.len() as f64 * 8., style.size + 4.),
             baseline: style.size,

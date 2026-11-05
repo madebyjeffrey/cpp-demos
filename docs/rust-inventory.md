@@ -21,10 +21,10 @@ The older UI engine and C++ `detail` namespace are excluded.
 | `Theme` | Light/dark palette, inherited density/accent and label roles implemented; full Lab coverage remains | M1.2, M7.3 |
 | `State`, `Binding` | Existing tracked owned Rust handles; thread confinement enforced by types | M8.4 |
 | `View` | Existing immutable descriptions, typed constructors and `view!`; description internals stay private, inspection uses snapshots | M1.2, M7.3 |
-| `TextInlineBox`, `TextSpan`, `TextLayoutOptions`, `TextPlacement`, `GlyphPosition`, `TextLine`, `TextLayout`, `TextLayoutEngine` | `Measure`/`TextLayout`, styled `Span`, inline `View` boxes and cached SkParagraph implemented; visual line geometry/navigation remains. Renderer types stay out of the portable core | M1.2, M2.2 |
-| `TextRange`, `TextSelection`, `TextCommand`, `TextBuffer` | Standard byte ranges/`Selection` and host editor commands exist; reusable buffer and remaining navigation/selection/history behavior pending | M2.1–M2.3 |
+| `TextInlineBox`, `TextSpan`, `TextLayoutOptions`, `TextPlacement`, `GlyphPosition`, `TextLine`, `TextLayout`, `TextLayoutEngine` | `Measure`/`TextLayout`, styled `Span`, inline `View` boxes, UTF-8 visual `TextLine` geometry/caret affinity and cached SkParagraph implemented. Renderer types stay out of the portable core | M1.2, M2.2 |
+| `TextRange`, `TextSelection`, `TextCommand`, `TextBuffer` | Standard byte ranges/`Selection`, reusable `TextBuffer`/`TextOptions`, visual/logical commands, gestures, composition and bounded/coalesced history implemented | M2.1–M2.3 |
 | `Clipboard`, `TextInputSnapshot` | Native clipboard and Rust `TextInputClient`/`TextInputState`; portable `TextInput` | M2.3, M5.4–M5.5 |
-| `PointerKind`, `PointerEvent`, `Key`, `KeyEvent`, `Cursor` | Portable/native events include both wheel axes and capture cancellation; richer click gestures, visual editor commands and resize cursors remain | M1.5, M2.2–M2.3, M3.1 |
+| `PointerKind`, `PointerEvent`, `Key`, `KeyEvent`, `Cursor` | Portable/native events include both wheel axes, capture cancellation, text click gestures and visual editor commands; resize cursors remain | M1.5, M2.2–M2.3, M3.1 |
 | `Role`, `Element`, `LogicalItem`, `LogicalCell`, `LogicalColumn` | Native semantic adapter and logical row proxies exist; complete portable semantic snapshots, cells/columns/tree metadata/actions pending | M5.1–M5.4 |
 | `HostOptions`, `Host` | Host refresh/layout/input/mount exist; relevant invalidation, cursor, scroll, text, selection, presentation, inspection and logical-query contracts are assigned across the checklist | M1.4–M1.5, M2, M3, M4, M5, M7 |
 
@@ -47,7 +47,7 @@ wrapping a row of independent labels alone does not close that behavior.
 | `Section`, `GroupBox`, `Panel`, `Spacer`, `Separator` | Grouping/spacer and both separator orientations implemented | M1.2 |
 | `ForEach`, `If` | Rust `for`/`if` inside `view!`, stable keyed descriptions; no duplicate wrapper classes required | M7.3 |
 | `ScrollView`, `ScrollAxes`, `ScrollViewOptions` | Both-axis scrolling, overlay bars, clamped queries/actions, nested wheel transport, keyboard/caret reveal and capture lifetime implemented | M1.4–M1.5 |
-| `TextField`, `TextFieldOptions`, `TextEditor` | Existing single/multiline editable controls; maximum length, visual navigation, rich gestures and remaining editor policies partial | M2.1–M2.3 |
+| `TextField`, `TextFieldOptions`, `TextEditor` | Single/multiline controls share TextBuffer; readonly/length/history policy, visual navigation and word/line selection implemented | M2.1–M2.3 |
 | `SearchField`, `SearchFieldOptions` | Currently a plain field alias with generic deadline primitives; integrated search semantics/options missing | M2.4 |
 | `PasswordField`, `PasswordFieldOptions` | Masking/native secure input/clipboard restrictions exist; reveal, undo and length policies partial | M2.5 |
 | `NumericField`, `Stepper`, `NumericOptions`, `NumericStatus`, `NumericValidation` | Exact `Numeric<T>`/`Draft<T>` and +/- composition exist; standalone repeat stepper and complete precision/commit/validation policies pending | M2.6, M6.1–M6.2, M6.6 |

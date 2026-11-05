@@ -207,7 +207,12 @@ impl Host {
             });
             for n in &mounted.nodes {
                 if let Value::Text(value) = &n.value {
-                    editors.entry(n.id).or_default().sync(value);
+                    let editor = editors.entry(n.id).or_default();
+                    let mut options = mounted.descriptions[&n.id].text_options;
+                    options.multiline = n.multiline;
+                    options.read_only = n.read_only;
+                    editor.set_options(options);
+                    editor.sync(value);
                 }
             }
             let mut i = self.0.interaction.borrow_mut();

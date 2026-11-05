@@ -176,7 +176,7 @@ fn command(host: &ui::Host, selector: &str) -> std::result::Result<bool, ui::Err
                 .map(|s| s.to_string())
                 .unwrap_or_default()
         };
-        return host.insert_text(&value, None);
+        return host.paste_text(&value);
     }
     let extend = selector.contains("AndModifySelection");
     let command = match selector
@@ -187,12 +187,23 @@ fn command(host: &ui::Host, selector: &str) -> std::result::Result<bool, ui::Err
         "moveRight" | "moveForward" => TextCommand::Right,
         "moveWordLeft" | "moveWordBackward" => TextCommand::WordLeft,
         "moveWordRight" | "moveWordForward" => TextCommand::WordRight,
-        "moveToBeginningOfLine" | "moveToBeginningOfDocument" | "moveToLeftEndOfLine" => {
-            TextCommand::Start
-        }
-        "moveToEndOfLine" | "moveToEndOfDocument" | "moveToRightEndOfLine" => TextCommand::End,
+        "moveToBeginningOfLine" | "moveToLeftEndOfLine" => TextCommand::LineStart,
+        "moveToEndOfLine" | "moveToRightEndOfLine" => TextCommand::LineEnd,
+        "moveToBeginningOfDocument" => TextCommand::Start,
+        "moveToEndOfDocument" => TextCommand::End,
+        "moveToBeginningOfParagraph" | "moveParagraphBackward" => TextCommand::ParagraphStart,
+        "moveToEndOfParagraph" | "moveParagraphForward" => TextCommand::ParagraphEnd,
+        "pageUp" | "movePageUp" | "scrollPageUp" => TextCommand::PageUp,
+        "pageDown" | "movePageDown" | "scrollPageDown" => TextCommand::PageDown,
         "deleteBackward" => TextCommand::Backspace,
         "deleteForward" => TextCommand::Delete,
+        "deleteWordBackward" => TextCommand::DeleteWordBackward,
+        "deleteWordForward" => TextCommand::DeleteWordForward,
+        "deleteToBeginningOfLine" => TextCommand::DeleteLineBackward,
+        "deleteToEndOfLine" => TextCommand::DeleteLineForward,
+        "deleteToBeginningOfParagraph" => TextCommand::DeleteParagraphBackward,
+        "deleteToEndOfParagraph" => TextCommand::DeleteParagraphForward,
+        "transpose" => TextCommand::Transpose,
         "selectAll" => TextCommand::SelectAll,
         "undo" => TextCommand::Undo,
         "redo" => TextCommand::Redo,
@@ -233,15 +244,18 @@ pub(super) fn event(m: &Mounted, event: &Event) -> std::result::Result<bool, ui:
                     );
                 }
             };
-            m.host.pointer(ui::Pointer {
-                kind,
-                position: ui::Point {
-                    x: p.position.x,
-                    y: p.position.y,
+            m.host.pointer_click(
+                ui::Pointer {
+                    kind,
+                    position: ui::Point {
+                        x: p.position.x,
+                        y: p.position.y,
+                    },
+                    button: p.button,
+                    modifiers: modifiers(p.modifiers),
                 },
-                button: p.button,
-                modifiers: modifiers(p.modifiers),
-            })
+                p.click_count,
+            )
         }
         Event::Key(k) => {
             let key = match k.key {

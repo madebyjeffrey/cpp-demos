@@ -361,7 +361,7 @@ fn expand(item: Item, root: &Tokens) -> Result<Tokens> {
                     | "margin" | "basis" | "align_self" | "accent" | "scroll_axes"
                     | "scrollbars" | "density" | "text_wrap" | "text_overflow" | "text_align"
                     | "max_lines" | "label_style" | "uppercase" | "orientation" => quote!(#expr),
-                    "read_only"
+                    "max_length" | "undo_enabled" | "history_limit" | "read_only"
                         if matches!(
                             kind.as_str(),
                             "text_field"

@@ -128,7 +128,7 @@ Tests: `cargo test --workspace`; native protocol/actions additionally use
 
 `cargo run --example stage3` demonstrates search, masked passwords, a multiline
 editor and an integer field with step buttons. Command-Z/Shift-Command-Z uses
-bounded (100 edit) history; composition is one undo step. External model changes
+bounded history (100 checkpoints by default); composition is one undo step. External model changes
 reset history. Text storage stays UTF-8, with native UTF-16 conversion at the edge.
 Password text is excluded from shaping caches, copy/cut, and accessibility value
 and substring queries. Native secure input follows focus and application lifetime.
@@ -294,3 +294,37 @@ spacing. Inline views keep normal state, events and keys; ellipsis hides omitted
 controls from input. Custom measurement providers implementing rich text must
 provide `Measure::paragraph` and its `TextLayout.placeholders`; the default returns
 an unsupported error. `TextLayout.baseline` is relative to the paragraph origin.
+
+
+## Completion M2 — text model and navigation checkpoint
+
+`cargo run --example m2_editor` demonstrates wrapping, readonly fields and a
+12-grapheme limit in both themes. `cargo run -p scars-ui --example text_buffer`
+demonstrates the same model without a window, native backend or Skia renderer.
+The remaining search/password/numeric policies are tracked in the checklist.
+
+`TextBuffer::new(text)` owns selection, composition and history. `select`, `insert`,
+`replace`, `mark`/`unmark`, `undo`/`redo` and `set_text` work independently of a host.
+`text()` includes preedit; `committed_text()` excludes it until acceptance. External
+`set_text` clears history/composition and deliberately accepts the application's
+full replacement even if it exceeds an input length limit. User edits enforce
+`TextOptions`; a lowered limit never silently truncates an existing model value.
+`max_length: 0` means unlimited. Limits count extended graphemes, including accents
+and combined emoji. Readonly fields still allow selection/copy. `history_limit: 0`
+or `undo_enabled: false` disables history; composition still works transactionally.
+
+Typing and repeated deletion coalesce until a pause, selection or discrete action;
+paste and composition are separate transactions. `insert_at` accepts an injected
+`Instant` for deterministic runtimes. `TextBuffer::navigate` accepts pure
+`TextLayout` geometry; `command` handles logical Unicode commands without geometry.
+`Start`/`End` mean document boundaries; `LineStart`/`LineEnd` mean visual lines when
+geometry is supplied. Word/paragraph deletion and transpose remain grapheme safe.
+Up/down preserve the preferred horizontal position through shorter lines; page
+movement uses the editor viewport. Double/triple clicks select words/visual lines,
+then dragging extends whole units. Native adapters pass click counts through
+`Host::pointer_click`; ordinary applications need no pointer bookkeeping.
+
+Custom `Measure` providers supply `TextLayout.lines` for visual navigation (an empty
+list retains logical-only behavior). `TextLine` uses UTF-8 ranges and paragraph-local
+geometry. `caret_rect(index, affinity)` distinguishes both sides of a soft wrap;
+newline bytes belong to `end_including_newline`, not the visible line range.

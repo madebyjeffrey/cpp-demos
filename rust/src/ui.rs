@@ -183,12 +183,81 @@ impl Renderer {
             .into_iter()
             .map(|b| rect(b.rect))
             .collect();
+        let mut lines = Vec::new();
+        let metrics: Vec<_> = paragraph
+            .get_line_metrics()
+            .into_iter()
+            .map(|l| {
+                (
+                    l.start_index,
+                    l.end_index,
+                    l.end_including_newline,
+                    l.left,
+                    l.baseline,
+                    l.ascent,
+                    l.width,
+                    l.height,
+                )
+            })
+            .collect();
+        let mut previous_end = 0;
+        for (
+            start_index,
+            end_index,
+            end_including_newline,
+            left,
+            baseline,
+            ascent,
+            width,
+            height,
+        ) in metrics
+        {
+            let byte = |index| text::byte_offset(&source, index).unwrap_or(source.len());
+            let start = byte(start_index).max(previous_end);
+            let mut end = byte(end_index).max(start);
+            if end > start && source[..end].ends_with('\n') {
+                end -= 1;
+            }
+            let bounds = Rect::new(left, baseline - ascent, width, height.max(style.size));
+            let mut caret = |index: usize, at_end: bool| {
+                let units = text::utf16_offset(&source, index).unwrap_or(0);
+                let info = paragraph.get_glyph_info_at_utf16_offset(if at_end {
+                    units.saturating_sub(1)
+                } else {
+                    units
+                });
+                let x = info.map_or(left, |info| {
+                    let rtl = info.text_direction == TextDirection::RTL;
+                    if at_end != rtl {
+                        info.grapheme_layout_bounds.right() as f64
+                    } else {
+                        info.grapheme_layout_bounds.left() as f64
+                    }
+                });
+                Rect::new(x, bounds.y, 1., bounds.height)
+            };
+            let start_caret = caret(start, false);
+            let end_caret = if start == end {
+                start_caret
+            } else {
+                caret(end, true)
+            };
+            previous_end = byte(end_including_newline).max(end);
+            lines.push(TextLine {
+                range: start..end,
+                end_including_newline: previous_end,
+                bounds,
+                start_caret,
+                end_caret,
+            });
+        }
         let paragraph = Rc::new(RefCell::new(paragraph));
         let hit = paragraph.clone();
         let ranges = paragraph.clone();
         let source2 = source.clone();
         let font = style.size;
         let layout = TextLayout {
+            lines,
             size,
             placeholders,
             baseline,

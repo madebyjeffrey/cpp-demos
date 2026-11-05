@@ -1,4 +1,4 @@
-use crate::{Error, Host, Kind, NodeId, Point, Selection, TextCommand, Value, host::focusable};
+use crate::{Error, Host, Kind, NodeId, Point, TextCommand, Value, host::focusable};
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Modifiers {
     pub shift: bool,
@@ -55,6 +55,8 @@ pub(crate) struct Interaction {
     pub hovered: Option<NodeId>,
     pub active: bool,
     pub text_anchor: usize,
+    pub text_origin: std::ops::Range<usize>,
+    pub text_clicks: u32,
     pub modal: Option<NodeId>,
     pub restore_focus: Option<NodeId>,
     pub hover_since: std::time::Instant,
@@ -71,6 +73,8 @@ impl Default for Interaction {
             hovered: None,
             active: true,
             text_anchor: 0,
+            text_origin: 0..0,
+            text_clicks: 1,
             modal: None,
             restore_focus: None,
             hover_since: std::time::Instant::now(),
@@ -323,6 +327,10 @@ impl Host {
             .map(|n| n.id))
     }
     pub fn pointer(&self, event: Pointer) -> Result<bool, Error> {
+        self.pointer_click(event, 1)
+    }
+    /// Native click count enables word (double) and visual-line (triple) selection.
+    pub fn pointer_click(&self, event: Pointer, clicks: u32) -> Result<bool, Error> {
         self.refresh()?;
         let inspector = self.inspector();
         if inspector.picking.get() && event.kind == PointerKind::Down && event.button == 0 {
@@ -392,18 +400,12 @@ impl Host {
                         self.slider_pointer(id, event.position)?;
                     }
                     if kind == Some(Kind::TextField) {
-                        let caret = self.text_index(id, event.position);
-                        let anchor = if event.modifiers.shift {
-                            self.0
-                                .editors
-                                .borrow()
-                                .get(&id)
-                                .map_or(caret, |e| e.selection.anchor)
-                        } else {
-                            caret
-                        };
-                        self.0.interaction.borrow_mut().text_anchor = anchor;
-                        self.select_text(id, Selection { anchor, caret })?;
+                        self.begin_text_selection(
+                            id,
+                            event.position,
+                            event.modifiers.shift,
+                            clicks,
+                        )?;
                     }
                 } else if let Some(modal) = self.active_modal() {
                     let nodes = self.snapshot()?;
@@ -429,10 +431,10 @@ impl Host {
                         .map(|n| n.kind);
                     if kind == Some(Kind::Slider) {
                         self.slider_pointer(id, event.position)?;
-                    } else if kind == Some(Kind::TextField) {
-                        let caret = self.text_index(id, event.position);
-                        let anchor = self.0.interaction.borrow().text_anchor;
-                        self.select_text(id, Selection { anchor, caret })?;
+                    } else if kind == Some(Kind::TextField)
+                        && let Some(selection) = self.drag_selection(id, event.position)
+                    {
+                        self.select_pointer_text(id, event.position, selection)?;
                     }
                 }
             }
@@ -567,16 +569,28 @@ impl Host {
         }
         if node.kind == Kind::TextField {
             let command = match event.key {
-                Key::Left if event.modifiers.command => TextCommand::Start,
-                Key::Right if event.modifiers.command => TextCommand::End,
+                Key::Left if event.modifiers.command => TextCommand::LineStart,
+                Key::Right if event.modifiers.command => TextCommand::LineEnd,
                 Key::Left if event.modifiers.alt => TextCommand::WordLeft,
                 Key::Right if event.modifiers.alt => TextCommand::WordRight,
                 Key::Left => TextCommand::Left,
                 Key::Right => TextCommand::Right,
+                Key::Up if event.modifiers.command => TextCommand::Start,
+                Key::Down if event.modifiers.command => TextCommand::End,
+                Key::Up if event.modifiers.alt => TextCommand::ParagraphStart,
+                Key::Down if event.modifiers.alt => TextCommand::ParagraphEnd,
                 Key::Up => TextCommand::Up,
                 Key::Down => TextCommand::Down,
-                Key::Home => TextCommand::Start,
-                Key::End => TextCommand::End,
+                Key::Home if event.modifiers.control => TextCommand::Start,
+                Key::End if event.modifiers.control => TextCommand::End,
+                Key::Home => TextCommand::LineStart,
+                Key::End => TextCommand::LineEnd,
+                Key::PageUp => TextCommand::PageUp,
+                Key::PageDown => TextCommand::PageDown,
+                Key::Backspace if event.modifiers.command => TextCommand::DeleteLineBackward,
+                Key::Delete if event.modifiers.command => TextCommand::DeleteLineForward,
+                Key::Backspace if event.modifiers.alt => TextCommand::DeleteWordBackward,
+                Key::Delete if event.modifiers.alt => TextCommand::DeleteWordForward,
                 Key::Backspace => TextCommand::Backspace,
                 Key::Delete => TextCommand::Delete,
                 Key::Enter => TextCommand::Enter,

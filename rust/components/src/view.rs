@@ -106,6 +106,7 @@ pub(crate) struct Description {
     pub autofocus: bool,
     pub secure: bool,
     pub multiline: bool,
+    pub text_options: crate::TextOptions,
     pub anchor: Option<String>,
     pub collection: Option<crate::ListModel>,
     pub tooltip: String,
@@ -133,6 +134,7 @@ impl View {
             autofocus: false,
             secure: false,
             multiline: false,
+            text_options: crate::TextOptions::default(),
             anchor: None,
             collection: None,
             tooltip: String::new(),
@@ -335,6 +337,18 @@ impl View {
     }
     pub fn hidden(mut self, v: bool) -> Self {
         Rc::make_mut(&mut self.0).hidden = v;
+        self
+    }
+    pub fn max_length(mut self, value: usize) -> Self {
+        Rc::make_mut(&mut self.0).text_options.max_length = value;
+        self
+    }
+    pub fn undo_enabled(mut self, value: bool) -> Self {
+        Rc::make_mut(&mut self.0).text_options.undo = value;
+        self
+    }
+    pub fn history_limit(mut self, value: usize) -> Self {
+        Rc::make_mut(&mut self.0).text_options.history_limit = value;
         self
     }
     pub fn read_only(mut self, v: bool) -> Self {

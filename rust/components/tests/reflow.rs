@@ -20,6 +20,7 @@ impl Measure for Metrics {
             lines
         };
         TextLayout {
+            lines: Vec::new(),
             placeholders: Vec::new(),
             size: Size::new(
                 if style.constrained() {

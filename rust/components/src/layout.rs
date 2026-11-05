@@ -109,10 +109,7 @@ impl Host {
                         f64::INFINITY
                     },
                 );
-                let caret = (layout.range_rects)(editor.selection.caret..editor.selection.caret)
-                    .first()
-                    .copied()
-                    .unwrap_or_default();
+                let caret = layout.caret_rect(editor.selection.caret, editor.affinity());
                 let available = (node.bounds.width - 20.).max(1.);
                 if node.multiline {
                     editor.scroll = 0.;

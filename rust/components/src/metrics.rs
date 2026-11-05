@@ -34,14 +34,53 @@ impl TextStyle {
             || matches!(self.align, crate::Align::Center | crate::Align::End)
     }
 }
+/// One visual line. Byte ranges exclude its newline; `end_including_newline`
+/// distinguishes hard breaks from wrapped boundaries.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextLine {
+    pub range: Range<usize>,
+    pub end_including_newline: usize,
+    pub bounds: Rect,
+    pub start_caret: Rect,
+    pub end_caret: Rect,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CaretAffinity {
+    Upstream,
+    #[default]
+    Downstream,
+}
 /// Shaped geometry in logical points and UTF-8 bytes, supplied by a renderer.
 #[derive(Clone)]
 pub struct TextLayout {
     pub size: Size,
     pub baseline: f64,
     pub placeholders: Vec<Rect>,
+    pub lines: Vec<TextLine>,
     pub hit_test: Rc<dyn Fn(Point) -> usize>,
     pub range_rects: Rc<dyn Fn(Range<usize>) -> Vec<Rect>>,
+}
+impl TextLayout {
+    pub fn caret_rect(&self, index: usize, affinity: CaretAffinity) -> Rect {
+        let boundary = match affinity {
+            CaretAffinity::Upstream => self
+                .lines
+                .iter()
+                .find(|line| line.range.end == index)
+                .map(|line| line.end_caret),
+            CaretAffinity::Downstream => self
+                .lines
+                .iter()
+                .find(|line| line.range.start == index)
+                .map(|line| line.start_caret),
+        };
+        boundary.unwrap_or_else(|| {
+            (self.range_rects)(index..index)
+                .first()
+                .copied()
+                .unwrap_or_default()
+        })
+    }
 }
 /// Fully resolved runs passed to the shaping provider; no native or view handles.
 #[derive(Clone, Debug, PartialEq)]
@@ -151,7 +190,20 @@ pub(crate) fn field_layout(
     let hit = layout.hit_test.clone();
     let rects = layout.range_rects.clone();
     let indices = boundaries.clone();
+    let lines = layout
+        .lines
+        .iter()
+        .map(|line| {
+            let mut line = line.clone();
+            line.range = boundaries[(line.range.start / 3).min(boundaries.len() - 1)]
+                ..boundaries[(line.range.end / 3).min(boundaries.len() - 1)];
+            line.end_including_newline =
+                boundaries[(line.end_including_newline / 3).min(boundaries.len() - 1)];
+            line
+        })
+        .collect();
     TextLayout {
+        lines,
         placeholders: Vec::new(),
         size: layout.size,
         baseline: layout.baseline,

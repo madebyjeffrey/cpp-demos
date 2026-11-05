@@ -30,9 +30,9 @@ overall goal complete while an in-scope item remains open.
 
 | Area | Implemented foundation | Remaining closure |
 | --- | --- | --- |
-| State and descriptions | Reactive bindings, keys, macro conditions/repetition, host identity | Complete inventory mapping and ergonomic coverage of the remaining behaviors |
+| State and descriptions | Reactive bindings, keys, macro conditions/repetition, host identity and inventory mapping | Ergonomic coverage of remaining component behaviors |
 | Layout and basic controls | Inventory, constrained layout, rich text, style coverage and two-axis scrolling verified | Final cross-component visual/semantic audit in M5/M8 |
-| Editing | Grapheme-safe edits, history, composition, secure fields, multiline text | Visual navigation, selection gestures, specialized field policies and reusable buffer interface |
+| Editing | Shared text buffer, visual/logical navigation, selection gestures, composition and bounded/coalesced history | Integrated search, password and numeric/stepper policies |
 | Presentation | Popups, focus scopes, simple menus, tabs, slider-controlled split, basic alerts | Complete interactions, retained page state and presentation transactions |
 | Collections | Fixed-height virtualization, keyed selection, basic trees/tables, cell conflict checks | Lazy tree lifecycle, cell/column interactions, richer selection and semantics |
 | Values and tooling | Typed drafts, sRGB/hex, calendar, ISO/zoned editing, picking/width overrides | Complete value-control policies and inspector/Lab coverage |
@@ -92,9 +92,9 @@ Completion record:
 
 ## M2 — Editing and specialized fields
 
-- [ ] **M2.1 Shared text model:** provide a reusable Rust text-buffer interface for selection, committed text, composition, history and external replacement without requiring a native window. Retain existing grapheme/UTF-16 guarantees.
-- [ ] **M2.2 Navigation:** visual up/down and line/page movement through wrapped text, preferred horizontal caret position, word/line deletion and selection extension; distinguish line boundaries from document boundaries.
-- [ ] **M2.3 Selection and history:** word/line selection gestures, drag selection outside the viewport, appropriate typing coalescing and history limits; composition, readonly and grapheme-counted maximum-length cases.
+- [x] **M2.1 Shared text model:** provide a reusable Rust text-buffer interface for selection, committed text, composition, history and external replacement without requiring a native window. Retain existing grapheme/UTF-16 guarantees.
+- [x] **M2.2 Navigation:** visual up/down and line/page movement through wrapped text, preferred horizontal caret position, word/line deletion and selection extension; distinguish line boundaries from document boundaries.
+- [x] **M2.3 Selection and history:** word/line selection gestures, drag selection outside the viewport, appropriate typing coalescing and history limits; composition, readonly and grapheme-counted maximum-length cases.
 - [ ] **M2.4 Search field:** integrated clear/cancel, query/submit callbacks and configurable debounce. Cancel pending work on replacement, removal and deactivation without an idle animation loop.
 - [ ] **M2.5 Password policy:** explicit reveal, undo, readonly and length options; verify masking, clipboard/accessibility restrictions, composition and balanced native secure-input ownership through every transition.
 - [ ] **M2.6 Numeric/stepper policy:** standalone stepper, configurable precision/validation states, blur/submit/cancel policy and press-and-hold repeat deadlines; preserve exact integer arithmetic and invalid/incomplete drafts.
@@ -103,7 +103,33 @@ Evidence: extend the editor example; Unicode/visual navigation and IME/history t
 native clipboard/candidate-geometry checks. Main implementation:
 [editing](../rust/components/src/editing.rs), [drafts](../rust/components/src/draft.rs).
 
-Completion record: pending.
+Completion record (in progress):
+
+- M2.1: public `TextBuffer`/`TextOptions` now own selection, committed/composing
+  text, replacement, readonly/length policy and history. Mounted fields use the
+  same buffer. External replacement cancels composition and clears history;
+  UTF-8 ranges snap at ICU4X grapheme boundaries. Example without a native backend:
+  `cargo run -p scars-ui --example text_buffer`.
+- M2.2: shaped `TextLine` geometry and caret affinity drive wrapped up/down,
+  line/page movement, preferred horizontal position and visual line deletion.
+  Logical word/paragraph/document commands remain distinct. Native AppKit line,
+  paragraph, document, deletion and page selectors map to the corresponding
+  portable commands. UTF-16 line metrics convert to UTF-8, including blank final
+  lines and emoji/combining sequences.
+- M2.3: native double/triple clicks select words/visual lines; dragging extends
+  whole units and uses M1's stationary autoscroll. Typing and repeated deletion
+  coalesce within a configurable interval; selection, paste and composition break
+  groups. History limits, readonly editing and grapheme-counted maximum lengths
+  are configurable on ordinary fields (`max_length`, `undo_enabled`, `history_limit`).
+- Evidence: five portable buffer/field tests, five real SkParagraph navigation and
+  gesture tests, existing editing/scroll regressions, workspace tests, strict
+  Clippy and portable compilation. Native protocol tests exercise explicit IME
+  replacement as one undo step, line/document commands and candidate rectangle/
+  index coordinate conversion. Dark/light `m2_editor` previews inspected and its
+  native smoke run passes. Actual interactive VoiceOver/IME sessions remain M5.5.
+- M2 remains open for integrated search, password reveal/secure-input policies and
+  numeric/stepper policies (M2.4–M2.6).
+
 
 ## M3 — Navigation and presentation
 

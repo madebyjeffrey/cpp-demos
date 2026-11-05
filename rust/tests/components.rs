@@ -99,6 +99,62 @@ fn main() {
     window.clear_view();
     assert!(drag_host.focused().is_none());
     assert!(drag_host.next_deadline().is_none());
+    // Native line/document selectors remain distinct, and explicit IME replacement
+    // commits one transaction rather than recording an intermediate marked string.
+    let command_text = State::new("first\nsecond".to_owned());
+    let command_host = window
+        .set_view({
+            let text = command_text.clone();
+            move || view! {text_editor("",bind:text);}
+        })
+        .unwrap();
+    let id = command_host.snapshot().unwrap().last().unwrap().id;
+    command_host.focus(id).unwrap();
+    command_host.set_active(true);
+    command_host
+        .select_text(
+            id,
+            ui::Selection {
+                anchor: 8,
+                caret: 8,
+            },
+        )
+        .unwrap();
+    unsafe {
+        let _: () = msg_send![native,doCommandBySelector:objc2::sel!(moveToBeginningOfLine:)];
+        assert_eq!(
+            command_host.text_input().unwrap().unwrap().selection.caret,
+            6
+        );
+        let _: () = msg_send![native,doCommandBySelector:objc2::sel!(moveToEndOfDocument:)];
+        assert_eq!(
+            command_host.text_input().unwrap().unwrap().selection.caret,
+            12
+        );
+        let marked = NSString::from_str("日");
+        let _: () = msg_send![native,setMarkedText:&*marked,selectedRange:NSRange::new(1,0),replacementRange:NSRange::new(isize::MAX as usize,0)];
+        assert_eq!(command_text.get(), "first\nsecond");
+        let commit = NSString::from_str("日本");
+        let _: () = msg_send![native,insertText:&*commit,replacementRange:NSRange::new(12,1)];
+        assert_eq!(command_text.get(), "first\nsecond日本");
+        let _: () = msg_send![native,doCommandBySelector:objc2::sel!(undo:)];
+        assert_eq!(command_text.get(), "first\nsecond");
+        let mut actual = NSRange::new(0, 0);
+        let caret: foundation::NSRect = msg_send![native,firstRectForCharacterRange:NSRange::new(12,0),actualRange:&mut actual as *mut NSRange];
+        assert_eq!(actual, NSRange::new(12, 0));
+        assert!(
+            caret.size.width > 0.
+                && caret.size.height > 0.
+                && caret.origin.x.is_finite()
+                && caret.origin.y.is_finite()
+        );
+        let point = foundation::NSPoint::new(
+            caret.origin.x + 0.25,
+            caret.origin.y + caret.size.height / 2.,
+        );
+        let index: usize = msg_send![native,characterIndexForPoint:point];
+        assert_eq!(index, 12);
+    }
     // Invalid replacement must preserve the existing mount.
     window.set_view(|| view! { label("retained"); }).unwrap();
     assert!(
