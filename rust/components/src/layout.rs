@@ -4,6 +4,7 @@ use crate::{
 };
 use std::collections::HashMap;
 mod flow;
+mod menu;
 mod split;
 
 impl Host {
@@ -221,6 +222,7 @@ impl Host {
         }
         self.update_drag_deadline(std::time::Instant::now());
         self.reconcile_modal()?;
+        self.reconcile_menu()?;
         if let Some(id) = self.0.autofocus.take().filter(|id| self.in_scope(*id)) {
             self.focus(id)?;
         }
@@ -659,6 +661,9 @@ impl Tree<'_> {
             content.y -= info.offset.y;
             content.width = extent.width;
             content.height = extent.height;
+        }
+        if n.menu_root {
+            return self.arrange_menu(i, bounds, nodes);
         }
         if let Some(anchor) = &n.anchor
             && let Some(target) = nodes.iter().find(|n| n.key.as_ref() == Some(anchor))

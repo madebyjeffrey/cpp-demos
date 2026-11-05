@@ -1,24 +1,26 @@
 //! Composable presentation models. State lives outside view construction.
-use crate::{OptionItem, State, View};
-use std::rc::Rc;
+use crate::{Menu, MenuAction, OptionItem, State, View};
 #[derive(Clone)]
 pub struct Popup {
     pub open: State<bool>,
+    menu: Menu,
 }
 impl Popup {
     pub fn new() -> Self {
+        let menu = Menu::new();
         Self {
-            open: State::new(false),
+            open: menu.open.clone(),
+            menu,
         }
     }
     pub fn show(&self) {
-        self.open.set(true)
+        self.menu.show()
     }
     pub fn dismiss(&self) {
-        self.open.set(false)
+        self.menu.dismiss()
     }
     pub fn toggle(&self) {
-        self.open.update(|v| *v = !*v)
+        self.menu.toggle()
     }
     pub fn modal(&self, title: impl Into<String>, body: View) -> View {
         if !self.open.get() {
@@ -47,36 +49,7 @@ impl Popup {
         View::popover(anchor, vec![body], move || close.dismiss())
     }
     pub fn menu(&self, anchor: impl Into<String>, items: Vec<MenuAction>) -> View {
-        let buttons = items
-            .into_iter()
-            .map(|item| {
-                let close = self.clone();
-                View::button(item.label, move || {
-                    close.dismiss();
-                    (item.action)();
-                })
-                .enabled(item.enabled)
-            })
-            .collect();
-        self.popover(anchor, View::panel(buttons).padding(8.).width(220))
-    }
-}
-pub struct MenuAction {
-    pub label: String,
-    pub enabled: bool,
-    action: Rc<dyn Fn()>,
-}
-impl MenuAction {
-    pub fn new(label: impl Into<String>, action: impl Fn() + 'static) -> Self {
-        Self {
-            label: label.into(),
-            enabled: true,
-            action: Rc::new(action),
-        }
-    }
-    pub fn enabled(mut self, value: bool) -> Self {
-        self.enabled = value;
-        self
+        self.menu.view(anchor, items)
     }
 }
 /// Tabs compose ordinary views. Only the selected page is mounted.
@@ -122,7 +95,10 @@ pub fn dropdown(
         .into_iter()
         .map(|o| {
             let selected = selected.clone();
-            MenuAction::new(o.label, move || selected.set(o.id.clone())).enabled(o.enabled)
+            let id = o.id.clone();
+            MenuAction::new(o.label, move || selected.set(o.id.clone()))
+                .key(id)
+                .enabled(o.enabled)
         })
         .collect();
     (button, popup.menu(key, items))

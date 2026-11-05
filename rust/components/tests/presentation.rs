@@ -102,3 +102,31 @@ fn popover_positions_against_anchor_and_stays_in_viewport() {
     assert_eq!(panel.bounds.x, 140.);
     assert_eq!(panel.bounds.y, 60.);
 }
+#[test]
+fn dropdown_keeps_distinct_option_ids_when_labels_match() {
+    let popup = Popup::new();
+    let selected = State::new("first".to_owned());
+    let host = Host::new({
+        let popup = popup.clone();
+        let selected = selected.clone();
+        move || {
+            let (button, overlay) = dropdown(
+                "Choice",
+                &selected,
+                vec![
+                    OptionItem::new("first", "Same"),
+                    OptionItem::new("second", "Same"),
+                ],
+                &popup,
+                "choice",
+            );
+            View::layer(vec![button, overlay])
+        }
+    });
+    host.layout(Size::new(500., 400.), &Metrics).unwrap();
+    popup.show();
+    host.layout(Size::new(500., 400.), &Metrics).unwrap();
+    key(&host, Key::End);
+    key(&host, Key::Enter);
+    assert_eq!(selected.get(), "second");
+}

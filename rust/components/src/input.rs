@@ -230,6 +230,7 @@ impl Host {
             .then(|| self.focused())
             .flatten();
         if !active {
+            self.dismiss_menu();
             let _ = self.unmark_text(true);
             self.cancel_field_work();
         }
@@ -376,6 +377,9 @@ impl Host {
             self.blur();
             inspector.selected.set(self.pick(event.position)?);
             self.redraw();
+            return Ok(true);
+        }
+        if self.menu_pointer(event)? {
             return Ok(true);
         }
         if self.split_pointer(event, clicks)? {
@@ -578,6 +582,9 @@ impl Host {
             inspector.picking.set(false);
             self.redraw();
             return Ok(true);
+        }
+        if let Some(handled) = self.menu_key(event)? {
+            return Ok(handled);
         }
         if event.key == Key::Escape
             && let Some(id) = self.active_modal()

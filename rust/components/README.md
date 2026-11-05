@@ -439,3 +439,48 @@ layout hides a pane is cancelled. Focus in the hidden pane moves to the divider.
 Native split groups expose splitters and previous/next pane contents, orientation,
 value/range, resize and collapse actions. This protocol coverage does not replace
 the later interactive VoiceOver audit.
+
+## Completion M3 — menu trees and split actions
+
+`cargo run --example m3_menu` demonstrates nested menus and retained primary actions.
+Create `Menu`/`SplitAction` once, then describe the current items in each builder:
+
+```rust
+let menu = Menu::new();
+let checked = State::new(true);
+// Inside the view builder, place trigger and overlay in the same layer:
+View::layer(vec![
+    menu.button("Document ▾", "document"),
+    menu.view("document", vec![
+        MenuAction::new("Save", || {}).key("save").shortcut("⌘S"),
+        MenuAction::separator(),
+        MenuAction::check("Show guides", checked.binding()),
+        MenuAction::submenu("Quality", vec![MenuAction::new("Best", || {})]),
+    ]),
+])
+```
+
+`radio(label, binding, choice)` selects a string choice. `enabled(false)` excludes
+an item from keyboard/typeahead navigation and activation. Keys default to labels;
+provide stable keys for changing labels. Keys are unique among siblings and cannot
+start with `$`. Shortcut strings are display hints; applications register actual
+accelerators in their window menus. The existing `Popup::menu` helper uses this
+same menu implementation.
+
+Up/Down wrap within the current level, Home/End choose its first/last enabled item,
+Right/Enter open submenus, Left/Escape return, and Escape at the root or Tab dismiss.
+Printable input searches a case-insensitive prefix; repeating a letter cycles
+matches, and a one-second pause resets it. This creates no editor or idle timer.
+Hover opens a branch; click or drag-release activates a leaf. Outside presses,
+pointer cancellation, deactivation and loss of the anchor dismiss. Leaf activation
+closes before invoking application code. Menus share one focus scope and restore
+the previous control on dismissal. Panels flip/fit inside the viewport and scroll
+long lists; keyboard focus reveals offscreen items.
+
+`SplitAction::view(key, items)` returns `(button, overlay)`. Selecting an enabled
+leaf remembers its key path and updates the primary button. If it becomes disabled
+or disappears, the button uses the first enabled leaf; restoring that key restores
+the retained choice. With no available leaf the primary button is disabled.
+`selected()` reports the retained path. `split_button` still supports a fixed
+primary callback. Native accessibility exposes menu/item roles, checked values,
+shortcut help and expanded branches; final interactive VoiceOver auditing is M5.

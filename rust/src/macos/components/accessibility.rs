@@ -153,7 +153,9 @@ define_class!(
         #[unsafe(method_id(accessibilityRole))]
         fn role(&self) -> Option<Retained<NSString>> {
             self.node().map(|n| {
-                if n.collection.is_some() {
+                if n.menu_item.is_some() { unsafe { NSAccessibilityMenuItemRole.retain() } }
+                else if n.menu_panel { unsafe { NSAccessibilityMenuRole.retain() } }
+                else if n.collection.is_some() {
                     unsafe { NSAccessibilityListRole.retain() }
                 } else {
                     ns(&role(n.kind).to_string())
@@ -163,6 +165,14 @@ define_class!(
         #[unsafe(method_id(accessibilityLabel))]
         fn label(&self) -> Option<Retained<NSString>> {
             self.node().map(|n| ns(&n.label))
+        }
+        #[unsafe(method_id(accessibilityHelp))]
+        fn help(&self) -> Option<Retained<NSString>> {
+            self.node().and_then(|n| n.menu_item.filter(|m| !m.shortcut.is_empty()).map(|m| ns(&m.shortcut)))
+        }
+        #[unsafe(method(isAccessibilityExpanded))]
+        fn expanded(&self) -> bool {
+            self.node().and_then(|n| n.menu_item).is_some_and(|m| m.expanded)
         }
         #[unsafe(method_id(accessibilityIdentifier))]
         fn identifier(&self) -> Option<Retained<NSString>> {
@@ -241,6 +251,7 @@ define_class!(
         #[unsafe(method_id(accessibilityValue))]
         fn value(&self)->Option<Retained<AnyObject>>{
             self.node().filter(|n|!n.secure).and_then(|n|{
+                if let Some(checked)=n.menu_item.as_ref().and_then(|m|m.checked){return Some(any(NSNumber::new_bool(checked)))}
                 if let Some(stepper)=&n.stepper{return numeric(&stepper.value)}
                 match n.value{
                     Value::Text(v)=>Some(any(ns(&v))),

@@ -385,6 +385,86 @@ fn main() {
         let increased: bool = msg_send![&*divider, accessibilityPerformIncrement];
         assert!(!increased);
     }
+    // Menus expose native roles/check values, accept printable key events
+    // without claiming an editor, and leave retained closed items inert.
+    let menu = ui::Menu::new();
+    let checked_menu = State::new(false);
+    let menu_host = window
+        .set_view({
+            let menu = menu.clone();
+            let checked = checked_menu.clone();
+            move || {
+                ui::View::layer(vec![
+                    ui::View::button("Open", || {}).key("open"),
+                    menu.view(
+                        "open",
+                        vec![
+                            ui::MenuAction::new("Alpha", || {}),
+                            ui::MenuAction::check("Beta", checked.binding()).shortcut("⌘B"),
+                            ui::MenuAction::submenu("Empty", vec![]),
+                        ],
+                    ),
+                ])
+            }
+        })
+        .unwrap();
+    menu_host.set_active(true);
+    menu.show();
+    unsafe {
+        let roots: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        let scope = roots.objectAtIndex(0);
+        let panels: Retained<NSArray<AnyObject>> = msg_send![&*scope, accessibilityChildren];
+        let panel = panels.objectAtIndex(0);
+        let role: Retained<NSString> = msg_send![&*panel, accessibilityRole];
+        assert_eq!(role.to_string(), "AXMenu");
+        let rows: Retained<NSArray<AnyObject>> = msg_send![&*panel, accessibilityChildren];
+        let beta = rows.objectAtIndex(1);
+        let role: Retained<NSString> = msg_send![&*beta, accessibilityRole];
+        assert_eq!(role.to_string(), "AXMenuItem");
+        let value: Retained<foundation::NSNumber> = msg_send![&*beta, accessibilityValue];
+        assert!(!value.boolValue());
+        let help: Retained<NSString> = msg_send![&*beta, accessibilityHelp];
+        assert_eq!(help.to_string(), "⌘B");
+        let characters = NSString::from_str("b");
+        let event = app_kit::NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
+            app_kit::NSEventType::KeyDown, foundation::NSPoint::ZERO, app_kit::NSEventModifierFlags::empty(), 0., window.native_window().windowNumber(), None, &characters, &characters, false, 11).unwrap();
+        let _: () = msg_send![native, keyDown:&*event];
+        assert_eq!(
+            menu_host.focused(),
+            menu_host
+                .snapshot()
+                .unwrap()
+                .iter()
+                .find(|n| n.text == "Beta")
+                .map(|n| n.id)
+        );
+        assert!(menu_host.text_input().unwrap().is_none());
+        let pressed: bool = msg_send![&*beta, accessibilityPerformPress];
+        assert!(pressed);
+        assert!(checked_menu.get());
+        assert!(!menu.open.get());
+        let pressed: bool = msg_send![&*beta, accessibilityPerformPress];
+        assert!(!pressed);
+        menu.show();
+        let roots: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        let scope = roots.objectAtIndex(0);
+        let panels: Retained<NSArray<AnyObject>> = msg_send![&*scope, accessibilityChildren];
+        let panel = panels.objectAtIndex(0);
+        let empty = menu_host
+            .snapshot()
+            .unwrap()
+            .into_iter()
+            .find(|n| n.text == "Empty")
+            .unwrap();
+        menu_host.activate(empty.id).unwrap();
+        let _: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        let rows: Retained<NSArray<AnyObject>> = msg_send![&*panel, accessibilityChildren];
+        let empty = rows.objectAtIndex(2);
+        let expanded: bool = msg_send![&*empty, isAccessibilityExpanded];
+        assert!(expanded);
+        window.clear_view();
+        assert!(!menu.open.get());
+    }
     let list = ui::ListModel::new(
         (0..100_000)
             .map(|i| ui::ListItem::new(i.to_string(), format!("Row {i}")))

@@ -33,7 +33,7 @@ overall goal complete while an in-scope item remains open.
 | State and descriptions | Reactive bindings, keys, macro conditions/repetition, host identity and inventory mapping | Ergonomic coverage of remaining component behaviors |
 | Layout and basic controls | Inventory, constrained layout, rich text, style coverage and two-axis scrolling verified | Final cross-component visual/semantic audit in M5/M8 |
 | Editing | Shared buffer, visual navigation/gestures, search/password/numeric policies and held steppers | Localization/value-control expansion in M6; final interactive IME audit in M5 |
-| Presentation | Retained two-axis splits, popups/focus scopes and initial menu/tab/alert compositions | Complete menu/overlay interactions, retained tab state and presentation transactions |
+| Presentation | Retained splits, hierarchical menus/split actions and popup focus scopes | Configurable overlay policy, retained tab state and presentation transactions |
 | Collections | Fixed-height virtualization, keyed selection, basic trees/tables, cell conflict checks | Lazy tree lifecycle, cell/column interactions, richer selection and semantics |
 | Values and tooling | Typed drafts, sRGB/hex, calendar, ISO/zoned editing, picking/width overrides | Complete value-control policies and inspector/Lab coverage |
 | Verification | Core/CPU tests and native input/accessibility protocol tests | Interactive audits, final visible GPU/full-screen runs and repeatable checks |
@@ -172,7 +172,7 @@ Completion record:
 ## M3 — Navigation and presentation
 
 - [x] **M3.1 Split views:** draggable dividers, both orientations, pane limits, collapse/restore and keyboard adjustment; resize cursors, capture cancellation and accessible split semantics.
-- [ ] **M3.2 Menus and split actions:** separators, checked/radio items, nested submenus, shortcut labels, disabled-item navigation, typeahead and complete open/close/activation behavior; a split action can retain its chosen primary action.
+- [x] **M3.2 Menus and split actions:** separators, checked/radio items, nested submenus, shortcut labels, disabled-item navigation, typeahead and complete open/close/activation behavior; a split action can retain its chosen primary action.
 - [ ] **M3.3 Overlay policy:** configurable placement, sizing, viewport fitting, focus preservation and dismissal callbacks for popovers/tooltips/context menus, including nested scopes and owner removal.
 - [ ] **M3.4 Tabs:** stable page identity, enabled tabs, keyboard navigation and restoration of editor history, selection, scroll and focus after switching pages. Application model state alone does not satisfy this item.
 - [ ] **M3.5 Wizards:** stable step IDs, validation that can block navigation, back/review policy, finish/cancel/change callbacks and valid behavior for empty/changed step sets.
@@ -201,7 +201,19 @@ Completion record (in progress):
   pass. Workspace tests, strict Clippy and portable compilation pass.
   `cargo run --example m3_split` demonstrates nested splits; dark/light previews
   inspected and native smoke run passes. Final interactive semantics remain M5.
-- M3.2–M3.6 remain open.
+- M3.2: `Menu`/`MenuAction` now cover stable keys, separators, check/radio
+  bindings, shortcut hints, disabled navigation, nested branches and Unicode
+  lowercase prefix typeahead with repeat-letter cycling/expiry. Pointer hover,
+  drag-release, scoped arrows/Home/End, Enter/Space, Left/Escape, Tab, outside
+  presses, cancellation, deactivation and anchor loss have explicit behavior.
+  Branch replacement repairs focus; long menus scroll/reveal; panels flip/fit.
+  `SplitAction` retains the chosen leaf path with disabled/removed-choice fallback.
+- Evidence: ten portable menu interaction/lifetime tests; native printable-key
+  routing without an editor, AX menu/item roles, check values, shortcut help,
+  expanded empty branches and inert closed/unmounted elements pass. Workspace
+  tests, strict Clippy, portable compilation, dark/light inspected previews and
+  native `m3_menu --smoke` pass. The existing `Popup::menu` stays compatible.
+- M3.3–M3.6 remain open.
 
 
 ## M4 — Collections and structured editing

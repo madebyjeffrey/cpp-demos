@@ -48,6 +48,10 @@ pub struct Node {
     pub field_kind: crate::TextFieldKind,
     pub field_action_width: f64,
     pub multiline: bool,
+    pub menu_root: bool,
+    pub menu_item: Option<crate::MenuItemInfo>,
+    pub menu_panel: bool,
+    pub(crate) menu_path: Vec<String>,
     pub anchor: Option<String>,
     pub scroll: Option<crate::ScrollInfo>,
     pub(crate) scroll_axes: crate::ScrollAxes,
@@ -319,6 +323,9 @@ impl Host {
         let Some((d, value)) = target else {
             return Ok(false);
         };
+        if let Some(handled) = self.activate_menu_item(id)? {
+            return Ok(handled);
+        }
         if d.kind == Kind::SplitDivider {
             return self.toggle_split(id);
         }
@@ -518,6 +525,10 @@ fn mount(
             .filter(|v| v.0.field_action.is_some())
             .map_or(0., |v| v.0.style.width.resolve(100.).unwrap_or(0.) + 6.),
         multiline: d.multiline,
+        menu_root: d.menu.is_some(),
+        menu_item: d.menu_item.clone(),
+        menu_panel: d.menu_panel,
+        menu_path: d.menu_path.clone(),
         anchor: d.anchor.clone(),
         scroll: None,
         scroll_axes: d.scroll_axes,
@@ -560,6 +571,9 @@ fn mount(
     Ok(())
 }
 pub(crate) fn validate(d: &Description) -> Result<(), Error> {
+    if let Some(menu) = &d.menu {
+        crate::menu::validate(menu)?;
+    }
     if d.field.kind == crate::TextFieldKind::Search
         && std::time::Instant::now()
             .checked_add(d.field.delay)

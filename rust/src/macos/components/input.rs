@@ -259,6 +259,31 @@ pub(super) fn event(m: &Mounted, event: &Event) -> std::result::Result<bool, ui:
             )
         }
         Event::Key(k) => {
+            if k.down
+                && !k.modifiers.command
+                && !k.modifiers.control
+                && !k.text.is_empty()
+                && !matches!(
+                    k.key,
+                    Key::Space
+                        | Key::Tab
+                        | Key::Enter
+                        | Key::Escape
+                        | Key::Left
+                        | Key::Right
+                        | Key::Up
+                        | Key::Down
+                        | Key::Home
+                        | Key::End
+                        | Key::PageUp
+                        | Key::PageDown
+                        | Key::Backspace
+                        | Key::DeleteForward
+                )
+                && m.host.menu_text(&k.text)?
+            {
+                return Ok(true);
+            }
             let key = match k.key {
                 Key::Tab => ui::Key::Tab,
                 Key::Space => ui::Key::Space,

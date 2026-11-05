@@ -235,11 +235,12 @@ pub fn combo_box(
     let query = text.get().to_lowercase();
     let items = options
         .iter()
-        .filter(|s| s.to_lowercase().contains(&query))
-        .map(|option| {
+        .enumerate()
+        .filter(|(_, s)| s.to_lowercase().contains(&query))
+        .map(|(index, option)| {
             let value = option.clone();
             let text = text.clone();
-            crate::MenuAction::new(option, move || text.set(value.clone()))
+            crate::MenuAction::new(option, move || text.set(value.clone())).key(index.to_string())
         })
         .take(100)
         .collect();

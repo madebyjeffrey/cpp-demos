@@ -396,7 +396,13 @@ impl Renderer {
             } else {
                 theme.secondary
             };
+            if n.menu_panel {
+                bg = bg.or(Some(theme.panel));
+            }
             match n.kind {
+                Kind::Button if n.menu_item.is_some() => {
+                    bg = bg.or_else(|| (n.focused || n.pressed).then_some(theme.selected));
+                }
                 Kind::Panel | Kind::GroupBox => bg = bg.or(Some(theme.panel)),
                 Kind::Button | Kind::Toggle | Kind::Segment | Kind::CollectionRow => {
                     bg = bg.or(Some(if n.value.selected() || n.pressed {
@@ -414,6 +420,7 @@ impl Renderer {
                 round(canvas, b, n.style.radius, bg, false);
             }
             match n.kind {
+                Kind::Button if n.menu_item.is_some() => (),
                 Kind::Button | Kind::Toggle | Kind::Segment | Kind::TextField | Kind::GroupBox => {
                     round(canvas, b.inset(0.5), n.style.radius, theme.border, true)
                 }
@@ -572,6 +579,43 @@ impl Renderer {
                     }
                 }
                 _ => (),
+            }
+            if let Some(item) = &n.menu_item {
+                let mut style = n.text_style;
+                style.color = fg;
+                let trailing = if item.submenu { "›" } else { &item.shortcut };
+                for (text, right) in [
+                    (
+                        if item.checked == Some(true) {
+                            "✓"
+                        } else {
+                            ""
+                        },
+                        false,
+                    ),
+                    (trailing, true),
+                ] {
+                    if text.is_empty() {
+                        continue;
+                    }
+                    let shaped = self.shaped_runs(
+                        &[ParagraphSpan::Text {
+                            text: text.into(),
+                            style,
+                        }],
+                        style,
+                        f64::INFINITY,
+                    );
+                    let x = if right {
+                        b.x + b.width - shaped.layout.size.width - 10.
+                    } else {
+                        b.x + 8.
+                    };
+                    shaped
+                        .paragraph
+                        .borrow()
+                        .paint(canvas, (x as f32, n.text_bounds.y as f32));
+                }
             }
             if let Some(spans) = &n.spans {
                 let mut spans = spans.clone();

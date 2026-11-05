@@ -51,9 +51,9 @@ wrapping a row of independent labels alone does not close that behavior.
 | `SearchField`, `SearchFieldOptions` | Integrated clear/cancel, committed query/submit hooks, scoped one-shot debounce and lifetime cancellation implemented | M2.4 |
 | `PasswordField`, `PasswordFieldOptions` | Explicit reveal/undo, readonly/grapheme limits, uncached sensitive painting and clipboard/AX restrictions implemented; actual native ownership transitions tested | M2.5 |
 | `NumericField`, `Stepper`, `NumericOptions`, `NumericStatus`, `NumericValidation` | Exact `Numeric<T>`/`Draft<T>`, `Validation`/`ValidationStatus`, precision/blur/submit/cancel and standalone repeating `stepper` implemented; localized grammar and shared typed-control expansion remain | M2.6, M6.1–M6.2, M6.6 |
-| `MenuButton`, `MenuItem`, `MenuItemKind`, `Action` | Flat `Popup::menu`/`MenuAction` composition; menu kinds, hierarchy, metadata and navigation partial | M3.2 |
+| `MenuButton`, `MenuItem`, `MenuItemKind`, `Action` | `Menu`/`MenuAction` tree: separator/check/radio/submenu, shortcut hints, disabled navigation/typeahead; legacy `Popup::menu` supported | M3.2 |
 | `SelectionDropdown` | Existing dropdown/button+overlay composition; richer menu navigation and semantics pending | M3.2, M5.3 |
-| `SplitActionButton` | Existing primary+arrow composition; selected default action and full menu behavior pending | M3.2 |
+| `SplitActionButton` | Retained `SplitAction`: selected leaf key path, primary invocation and unavailable-choice fallback; fixed `split_button` helper retained | M3.2 |
 | `OverlayPlacement`, `PopoverFocus`, `TooltipOptions`, `PopoverOptions` | Basic anchored/clamped popover, modal scope and delayed tooltip; configurable placement/focus/dismissal/size/help policies partial | M3.3, M5.3 |
 | `SplitView`, `SplitViewOptions`, `SplitPane` | `Split` model and retained panes, draggable dividers, both axes/minima, collapse/restoration, keyboard/cursor/capture policy and native split semantics implemented | M3.1 |
 | `Tab`, `TabView` | Segmented selection mounts only active view; retained host-owned state/focus and enabled/key behavior incomplete | M3.4 |
