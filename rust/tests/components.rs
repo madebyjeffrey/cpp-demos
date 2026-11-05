@@ -289,6 +289,102 @@ fn main() {
         let increased: bool = msg_send![&*step, accessibilityPerformIncrement];
         assert!(!increased);
     }
+    let split = ui::Split::new(0.4).limits(50., 50.);
+    let ratio = split.clone();
+    let split_host = window
+        .set_view(move || {
+            split.view(
+                ui::View::button("First", || {}),
+                ui::View::button("Second", || {}),
+            )
+        })
+        .unwrap();
+    unsafe {
+        let roots: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        let group = roots.objectAtIndex(0);
+        let role: Retained<NSString> = msg_send![&*group, accessibilityRole];
+        assert_eq!(role.to_string(), "AXSplitGroup");
+        let splitters: Retained<NSArray<AnyObject>> = msg_send![&*group, accessibilitySplitters];
+        assert_eq!(splitters.len(), 1);
+        let divider = splitters.objectAtIndex(0);
+        let role: Retained<NSString> = msg_send![&*divider, accessibilityRole];
+        assert_eq!(role.to_string(), "AXSplitter");
+        let orientation: app_kit::NSAccessibilityOrientation =
+            msg_send![&*divider, accessibilityOrientation];
+        assert_eq!(orientation, app_kit::NSAccessibilityOrientation::Vertical);
+        let previous: Retained<NSArray<AnyObject>> =
+            msg_send![&*divider, accessibilityPreviousContents];
+        assert_eq!(previous.len(), 1);
+        let first_pane = previous.objectAtIndex(0);
+        let next: Retained<NSArray<AnyObject>> = msg_send![&*divider, accessibilityNextContents];
+        assert_eq!(next.len(), 1);
+        let minimum: Retained<foundation::NSNumber> = msg_send![&*divider, accessibilityMinValue];
+        assert_eq!(minimum.doubleValue(), 50.);
+        let maximum: Retained<foundation::NSNumber> = msg_send![&*divider, accessibilityMaxValue];
+        assert!(maximum.doubleValue() > minimum.doubleValue());
+        let before: Retained<foundation::NSNumber> = msg_send![&*divider, accessibilityValue];
+        let increased: bool = msg_send![&*divider, accessibilityPerformIncrement];
+        assert!(increased);
+        let after: Retained<foundation::NSNumber> = msg_send![&*divider, accessibilityValue];
+        assert!((after.doubleValue() - before.doubleValue() - 10.).abs() < 0.001);
+        let value = foundation::NSNumber::new_f64(after.doubleValue() - 20.);
+        let _: () = msg_send![&*divider,setAccessibilityValue:&*value];
+        let changed: Retained<foundation::NSNumber> = msg_send![&*divider, accessibilityValue];
+        assert!((changed.doubleValue() - value.doubleValue()).abs() < 0.001);
+        let pressed: bool = msg_send![&*divider, accessibilityPerformPress];
+        assert!(pressed);
+        let description: Retained<NSString> = msg_send![&*divider, accessibilityValueDescription];
+        assert!(description.to_string().contains("collapsed"));
+        let previous: Retained<NSArray<AnyObject>> =
+            msg_send![&*divider, accessibilityPreviousContents];
+        assert_eq!(previous.len(), 0);
+        let stale: bool = msg_send![&*first_pane, accessibilityPerformPress];
+        assert!(!stale);
+
+        let children: Retained<NSArray<AnyObject>> = msg_send![&*group, accessibilityChildren];
+        assert_eq!(children.len(), 2);
+        ratio.restore();
+        let children: Retained<NSArray<AnyObject>> = msg_send![&*group, accessibilityChildren];
+        assert_eq!(children.len(), 3);
+        let divider_id = split_host
+            .snapshot()
+            .unwrap()
+            .into_iter()
+            .find(|n| n.kind == ui::Kind::SplitDivider)
+            .unwrap()
+            .id;
+        let b = split_host
+            .snapshot()
+            .unwrap()
+            .into_iter()
+            .find(|n| n.id == divider_id)
+            .unwrap()
+            .bounds;
+        split_host
+            .pointer(ui::Pointer {
+                kind: ui::PointerKind::Down,
+                position: ui::Point {
+                    x: b.x + 4.,
+                    y: b.y + 4.,
+                },
+                button: 0,
+                modifiers: Default::default(),
+            })
+            .unwrap();
+        let saved = ratio.ratio();
+        window.clear_view();
+        split_host
+            .pointer(ui::Pointer {
+                kind: ui::PointerKind::Move,
+                position: ui::Point { x: 500., y: 10. },
+                button: 0,
+                modifiers: Default::default(),
+            })
+            .unwrap();
+        assert_eq!(ratio.ratio(), saved);
+        let increased: bool = msg_send![&*divider, accessibilityPerformIncrement];
+        assert!(!increased);
+    }
     let list = ui::ListModel::new(
         (0..100_000)
             .map(|i| ui::ListItem::new(i.to_string(), format!("Row {i}")))

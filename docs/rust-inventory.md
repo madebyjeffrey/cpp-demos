@@ -24,7 +24,7 @@ The older UI engine and C++ `detail` namespace are excluded.
 | `TextInlineBox`, `TextSpan`, `TextLayoutOptions`, `TextPlacement`, `GlyphPosition`, `TextLine`, `TextLayout`, `TextLayoutEngine` | `Measure`/`TextLayout`, styled `Span`, inline `View` boxes, UTF-8 visual `TextLine` geometry/caret affinity and cached SkParagraph implemented. Renderer types stay out of the portable core | M1.2, M2.2 |
 | `TextRange`, `TextSelection`, `TextCommand`, `TextBuffer` | Standard byte ranges/`Selection`, reusable `TextBuffer`/`TextOptions`, visual/logical commands, gestures, composition and bounded/coalesced history implemented | M2.1–M2.3 |
 | `Clipboard`, `TextInputSnapshot` | Native clipboard and Rust `TextInputClient`/`TextInputState`; portable `TextInput` | M2.3, M5.4–M5.5 |
-| `PointerKind`, `PointerEvent`, `Key`, `KeyEvent`, `Cursor` | Portable/native events include both wheel axes, capture cancellation, text click gestures and visual editor commands; resize cursors remain | M1.5, M2.2–M2.3, M3.1 |
+| `PointerKind`, `PointerEvent`, `Key`, `KeyEvent`, `Cursor` | Portable/native events include both wheel axes, capture cancellation, text gestures/commands and resize cursor transport; final interactive audit remains | M5.4–M5.5 |
 | `Role`, `Element`, `LogicalItem`, `LogicalCell`, `LogicalColumn` | Native semantic adapter and logical row proxies exist; complete portable semantic snapshots, cells/columns/tree metadata/actions pending | M5.1–M5.4 |
 | `HostOptions`, `Host` | Host refresh/layout/input/mount exist; relevant invalidation, cursor, scroll, text, selection, presentation, inspection and logical-query contracts are assigned across the checklist | M1.4–M1.5, M2, M3, M4, M5, M7 |
 
@@ -40,7 +40,7 @@ wrapping a row of independent labels alone does not close that behavior.
 | --- | --- | --- |
 | `Label`, `Text`, `Button`, `CommandButton` | Existing label/button constructors and macro aliases | M1.2 text options, M5.3, M7.3 |
 | `ToggleButton`, `CheckBox`, `CheckState`, `Switch`, `RadioGroup`, `SegmentedControl`, `Option` | Existing bound controls, `CheckState`, `OptionItem` | M1.5, M5.3, M7.3 |
-| `Slider`, `SliderOptions` | Stepped bounded slider with pointer/key/capture lifetime; configurable page-step and repeat policy remain | M1.5, M2.6, M5.3 |
+| `Slider`, `SliderOptions` | Stepped bounded slider with pointer/key/capture lifetime; configurable page-step remains for full Lab/inventory closure | M7.3, M8.6 |
 | `ProgressBar` | Existing determinate/indeterminate progress | M5.3, M8.4 |
 | `Bitmap`, `Image`, `ContentMode` | Existing validated encoded/RGBA data and fit/fill/stretch/center rendering; resource lifetime and preview coverage retained | M7.3, M8.2–M8.4 |
 | `FlexRow`, `FlexColumn`, `Block`, `Inline`, `Layer` | Row/column/block/inline/layer and shaped rich inline text implemented with width-dependent reflow and baselines | M1.2–M1.3 |
@@ -55,7 +55,7 @@ wrapping a row of independent labels alone does not close that behavior.
 | `SelectionDropdown` | Existing dropdown/button+overlay composition; richer menu navigation and semantics pending | M3.2, M5.3 |
 | `SplitActionButton` | Existing primary+arrow composition; selected default action and full menu behavior pending | M3.2 |
 | `OverlayPlacement`, `PopoverFocus`, `TooltipOptions`, `PopoverOptions` | Basic anchored/clamped popover, modal scope and delayed tooltip; configurable placement/focus/dismissal/size/help policies partial | M3.3, M5.3 |
-| `SplitView`, `SplitViewOptions`, `SplitPane` | Two-pane composition with ratio slider; divider/orientation/collapse/minima and native semantics missing | M3.1 |
+| `SplitView`, `SplitViewOptions`, `SplitPane` | `Split` model and retained panes, draggable dividers, both axes/minima, collapse/restoration, keyboard/cursor/capture policy and native split semantics implemented | M3.1 |
 | `Tab`, `TabView` | Segmented selection mounts only active view; retained host-owned state/focus and enabled/key behavior incomplete | M3.4 |
 | `Wizard`, `WizardStep`, `WizardOptions`, `WizardNavigation` | Simple index/back/next composition; validation, stable steps, review, finish/cancel/change policies missing | M3.5 |
 | `Alert`, `AlertAction`, `AlertActionRole` | Basic Done popup and low-level native dialog exist; component result transaction/action roles and complete native sheet integration missing | M3.6 |

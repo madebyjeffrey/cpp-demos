@@ -79,13 +79,14 @@ fn item(input: ParseStream<'_>) -> Result<Item> {
         let content;
         parenthesized!(content in input);
         while !content.is_empty() {
-            let property = if content.peek(Ident) && content.peek2(Token![:]) {
-                let property = content.parse()?;
-                content.parse::<Token![:]>()?;
-                Some(property)
-            } else {
-                None
-            };
+            let property =
+                if content.peek(Ident) && content.peek2(Token![:]) && !content.peek2(Token![::]) {
+                    let property = content.parse()?;
+                    content.parse::<Token![:]>()?;
+                    Some(property)
+                } else {
+                    None
+                };
             args.push((property, content.parse()?));
             if !content.is_empty() {
                 content.parse::<Token![,]>()?;
@@ -224,6 +225,15 @@ fn expand(item: Item, root: &Tokens) -> Result<Tokens> {
                     "embed" => {
                         let value = one(&mut positional)?;
                         quote!(#value)
+                    }
+                    "split" | "split_view" => {
+                        if positional.len() != 3 {
+                            return Err(syn::Error::new(
+                                name.span(),
+                                "split needs a model/ratio and two pane expressions",
+                            ));
+                        }
+                        quote!(#root::#name(#(#positional),*))
                     }
                     "rich_text" => {
                         let runs = one(&mut positional)?;

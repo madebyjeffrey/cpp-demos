@@ -52,6 +52,7 @@ pub(crate) struct Interaction {
     pub pressed: Option<NodeId>,
     pub repeat: Option<(NodeId, std::time::Instant)>,
     pub scroll_drag: Option<crate::scroll::ScrollDrag>,
+    pub split_drag: Option<crate::split::SplitDrag>,
     pub drag_tick: Option<std::time::Instant>,
     pub hovered: Option<NodeId>,
     pub active: bool,
@@ -71,6 +72,7 @@ impl Default for Interaction {
             pressed: None,
             repeat: None,
             scroll_drag: None,
+            split_drag: None,
             drag_tick: None,
             hovered: None,
             active: true,
@@ -236,6 +238,7 @@ impl Host {
         if !active {
             i.pressed = None;
             i.scroll_drag = None;
+            i.split_drag = None;
             i.drag_tick = None;
             i.repeat = None;
             i.hovered = None;
@@ -268,6 +271,7 @@ impl Host {
             let mut i = self.0.interaction.borrow_mut();
             i.pressed = None;
             i.scroll_drag = None;
+            i.split_drag = None;
             i.drag_tick = None;
             i.repeat = None;
         }
@@ -288,6 +292,7 @@ impl Host {
         let previous = i.focus.take().filter(|_| i.active);
         i.pressed = None;
         i.scroll_drag = None;
+        i.split_drag = None;
         i.drag_tick = None;
         i.repeat = None;
         drop(i);
@@ -371,6 +376,9 @@ impl Host {
             self.blur();
             inspector.selected.set(self.pick(event.position)?);
             self.redraw();
+            return Ok(true);
+        }
+        if self.split_pointer(event, clicks)? {
             return Ok(true);
         }
         if self.scrollbar_pointer(event)? {
@@ -628,6 +636,9 @@ impl Host {
             && matches!(event.key, Key::Up | Key::Down)
         {
             return self.focus_next(event.key == Key::Up);
+        }
+        if node.kind == Kind::SplitDivider {
+            return self.split_key(id, event);
         }
         if node.kind == Kind::TextField {
             let command = match event.key {

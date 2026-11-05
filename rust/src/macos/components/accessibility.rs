@@ -124,6 +124,8 @@ fn role(kind: Kind) -> &'static NSString {
             Kind::RadioGroup => NSAccessibilityRadioGroupRole,
             Kind::Slider => NSAccessibilitySliderRole,
             Kind::Stepper => NSAccessibilityIncrementorRole,
+            Kind::Split => NSAccessibilitySplitGroupRole,
+            Kind::SplitDivider => NSAccessibilitySplitterRole,
             Kind::Progress => NSAccessibilityProgressIndicatorRole,
             Kind::Image => NSAccessibilityImageRole,
             Kind::TextField => NSAccessibilityTextFieldRole,
@@ -256,7 +258,7 @@ define_class!(
                 if let Some(text) = value.and_then(|v| v.downcast_ref::<NSString>()) {
                     m.host.set_text(n.id, &text.to_string())
                 } else if let Some(number) = value.and_then(|v| v.downcast_ref::<NSNumber>()) {
-                    if n.kind == Kind::Slider {
+                    if matches!(n.kind,Kind::Slider|Kind::SplitDivider) {
                         m.host.set_number(n.id, number.doubleValue())
                     } else if n.value.selected() != number.boolValue() {
                         m.host.activate(n.id)
@@ -267,6 +269,22 @@ define_class!(
                     Ok(false)
                 }
             });
+        }
+        #[unsafe(method(accessibilityOrientation))]
+        fn orientation(&self)->NSAccessibilityOrientation{
+            self.node().and_then(|n|n.split.map(|s|if (s.orientation==ui::Orientation::Vertical)!=(n.kind==Kind::SplitDivider){NSAccessibilityOrientation::Vertical}else{NSAccessibilityOrientation::Horizontal})).unwrap_or(NSAccessibilityOrientation::Unknown)
+        }
+        #[unsafe(method_id(accessibilityValueDescription))]
+        fn value_description(&self)->Option<Retained<NSString>>{
+            self.node().filter(|n|n.kind==Kind::SplitDivider).and_then(|n|n.split).map(|s|ns(&match s.collapsed{ui::SplitPane::First=>"First pane collapsed".into(),ui::SplitPane::Second=>"Second pane collapsed".into(),ui::SplitPane::None=>format!("{:.0} points",if s.orientation==ui::Orientation::Horizontal{s.first.width}else{s.first.height})}))
+        }
+        #[unsafe(method_id(accessibilityPreviousContents))]
+        fn previous_contents(&self)->Option<Retained<NSArray<AnyObject>>>{self.split_contents(true)}
+        #[unsafe(method_id(accessibilityNextContents))]
+        fn next_contents(&self)->Option<Retained<NSArray<AnyObject>>>{self.split_contents(false)}
+        #[unsafe(method_id(accessibilitySplitters))]
+        fn splitters(&self)->Option<Retained<NSArray<AnyObject>>>{
+            self.with(|m,_,n|Ok(if n.kind==Kind::Split{Some(NSArray::from_retained_slice(&m.host.snapshot()?.iter().filter(|child|child.parent==Some(n.id) && child.kind==Kind::SplitDivider && !child.hidden).map(|child|any(element(m,child.id))).collect::<Vec<_>>()))}else{None})).flatten()
         }
         #[unsafe(method_id(accessibilityMinValue))]
         fn min(&self) -> Option<Retained<AnyObject>> {
@@ -458,11 +476,51 @@ impl Element {
     fn node(&self) -> Option<Node> {
         self.with(|_, _, n| Ok(n.clone()))
     }
+    fn split_contents(&self, first: bool) -> Option<Retained<NSArray<AnyObject>>> {
+        self.with(|m, _, n| {
+            if n.kind != Kind::SplitDivider {
+                return Ok(None);
+            }
+            let nodes = m.host.snapshot()?;
+            let pane = nodes
+                .iter()
+                .find(|p| {
+                    p.parent == n.parent
+                        && p.key.as_deref() == Some(if first { "$first" } else { "$second" })
+                })
+                .map(|p| p.id);
+            let items: Vec<_> = nodes
+                .iter()
+                .filter(|child| {
+                    if !semantic(child) || parent(child, &nodes) != n.parent || child.id == n.id {
+                        return false;
+                    }
+                    let mut ancestor = child.parent;
+                    while let Some(id) = ancestor {
+                        if Some(id) == pane {
+                            return true;
+                        }
+                        ancestor = nodes.iter().find(|n| n.id == id).and_then(|n| n.parent);
+                    }
+                    false
+                })
+                .map(|n| any(element(m, n.id)))
+                .collect();
+            Ok(Some(NSArray::from_retained_slice(&items)))
+        })
+        .flatten()
+    }
     fn adjust(&self, delta: f64) -> bool {
         self.with(|m, _, n| {
             if n.kind == Kind::Stepper {
                 return m.host.step_control(n.id, delta > 0.);
             }
+            if n.kind == Kind::SplitDivider {
+                return m
+                    .host
+                    .resize_split(n.id, delta * n.range.map_or(10., |r| r.2));
+            }
+
             let (Some((min, max, step)), Value::Number(value)) = (n.range, &n.value) else {
                 return Ok(false);
             };

@@ -517,6 +517,37 @@ impl Renderer {
                     );
                 }
                 Kind::Separator => round(canvas, b, 0., theme.border, false),
+                Kind::SplitDivider => {
+                    let horizontal = n
+                        .split
+                        .is_none_or(|s| s.orientation == Orientation::Horizontal);
+                    if n.hovered || n.pressed {
+                        round(canvas, b, 3., theme.panel, false);
+                    }
+                    let grip = if horizontal {
+                        Rect::new(
+                            b.x + b.width / 2. - 1.,
+                            b.y + (b.height - 28.).max(0.) / 2.,
+                            2.,
+                            b.height.min(28.),
+                        )
+                    } else {
+                        Rect::new(
+                            b.x + (b.width - 28.).max(0.) / 2.,
+                            b.y + b.height / 2. - 1.,
+                            b.width.min(28.),
+                            2.,
+                        )
+                    };
+                    round(
+                        canvas,
+                        grip,
+                        1.,
+                        if n.pressed { n.accent } else { theme.border },
+                        false,
+                    );
+                }
+
                 Kind::Image => {
                     if let Some((bitmap, mode)) = &n.image {
                         let image = self.image(bitmap)?;

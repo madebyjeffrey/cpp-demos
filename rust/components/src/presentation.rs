@@ -96,20 +96,6 @@ pub fn tabs(selected: &State<String>, pages: Vec<(String, String, View)>) -> Vie
         content.grow(1.),
     ])
 }
-/// A split view with an accessible keyboard/pointer-adjustable divider control.
-pub fn split_view(ratio: &State<f64>, left: View, right: View) -> View {
-    let portion = ratio.get().clamp(0.1, 0.9);
-    View::column(vec![
-        View::row(vec![
-            left.width(crate::percent(portion * 100.)).grow(portion),
-            right.grow(1. - portion),
-        ])
-        .grow(1.),
-        View::slider(ratio.binding(), 0.1, 0.9, 0.01)
-            .accessible_label("Split position")
-            .height(20),
-    ])
-}
 pub fn alert(popup: &Popup, title: impl Into<String>, message: impl Into<String>) -> View {
     popup.modal(title, View::label(message).wrap(true))
 }

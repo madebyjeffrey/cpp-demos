@@ -1,5 +1,6 @@
 use crate::{
-    Bitmap, ContentMode, Kind, Rect, Size, Style, TextLayout, TextStyle, Theme, Value, View,
+    Binding, Bitmap, ContentMode, Kind, Rect, Size, Style, TextLayout, TextStyle, Theme, Value,
+    View,
     state::{Observer, Tracking},
     view::{Data, Description},
 };
@@ -58,6 +59,10 @@ pub struct Node {
     pub hovered: bool,
     pub range: Option<(f64, f64, f64)>,
     pub stepper: Option<crate::StepperInfo>,
+    pub split: Option<crate::SplitInfo>,
+    pub(crate) split_options: Option<crate::SplitOptions>,
+    pub(crate) split_ratio: f64,
+    pub(crate) split_collapsed: crate::SplitPane,
     pub image: Option<(Bitmap, ContentMode)>,
 }
 impl Node {
@@ -105,6 +110,7 @@ pub(crate) struct Inner {
     pub scroll: RefCell<HashMap<NodeId, crate::Point>>,
     pub deadlines: RefCell<Vec<crate::deadlines::Deadline>>,
     pub fields: RefCell<HashMap<NodeId, crate::fields::FieldState>>,
+    pub splits: RefCell<HashMap<NodeId, crate::SplitPane>>,
     pub editors: RefCell<HashMap<NodeId, crate::editing::Editor>>,
 }
 /// Reactive descriptions, layout and input in logical points. The host is !Send/!Sync.
@@ -125,6 +131,7 @@ impl Host {
             editors: RefCell::new(HashMap::new()),
             deadlines: RefCell::new(Vec::new()),
             fields: RefCell::new(HashMap::new()),
+            splits: RefCell::new(HashMap::new()),
             scroll: RefCell::new(HashMap::new()),
             inspector: RefCell::new(crate::Inspector::new()),
             autofocus: Cell::new(None),
@@ -211,6 +218,12 @@ impl Host {
         {
             let mounted = self.0.mounted.borrow();
             let mut editors = self.0.editors.borrow_mut();
+            self.0.splits.borrow_mut().retain(|id, _| {
+                mounted
+                    .nodes
+                    .iter()
+                    .any(|n| n.id == *id && n.kind == Kind::Split)
+            });
             self.0
                 .scroll
                 .borrow_mut()
@@ -306,6 +319,9 @@ impl Host {
         let Some((d, value)) = target else {
             return Ok(false);
         };
+        if d.kind == Kind::SplitDivider {
+            return self.toggle_split(id);
+        }
         if let Some(action) = d.field_action {
             return self.field_action(id, action);
         }
@@ -340,6 +356,16 @@ impl Host {
         self.refresh()?;
         if !value.is_finite() {
             return Ok(false);
+        }
+        if self.0.mounted.borrow().nodes.iter().any(|n| {
+            n.id == id
+                && n.kind == Kind::SplitDivider
+                && n.enabled
+                && !n.hidden
+                && !n.layout_hidden
+                && self.in_scope(id)
+        }) {
+            return self.split_offset(id, value);
         }
         let data = {
             let m = self.0.mounted.borrow();
@@ -392,6 +418,7 @@ pub(crate) fn focusable(kind: Kind) -> bool {
             | Kind::Switch
             | Kind::Slider
             | Kind::Stepper
+            | Kind::SplitDivider
             | Kind::TextField
     )
 }
@@ -423,6 +450,15 @@ fn mount(
         .get(&path)
         .copied()
         .unwrap_or_else(|| NodeId(NEXT.fetch_add(1, Ordering::Relaxed)));
+    let split_ratio = d.split.as_ref().map_or(0.5, |s| s.ratio.get());
+    if !split_ratio.is_finite() {
+        return Err(Error("Split ratio must be finite".into()));
+    }
+    let split_collapsed = d
+        .split
+        .as_ref()
+        .and_then(|s| s.collapsed.as_ref())
+        .map_or(crate::SplitPane::None, Binding::get);
     let stepper = d.stepper.as_ref().map(|s| (s.read)());
     let value = stepper
         .as_ref()
@@ -497,6 +533,10 @@ fn mount(
         hovered: false,
         range,
         stepper,
+        split: None,
+        split_ratio,
+        split_collapsed,
+        split_options: d.split.as_ref().map(|s| s.options),
         image,
     });
     let mut keys = HashSet::new();
@@ -540,6 +580,9 @@ pub(crate) fn validate(d: &Description) -> Result<(), Error> {
                 .is_none())
     {
         return Err(Error("Invalid repeat timing".into()));
+    }
+    if let Some(split) = &d.split {
+        split.options.validate()?;
     }
     let s = d.style;
     if let Some(runs) = &d.rich {

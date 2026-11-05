@@ -119,8 +119,8 @@ virtualization uses fixed row heights; durable per-row edit state belongs outsid
 the viewport. Trees accept application-loaded lazy children. Table accessibility
 currently exposes logical row summaries and indexed row actions. Layout supports
 rich inline paragraphs, constrained reflow and both-axis scrolling with draggable
-bars. Split views still use a ratio slider, and color controls currently expose
-sRGB channels. These interfaces do not claim full C++ behavior or pixel parity.
+bars. Split views have draggable, keyboard-adjustable dividers with collapse and
+retained pane state. Color controls currently expose sRGB channels. These interfaces do not claim full C++ behavior or pixel parity.
 The [completion checklist](rust-completion-checklist.md) tracks remaining work,
 including localized editing, table-cell semantics and an actual VoiceOver/IME audit.
 Variable-height virtualization is a separate extension.

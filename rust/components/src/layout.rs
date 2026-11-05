@@ -4,6 +4,7 @@ use crate::{
 };
 use std::collections::HashMap;
 mod flow;
+mod split;
 
 impl Host {
     pub fn layout(&self, size: Size, measure: &dyn Measure) -> Result<(), Error> {
@@ -57,6 +58,20 @@ impl Host {
                 .borrow()
                 .get(&node.id)
                 .is_some_and(|s| s.revealed);
+            if node.kind == Kind::Split
+                && descriptions[&node.id]
+                    .split
+                    .as_ref()
+                    .is_some_and(|s| s.collapsed.is_none())
+            {
+                node.split_collapsed = self
+                    .0
+                    .splits
+                    .borrow()
+                    .get(&node.id)
+                    .copied()
+                    .unwrap_or_default();
+            }
             node.layout_hidden = false;
             node.text = descriptions[&node.id].text.clone();
             if descriptions[&node.id].field_action.is_some()
@@ -198,6 +213,7 @@ impl Host {
         for (model, offset, height) in collections {
             model.set_viewport(offset, height);
         }
+        self.reconcile_split_capture();
         self.reconcile_capture();
         self.reconcile_fields();
         if let Some((id, rect)) = reveal_caret {
@@ -294,6 +310,7 @@ fn container(kind: Kind) -> bool {
             | Kind::Column
             | Kind::Row
             | Kind::Stepper
+            | Kind::Split
             | Kind::Block
             | Kind::Inline
             | Kind::Layer
@@ -398,7 +415,9 @@ impl Tree<'_> {
                 self.measure_node(child, Size::new(inner, 24.), text, nodes)?;
             }
         }
-        let mut size = if n.kind == Kind::RichText {
+        let mut size = if n.kind == Kind::Split {
+            self.measure_split(i, Size::new(inner, f64::INFINITY), text, nodes)?
+        } else if n.kind == Kind::RichText {
             let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
             for child in &children {
                 let size =
@@ -667,7 +686,9 @@ impl Tree<'_> {
             content.height = height.min(bounds.height);
         }
         let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
-        if n.kind == Kind::RichText {
+        if n.kind == Kind::Split {
+            self.arrange_split(i, content, nodes)?;
+        } else if n.kind == Kind::RichText {
             let layout = self.layouts[&n.id].clone();
             let y = content.y + (content.height - layout.size.height) / 2.;
             nodes[i].text_bounds = Rect::new(content.x, y, content.width, layout.size.height);
@@ -955,7 +976,11 @@ impl Tree<'_> {
                 .get(&Some(n.id))
                 .into_iter()
                 .flatten()
-                .find(|c| nodes[**c].style.position != Position::Absolute)
+                .find(|c| {
+                    nodes[**c].style.position != Position::Absolute
+                        && !nodes[**c].layout_hidden
+                        && nodes[**c].kind != Kind::SplitDivider
+                })
                 .map_or(bounds.height, |c| {
                     nodes[*c].bounds.y - bounds.y + nodes[*c].baseline
                 })

@@ -148,10 +148,11 @@ impl TextInputClient for Client {
     }
     fn deactivate(&self) {
         if let Some(m) = self.owner.upgrade() {
-            m.run(|m, _| {
-                m.host.set_active(false);
-                Ok(())
-            });
+            // Lifecycle cancellation must still run if the current view cannot lay out.
+            m.host.set_active(false);
+            if let Some(surface) = m.surface.upgrade() {
+                surface.set_cursor(Cursor::Arrow);
+            }
         }
     }
 }

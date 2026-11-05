@@ -109,6 +109,9 @@ impl Mounted {
         let _ = self.host.unmark_text(false);
         self.host.blur();
         self.host.set_active(false);
+        if let Some(surface) = self.surface.upgrade() {
+            surface.set_cursor(Cursor::Arrow);
+        }
         self.cache.borrow_mut().clear();
     }
 }
@@ -196,19 +199,20 @@ impl Surface {
                 events.run(|m, s| {
                     let handled = input::event(m, event)?;
                     if let Event::Pointer(p) = event {
-                        let hit = m.host.hit_test(ui::Point {
+                        let cursor = m.host.pointer_cursor(ui::Point {
                             x: p.position.x,
                             y: p.position.y,
                         })?;
-                        let text = hit.is_some_and(|id| {
-                            m.host.snapshot().is_ok_and(|nodes| {
-                                nodes
-                                    .iter()
-                                    .any(|n| n.id == id && n.kind == ui::Kind::TextField)
-                            })
+                        s.set_cursor(match cursor {
+                            ui::PointerCursor::Arrow => Cursor::Arrow,
+                            ui::PointerCursor::Text => Cursor::Text,
+                            ui::PointerCursor::ResizeHorizontal => Cursor::ResizeHorizontal,
+                            ui::PointerCursor::ResizeVertical => Cursor::ResizeVertical,
                         });
-                        s.set_cursor(if text { Cursor::Text } else { Cursor::Arrow });
+                    } else if matches!(event, Event::Focus(false)) {
+                        s.set_cursor(Cursor::Arrow);
                     }
+
                     s.invalidate_text_input();
                     if !handled && let Some(unhandled) = &m.previous.on_event {
                         unhandled(event);

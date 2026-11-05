@@ -173,7 +173,16 @@ impl Tree<'_> {
         let mut paragraph = self.layouts[&n.id].clone();
         let mut natural;
         let mut baseline = s.padding.top;
-        if n.kind == Kind::RichText {
+        if n.kind == Kind::Split {
+            natural = self.reflow_split(i, inner, inner_height, nodes)?;
+            let children = &self.children[&Some(n.id)];
+            let first = children[if n.split_collapsed == crate::SplitPane::First {
+                2
+            } else {
+                0
+            }];
+            baseline = s.padding.top + self.baselines[&nodes[first].id];
+        } else if n.kind == Kind::RichText {
             let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
             for child in &children {
                 let size = self.desired[&nodes[*child].id];

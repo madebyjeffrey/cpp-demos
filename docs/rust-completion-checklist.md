@@ -33,7 +33,7 @@ overall goal complete while an in-scope item remains open.
 | State and descriptions | Reactive bindings, keys, macro conditions/repetition, host identity and inventory mapping | Ergonomic coverage of remaining component behaviors |
 | Layout and basic controls | Inventory, constrained layout, rich text, style coverage and two-axis scrolling verified | Final cross-component visual/semantic audit in M5/M8 |
 | Editing | Shared buffer, visual navigation/gestures, search/password/numeric policies and held steppers | Localization/value-control expansion in M6; final interactive IME audit in M5 |
-| Presentation | Popups, focus scopes, simple menus, tabs, slider-controlled split, basic alerts | Complete interactions, retained page state and presentation transactions |
+| Presentation | Retained two-axis splits, popups/focus scopes and initial menu/tab/alert compositions | Complete menu/overlay interactions, retained tab state and presentation transactions |
 | Collections | Fixed-height virtualization, keyed selection, basic trees/tables, cell conflict checks | Lazy tree lifecycle, cell/column interactions, richer selection and semantics |
 | Values and tooling | Typed drafts, sRGB/hex, calendar, ISO/zoned editing, picking/width overrides | Complete value-control policies and inspector/Lab coverage |
 | Verification | Core/CPU tests and native input/accessibility protocol tests | Interactive audits, final visible GPU/full-screen runs and repeatable checks |
@@ -76,7 +76,7 @@ Completion record:
   cover resizing, baselines, clipping, subtree stacking, painting and interaction.
   Workspace tests and strict Clippy pass; dark/light `m1_layout` previews inspected.
   Checkpoint commits: `53a4202` (styles), `24156ef` (reflow/rich text).
-- M1.4/M1.5: `ScrollAxes::{Vertical, Horizontal, Both}`, clamped `scroll_info`,
+- M1.4/M1.5 (`dcf5ea8`): `ScrollAxes::{Vertical, Horizontal, Both}`, clamped `scroll_info`,
   `scroll_to`/`scroll_by`, draggable overlay bars and track paging implemented.
   Native wheel transport includes both axes; residual diagonal deltas travel only
   through containing ancestors. Focus/caret reveal, keyboard movement and stationary
@@ -163,15 +163,15 @@ Completion record:
   portable compilation and native input/secure-ownership suites pass.
   `cargo run --example m2_numbers` demonstrates the completed policies; dark/light
   previews inspected and its native smoke run passes.
-- M2 checkpoint commits: `8524b99` (buffer/navigation), `024a26d` (search/password),
-  plus the numeric/stepper implementation in this checklist revision. Localization
+- M2 checkpoint commits: `8524b99` (buffer/navigation), `024a26d` (search/password)
+  and `3b88eef` (numeric/stepper closure). Localization
   and fuller typed value controls remain M6; the actual VoiceOver/IME audit remains
   M5.5 and final Metal/visual/resource evidence remains M8.
 
 
 ## M3 — Navigation and presentation
 
-- [ ] **M3.1 Split views:** draggable dividers, both orientations, pane limits, collapse/restore and keyboard adjustment; resize cursors, capture cancellation and accessible split semantics.
+- [x] **M3.1 Split views:** draggable dividers, both orientations, pane limits, collapse/restore and keyboard adjustment; resize cursors, capture cancellation and accessible split semantics.
 - [ ] **M3.2 Menus and split actions:** separators, checked/radio items, nested submenus, shortcut labels, disabled-item navigation, typeahead and complete open/close/activation behavior; a split action can retain its chosen primary action.
 - [ ] **M3.3 Overlay policy:** configurable placement, sizing, viewport fitting, focus preservation and dismissal callbacks for popovers/tooltips/context menus, including nested scopes and owner removal.
 - [ ] **M3.4 Tabs:** stable page identity, enabled tabs, keyboard navigation and restoration of editor history, selection, scroll and focus after switching pages. Application model state alone does not satisfy this item.
@@ -182,7 +182,27 @@ Evidence: extend the workspace example with a nested menu, retained tab editor a
 confirmation sheet; focused interaction/lifecycle tests. Main implementation:
 [presentation](../rust/components/src/presentation.rs), [native mounting](../rust/src/macos/components/mod.rs).
 
-Completion record: pending.
+Completion record (in progress):
+
+- M3.1: dedicated `Split`/divider nodes replace the ratio-slider composition;
+  `split_view(&ratio, first, second)` remains supported. `Split::new`/`bound`,
+  builder options and an optional collapsed binding support both orientations,
+  minima, divider width, keyboard step and programmatic collapse/restoration.
+  Infeasible minima scale proportionally without rewriting the preferred ratio.
+- Divider dragging preserves grab offset and clamps at pane limits. Arrows, Shift,
+  Home/End and Enter/Space/double-click adjust or collapse; Escape restores a
+  collapsed pane or rolls back a live drag. Resize cursors follow the active axis.
+  Blur, focus change, deactivation, hide/disable/removal/unmount, orientation changes
+  and external ratio/collapse changes cancel capture. Panes remain mounted while
+  collapsed; hidden preedit cancels, while history/selection/scroll survive.
+- Evidence: six portable geometry/input/lifetime tests, including the legacy helper
+  and macro/model-name hygiene. Native AX split-group/splitter orientation, numeric
+  value/bounds/actions, previous/next contents and inert collapsed/unmounted objects
+  pass. Workspace tests, strict Clippy and portable compilation pass.
+  `cargo run --example m3_split` demonstrates nested splits; dark/light previews
+  inspected and native smoke run passes. Final interactive semantics remain M5.
+- M3.2–M3.6 remain open.
+
 
 ## M4 — Collections and structured editing
 

@@ -188,8 +188,9 @@ while the overlay lives in the root layer. Menus support enabled actions, arrows
 Tab and activation. `on_context` handles a secondary click; `tooltip` displays
 help after a 600ms one-shot deadline. `tabs` mounts the active page; `wizard` adds
 step navigation; `split_button` combines a primary action with a menu anchor.
-`split_view` uses an accessible slider for the pane ratio. These are Rust
-compositions, and applications may build other presentations from the same pieces.
+`split_view` uses a dedicated adjustable divider and retained panes. The remaining
+presentations are initial Rust compositions; their closure work is tracked in the
+completion checklist.
 
 For an actual macOS sheet, attach components with `Dialog::set_view` and use the
 existing `show_modal`/`dismiss` lifetime interface. `Popup::modal` is an in-window
@@ -404,3 +405,37 @@ focus loss, hide/disable/removal and unmount cancel repeats; no idle animation i
 needed. `on_blur` and `repeat` also work on ordinary builder/macro controls (repeat
 requires a button and a nonzero interval). Call layout before geometric input on
 a detached host, as usual.
+
+
+## Completion M3 — split views
+
+`cargo run --example m3_split` demonstrates nested horizontal/vertical splits.
+Store `Split::new(0.35)` and use `split(&model, first, second)` in `view!`, or
+`model.view(first, second)` from ordinary Rust. `Split::bound(ratio.binding())`
+connects an existing source; the older `split_view(&ratio, first, second)` call
+keeps working with mounted collapse state. Macro calls resolve through the crate,
+so a local model named `split` does not shadow the built-in component.
+
+Builders: `orientation`, `limits(first_min, second_min)`, `divider_width`,
+`keyboard_step`, `collapsed(binding)` and `options(SplitOptions { .. })`.
+Orientation is the axis along which panes are arranged. `ratio`/`set_ratio` query
+or set the preferred fraction; `collapse(SplitPane::First/Second)` and `restore`
+change pane visibility without losing that fraction. Pane minima constrain actual
+geometry. If both cannot fit, minima scale proportionally; resizing alone never
+rewrites the preferred fraction. `Host::split_info` reports effective pane/divider
+rectangles and limits after layout; `resize_split`, `set_split_ratio` and
+`collapse_split` support host-driven commands, including the legacy helper.
+
+Drag the divider; focus it with Tab and use arrows along the split axis. Shift
+moves ten keyboard steps, Home/End reach pane limits, and Enter/Space or a double
+click toggles the smaller pane. Escape restores a collapsed split; during a drag
+it restores the starting ratio/collapse state. Pointer cancellation stops at the
+last accepted position. Focus loss, deactivation, hide/disable/removal/unmount,
+orientation changes and external ratio/collapse changes cancel capture.
+
+Collapsed panes stay mounted with hidden, inert descendants. Editor history,
+selection and scroll offsets survive restoration; preedit still present when
+layout hides a pane is cancelled. Focus in the hidden pane moves to the divider.
+Native split groups expose splitters and previous/next pane contents, orientation,
+value/range, resize and collapse actions. This protocol coverage does not replace
+the later interactive VoiceOver audit.
