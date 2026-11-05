@@ -145,6 +145,7 @@ impl Surface {
                     return;
                 };
                 let result = (|| {
+                    draw.host.run_due();
                     draw.sync(&surface)?;
                     if let Some(underlay) = &draw.previous.on_draw {
                         underlay(frame);
@@ -166,6 +167,9 @@ impl Surface {
                     if surface.is_animating() != animate {
                         surface.set_animating(animate);
                     }
+                    surface
+                        .set_redraw_delay(draw.host.next_deadline())
+                        .map_err(|e| ui::Error(e.to_string()))?;
                     draw.notify(&surface);
                     Ok::<_, ui::Error>(())
                 })();
@@ -179,6 +183,20 @@ impl Surface {
             on_event: Some(Rc::new(move |event| {
                 events.run(|m, s| {
                     let handled = input::event(m, event)?;
+                    if let Event::Pointer(p) = event {
+                        let hit = m.host.hit_test(ui::Point {
+                            x: p.position.x,
+                            y: p.position.y,
+                        })?;
+                        let text = hit.is_some_and(|id| {
+                            m.host.snapshot().is_ok_and(|nodes| {
+                                nodes
+                                    .iter()
+                                    .any(|n| n.id == id && n.kind == ui::Kind::TextField)
+                            })
+                        });
+                        s.set_cursor(if text { Cursor::Text } else { Cursor::Arrow });
+                    }
                     s.invalidate_text_input();
                     if !handled && let Some(unhandled) = &m.previous.on_event {
                         unhandled(event);
@@ -214,6 +232,7 @@ impl Surface {
             drop(callbacks);
             self.set_text_input_client(m.previous_input.clone());
             self.set_animating(false);
+            let _ = self.set_redraw_delay(None);
             self.request_redraw();
         }
     }

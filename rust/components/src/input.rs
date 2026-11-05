@@ -292,6 +292,8 @@ impl Host {
                 Key::Right if event.modifiers.alt => TextCommand::WordRight,
                 Key::Left => TextCommand::Left,
                 Key::Right => TextCommand::Right,
+                Key::Up => TextCommand::Up,
+                Key::Down => TextCommand::Down,
                 Key::Home => TextCommand::Start,
                 Key::End => TextCommand::End,
                 Key::Backspace => TextCommand::Backspace,

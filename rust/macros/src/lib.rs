@@ -225,7 +225,8 @@ fn expand(item: Item) -> Result<Tokens> {
                         })?;
                         quote!(::scars_ui::View::button(#text,#action))
                     }
-                    "checkbox" | "tri_checkbox" | "toggle" | "switch" | "text_field" => {
+                    "checkbox" | "tri_checkbox" | "toggle" | "switch" | "text_field"
+                    | "password_field" | "text_editor" | "search_field" => {
                         let text = one(&mut positional)?;
                         let b = need_binding()?;
                         quote!(::scars_ui::View::#name(#text,#b))
@@ -292,6 +293,9 @@ fn expand(item: Item) -> Result<Tokens> {
                         | "toggle"
                         | "switch"
                         | "text_field"
+                        | "password_field"
+                        | "text_editor"
+                        | "search_field"
                         | "slider"
                         | "progress"
                         | "radio_group"
@@ -339,10 +343,26 @@ fn expand(item: Item) -> Result<Tokens> {
                     | "foreground" | "background" | "enabled" | "visible" | "hidden"
                     | "position" | "left" | "right" | "top" | "bottom" | "z_index"
                     | "accessible_label" => quote!(#expr),
-                    "read_only" if matches!(kind.as_str(), "text_field" | "slider") => {
+                    "read_only"
+                        if matches!(
+                            kind.as_str(),
+                            "text_field"
+                                | "password_field"
+                                | "text_editor"
+                                | "search_field"
+                                | "slider"
+                        ) =>
+                    {
                         quote!(#expr)
                     }
-                    "on_submit" if kind == "text_field" => quote!(#expr),
+                    "on_submit"
+                        if matches!(
+                            kind.as_str(),
+                            "text_field" | "password_field" | "text_editor" | "search_field"
+                        ) =>
+                    {
+                        quote!(#expr)
+                    }
                     _ => {
                         return Err(syn::Error::new(
                             property.span(),

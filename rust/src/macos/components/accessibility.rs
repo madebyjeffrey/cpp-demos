@@ -187,18 +187,20 @@ define_class!(
         }
         #[unsafe(method_id(accessibilityValue))]
         fn value(&self) -> Option<Retained<AnyObject>> {
-            self.node().and_then(|n| match n.value {
-                Value::Text(v) => Some(any(ns(&v))),
-                Value::Bool(v) => Some(any(NSNumber::new_bool(v))),
-                Value::Check(v) => Some(any(NSNumber::new_i32(match v {
-                    ui::CheckState::Unchecked => 0,
-                    ui::CheckState::Checked => 1,
-                    ui::CheckState::Indeterminate => 2,
-                }))),
-                Value::Number(v) => Some(any(NSNumber::new_f64(v))),
-                Value::None if n.kind == Kind::Label => Some(any(ns(&n.text))),
-                _ => None,
-            })
+            self.node()
+                .filter(|n| !n.secure)
+                .and_then(|n| match n.value {
+                    Value::Text(v) => Some(any(ns(&v))),
+                    Value::Bool(v) => Some(any(NSNumber::new_bool(v))),
+                    Value::Check(v) => Some(any(NSNumber::new_i32(match v {
+                        ui::CheckState::Unchecked => 0,
+                        ui::CheckState::Checked => 1,
+                        ui::CheckState::Indeterminate => 2,
+                    }))),
+                    Value::Number(v) => Some(any(NSNumber::new_f64(v))),
+                    Value::None if n.kind == Kind::Label => Some(any(ns(&n.text))),
+                    _ => None,
+                })
         }
         #[unsafe(method(setAccessibilityValue:))]
         unsafe fn set_value(&self, value: Option<&AnyObject>) {
@@ -261,7 +263,7 @@ define_class!(
             self.with(|m, _, n| {
                 Ok(m.host
                     .text_input()?
-                    .filter(|i| i.id == n.id)
+                    .filter(|i| i.id == n.id && !i.secure)
                     .map(|i| ns(&i.text[i.selection.range()])))
             })
             .flatten()
@@ -271,7 +273,7 @@ define_class!(
             self.with(|m, _, n| {
                 Ok(m.host
                     .text_input()?
-                    .filter(|i| i.id == n.id)
+                    .filter(|i| i.id == n.id && !i.secure)
                     .and_then(|i| native_range(&i.text, i.selection.range())))
             })
             .flatten()
@@ -280,6 +282,9 @@ define_class!(
         #[unsafe(method(setAccessibilitySelectedTextRange:))]
         fn select_range(&self, r: NSRange) {
             self.with(|m, _, n| {
+                if n.secure {
+                    return Ok(false);
+                }
                 let Value::Text(text) = &n.value else {
                     return Ok(false);
                 };
@@ -298,7 +303,7 @@ define_class!(
         }
         #[unsafe(method_id(accessibilityStringForRange:))]
         fn string_range(&self, r: NSRange) -> Option<Retained<NSString>> {
-            self.node().and_then(|n| {
+            self.node().filter(|n| !n.secure).and_then(|n| {
                 if let Value::Text(text) = n.value {
                     byte_range(&text, r).map(|r| ns(&text[r]))
                 } else {

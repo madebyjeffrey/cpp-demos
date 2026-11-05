@@ -25,10 +25,10 @@ impl TextInputClient for Client {
                         selection: native(&i.text, i.selection.range())?,
                         marked: i.marked.and_then(|r| native(&i.text, r)),
                         editable: i.editable,
-                        multiline: false,
-                        can_undo: false,
-                        can_redo: false,
-                        secure: false,
+                        multiline: i.multiline,
+                        can_undo: i.can_undo,
+                        can_redo: i.can_redo,
+                        secure: i.secure,
                         active: i.active,
                     })
                 }))
@@ -138,6 +138,8 @@ impl TextInputClient for Client {
                 Key::X => "cut:",
                 Key::V => "paste:",
                 Key::A => "selectAll:",
+                Key::Z if key.modifiers.shift => "redo:",
+                Key::Z => "undo:",
                 _ => return false,
             };
             return self.command(command);
@@ -162,7 +164,7 @@ fn command(host: &ui::Host, selector: &str) -> std::result::Result<bool, ui::Err
                 p.setString_forType(&ns(&value), NSPasteboardTypeString);
             }
         }
-        if selector == "cut:" {
+        if selector == "cut:" && host.selected_text()?.is_some() {
             return host.insert_text("", None);
         }
         return Ok(true);
@@ -192,6 +194,10 @@ fn command(host: &ui::Host, selector: &str) -> std::result::Result<bool, ui::Err
         "deleteBackward" => TextCommand::Backspace,
         "deleteForward" => TextCommand::Delete,
         "selectAll" => TextCommand::SelectAll,
+        "undo" => TextCommand::Undo,
+        "redo" => TextCommand::Redo,
+        "moveUp" => TextCommand::Up,
+        "moveDown" => TextCommand::Down,
         "insertNewline" | "insertNewlineIgnoringFieldEditor" => TextCommand::Enter,
         "cancelOperation" => TextCommand::Escape,
         "insertTab" => TextCommand::Tab,

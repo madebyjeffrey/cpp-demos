@@ -98,6 +98,8 @@ pub(crate) struct Description {
     pub hidden: bool,
     pub accessible: String,
     pub read_only: bool,
+    pub secure: bool,
+    pub multiline: bool,
 }
 impl View {
     fn new(kind: Kind, text: String, children: Vec<Self>) -> Self {
@@ -114,6 +116,8 @@ impl View {
             hidden: false,
             accessible: String::new(),
             read_only: false,
+            secure: false,
+            multiline: false,
         }))
     }
     pub fn fragment(v: Vec<Self>) -> Self {
@@ -163,6 +167,19 @@ impl View {
     }
     pub fn text_field(placeholder: impl Into<String>, value: Binding<String>) -> Self {
         Self::bound(Kind::TextField, placeholder, Data::Text(value))
+    }
+    pub fn password_field(placeholder: impl Into<String>, value: Binding<String>) -> Self {
+        let mut v = Self::text_field(placeholder, value);
+        Rc::make_mut(&mut v.0).secure = true;
+        v
+    }
+    pub fn text_editor(placeholder: impl Into<String>, value: Binding<String>) -> Self {
+        let mut v = Self::text_field(placeholder, value).height(140.);
+        Rc::make_mut(&mut v.0).multiline = true;
+        v
+    }
+    pub fn search_field(placeholder: impl Into<String>, value: Binding<String>) -> Self {
+        Self::text_field(placeholder, value)
     }
     pub fn slider(value: Binding<f64>, min: f64, max: f64, step: f64) -> Self {
         Self::bound(Kind::Slider, "", Data::Number(value, min, max, step))

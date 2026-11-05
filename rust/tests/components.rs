@@ -84,6 +84,22 @@ fn main() {
             .iter()
             .any(|n| n.text == "retained")
     );
+    let secret = State::new("do not expose".to_owned());
+    let secure_host = window
+        .set_view(move || view! {password_field("Secret",bind:secret);})
+        .unwrap();
+    let id = secure_host.snapshot().unwrap().last().unwrap().id;
+    secure_host.focus(id).unwrap();
+    secure_host.set_active(true);
+    unsafe {
+        let children: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        let element = children.objectAtIndex(0);
+        let value: Option<Retained<AnyObject>> = msg_send![&*element, accessibilityValue];
+        assert!(value.is_none());
+        let value: Option<Retained<NSString>> =
+            msg_send![&*element,accessibilityStringForRange:NSRange::new(0,3)];
+        assert!(value.is_none());
+    }
     window.show();
     app.quit_after(std::time::Duration::from_millis(200));
     app.run().unwrap();

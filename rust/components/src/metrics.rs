@@ -89,3 +89,38 @@ impl Bitmap {
         }))
     }
 }
+
+/// Shape a field while keeping password contents out of renderer caches.
+pub(crate) fn field_layout(
+    measure: &dyn Measure,
+    text: &str,
+    secure: bool,
+    style: TextStyle,
+    width: f64,
+) -> TextLayout {
+    if !secure {
+        return measure.text(text, style, width);
+    }
+    let boundaries = crate::text::grapheme_boundaries(text);
+    let mask = "•".repeat(boundaries.len().saturating_sub(1));
+    let layout = measure.text(&mask, style, width);
+    let hit = layout.hit_test.clone();
+    let rects = layout.range_rects.clone();
+    let indices = boundaries.clone();
+    TextLayout {
+        size: layout.size,
+        baseline: layout.baseline,
+        hit_test: Rc::new(move |p| indices[(hit(p) / 3).min(indices.len() - 1)]),
+        range_rects: Rc::new(move |r| {
+            let start = boundaries
+                .partition_point(|b| *b < r.start)
+                .min(boundaries.len() - 1)
+                * 3;
+            let end = boundaries
+                .partition_point(|b| *b < r.end)
+                .min(boundaries.len() - 1)
+                * 3;
+            rects(start..end)
+        }),
+    }
+}

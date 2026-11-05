@@ -35,6 +35,8 @@ pub struct Node {
     pub enabled: bool,
     pub hidden: bool,
     pub read_only: bool,
+    pub secure: bool,
+    pub multiline: bool,
     pub label: String,
     pub focused: bool,
     pub pressed: bool,
@@ -72,6 +74,7 @@ pub(crate) struct Inner {
     pub theme: Cell<Theme>,
     pub viewport: Cell<Size>,
     pub interaction: RefCell<crate::input::Interaction>,
+    pub deadlines: RefCell<Vec<crate::deadlines::Deadline>>,
     pub editors: RefCell<HashMap<NodeId, crate::editing::Editor>>,
 }
 /// Reactive descriptions, layout and input in logical points. The host is !Send/!Sync.
@@ -90,6 +93,7 @@ impl Host {
             viewport: Cell::new(Size::default()),
             interaction: RefCell::new(Default::default()),
             editors: RefCell::new(HashMap::new()),
+            deadlines: RefCell::new(Vec::new()),
         }))
     }
     pub fn on_invalidate(&self, wake: impl Fn() + 'static) {
@@ -356,6 +360,8 @@ fn mount(
         enabled: enabled && d.enabled,
         hidden: hidden || d.hidden,
         read_only: d.read_only,
+        secure: d.secure,
+        multiline: d.multiline,
         label: if d.accessible.is_empty() {
             d.text.clone()
         } else {

@@ -358,7 +358,18 @@ impl Renderer {
                 }
                 _ => (),
             }
-            let text = if n.kind == Kind::TextField {
+            let masked = if n.secure {
+                if let Value::Text(v) = &n.value {
+                    "•".repeat(text::grapheme_boundaries(v).len().saturating_sub(1))
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            };
+            let text = if n.secure && !masked.is_empty() {
+                masked.as_str()
+            } else if n.kind == Kind::TextField {
                 if let Value::Text(value) = &n.value {
                     if value.is_empty() {
                         n.text.as_str()
@@ -389,7 +400,11 @@ impl Renderer {
                     text,
                     style,
                     if style.wrap {
-                        b.width - 2. * n.style.padding
+                        if n.kind == Kind::TextField {
+                            b.width - 20.
+                        } else {
+                            b.width - 2. * n.style.padding
+                        }
                     } else {
                         f64::INFINITY
                     },

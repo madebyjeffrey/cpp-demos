@@ -48,16 +48,39 @@ impl Host {
         let mut field_layouts = Vec::new();
         for node in &mut mounted.nodes {
             if let Some(editor) = editors.get_mut(&node.id) {
-                let layout = measure.text(&editor.text, node.text_style, f64::INFINITY);
+                let layout = crate::metrics::field_layout(
+                    measure,
+                    &editor.text,
+                    node.secure,
+                    node.text_style,
+                    if node.multiline {
+                        (node.bounds.width - 20.).max(1.)
+                    } else {
+                        f64::INFINITY
+                    },
+                );
                 let caret = (layout.range_rects)(editor.selection.caret..editor.selection.caret)
                     .first()
                     .copied()
                     .unwrap_or_default();
                 let available = (node.bounds.width - 20.).max(1.);
-                if caret.x < editor.scroll {
+                if node.multiline {
+                    editor.scroll = 0.;
+                    let height = (node.bounds.height - 20.).max(1.);
+                    if caret.y < editor.scroll_y {
+                        editor.scroll_y = caret.y;
+                    }
+                    if caret.y + caret.height > editor.scroll_y + height {
+                        editor.scroll_y = caret.y + caret.height - height;
+                    }
+                    editor.scroll_y = editor
+                        .scroll_y
+                        .clamp(0., (layout.size.height - height).max(0.));
+                }
+                if !node.multiline && caret.x < editor.scroll {
                     editor.scroll = caret.x;
                 }
-                if caret.x + 2. > editor.scroll + available {
+                if !node.multiline && caret.x + 2. > editor.scroll + available {
                     editor.scroll = caret.x + 2. - available;
                 }
                 editor.scroll = editor
@@ -65,7 +88,11 @@ impl Host {
                     .clamp(0., (layout.size.width + 2. - available).max(0.));
                 node.text_bounds = Rect::new(
                     node.bounds.x + 10. - editor.scroll,
-                    node.bounds.y + (node.bounds.height - layout.size.height) / 2.,
+                    if node.multiline {
+                        node.bounds.y + 10. - editor.scroll_y
+                    } else {
+                        node.bounds.y + (node.bounds.height - layout.size.height) / 2.
+                    },
                     layout.size.width,
                     layout.size.height,
                 );
@@ -146,7 +173,11 @@ impl Tree<'_> {
             size: s.font_size.unwrap_or(parent.size),
             color: s.foreground.unwrap_or(parent.color),
             bold: s.bold || parent.bold,
-            wrap: s.wrap && n.kind != Kind::TextField,
+            wrap: if n.kind == Kind::TextField {
+                n.multiline
+            } else {
+                s.wrap
+            },
         };
         nodes[i].text_style = text;
         let width = s

@@ -29,6 +29,10 @@ pub enum TextCommand {
     Escape,
     Tab,
     BackTab,
+    Undo,
+    Redo,
+    Up,
+    Down,
 }
 #[derive(Clone, Debug)]
 pub struct TextInput {
@@ -39,6 +43,10 @@ pub struct TextInput {
     pub editable: bool,
     pub active: bool,
     pub bounds: Rect,
+    pub secure: bool,
+    pub multiline: bool,
+    pub can_undo: bool,
+    pub can_redo: bool,
 }
 #[derive(Default)]
 pub(crate) struct Editor {
@@ -48,6 +56,9 @@ pub(crate) struct Editor {
     pub marked: Option<Range<usize>>,
     base: Option<(String, Selection)>,
     pub scroll: f64,
+    pub scroll_y: f64,
+    undo: Vec<(String, Selection)>,
+    redo: Vec<(String, Selection)>,
 }
 fn floor(text: &str, index: usize) -> usize {
     grapheme_boundaries(text)
@@ -72,7 +83,16 @@ impl Editor {
             self.marked = None;
             self.base = None;
             self.scroll = 0.;
+            self.undo.clear();
+            self.redo.clear();
         }
+    }
+    fn checkpoint(&mut self) {
+        if self.undo.len() >= 100 {
+            self.undo.remove(0);
+        }
+        self.undo.push((self.text.clone(), self.selection));
+        self.redo.clear();
     }
     fn replace(&mut self, value: &str, range: Range<usize>) -> Range<usize> {
         let start = floor(&self.text, range.start.min(self.text.len()));
@@ -93,6 +113,7 @@ impl Editor {
         if !commit && let Some((text, selection)) = self.base.take() {
             self.text = text;
             self.selection = selection;
+            self.undo.pop();
         }
         self.base = None;
         self.marked = None;
@@ -118,9 +139,16 @@ impl Host {
         let Some(binding) = binding else {
             return Ok(false);
         };
+        let multiline = self
+            .0
+            .mounted
+            .borrow()
+            .nodes
+            .iter()
+            .any(|n| n.id == id && n.multiline);
         binding.set(
             text.chars()
-                .filter(|c| !matches!(c, '\n' | '\r' | '\0'))
+                .filter(|c| *c != '\0' && *c != '\r' && (multiline || *c != '\n'))
                 .collect(),
         );
         self.redraw();
@@ -147,6 +175,10 @@ impl Host {
             editable: !node.read_only,
             active: i.active,
             bounds: node.bounds.inset(10.),
+            secure: node.secure,
+            multiline: node.multiline,
+            can_undo: !e.undo.is_empty(),
+            can_redo: !e.redo.is_empty(),
         }))
     }
     pub fn select_text(&self, id: NodeId, selection: Selection) -> Result<bool, Error> {
@@ -173,7 +205,7 @@ impl Host {
         };
         let text: String = text
             .chars()
-            .filter(|c| *c != '\n' && *c != '\r' && *c != '\0')
+            .filter(|c| *c != '\r' && *c != '\0' && (input.multiline || *c != '\n'))
             .collect();
         {
             let mut editors = self.0.editors.borrow_mut();
@@ -181,6 +213,9 @@ impl Host {
             let range = replacement
                 .or_else(|| e.marked.clone())
                 .unwrap_or_else(|| e.selection.range());
+            if e.marked.is_none() {
+                e.checkpoint();
+            }
             e.replace(&text, range);
             e.unmark(true);
         }
@@ -204,6 +239,7 @@ impl Host {
             let mut editors = self.0.editors.borrow_mut();
             let e = editors.get_mut(&input.id).unwrap();
             if e.base.is_none() {
+                e.checkpoint();
                 e.base = Some((e.text.clone(), e.selection));
             }
             let range = replacement
@@ -252,11 +288,21 @@ impl Host {
         let text = self.0.editors.borrow().get(&id).map(|e| e.text.clone());
         if let (Some(binding), Some(text)) = (binding, text) {
             binding.set(text);
+            let accepted = binding.get();
+            if let Some(e) = self.0.editors.borrow_mut().get_mut(&id) {
+                e.source = accepted.clone();
+                if e.text != accepted {
+                    e.text = accepted;
+                    e.selection.anchor = floor(&e.text, e.selection.anchor);
+                    e.selection.caret = floor(&e.text, e.selection.caret);
+                }
+            }
         }
     }
     pub fn selected_text(&self) -> Result<Option<String>, Error> {
         Ok(self
             .text_input()?
+            .filter(|i| !i.secure)
             .map(|i| i.text[i.selection.range()].to_owned()))
     }
     pub fn text_command(&self, command: TextCommand, extend: bool) -> Result<bool, Error> {
@@ -266,6 +312,71 @@ impl Host {
         let Some(input) = self.text_input()?.filter(|i| i.active) else {
             return Ok(false);
         };
+        if matches!(command, TextCommand::Undo | TextCommand::Redo) {
+            if !input.editable {
+                return Ok(false);
+            }
+            self.unmark_text(false)?;
+            let changed = {
+                let mut editors = self.0.editors.borrow_mut();
+                let e = editors.get_mut(&input.id).unwrap();
+                let prior = if command == TextCommand::Undo {
+                    e.undo.pop()
+                } else {
+                    e.redo.pop()
+                };
+                if let Some((text, selection)) = prior {
+                    let current = (e.text.clone(), e.selection);
+                    if command == TextCommand::Undo {
+                        e.redo.push(current);
+                    } else {
+                        e.undo.push(current);
+                    }
+                    e.text = text;
+                    e.selection = selection;
+                    true
+                } else {
+                    false
+                }
+            };
+            if changed {
+                self.publish_text(input.id);
+                self.redraw();
+            }
+            return Ok(changed);
+        }
+        if command == TextCommand::Enter && input.multiline {
+            return self.insert_text("\n", None);
+        }
+        if matches!(command, TextCommand::Up | TextCommand::Down) && input.multiline {
+            let caret = input.selection.caret;
+            let start = input.text[..caret].rfind('\n').map_or(0, |n| n + 1);
+            let col = input.text[start..caret].chars().count();
+            let target_start = if command == TextCommand::Up {
+                if start == 0 {
+                    0
+                } else {
+                    input.text[..start - 1].rfind('\n').map_or(0, |n| n + 1)
+                }
+            } else {
+                input.text[caret..]
+                    .find('\n')
+                    .map_or(input.text.len(), |n| caret + n + 1)
+            };
+            let line = input.text[target_start..].split('\n').next().unwrap_or("");
+            let target = target_start + line.char_indices().nth(col).map_or(line.len(), |(i, _)| i);
+            return self.select_text(
+                input.id,
+                Selection {
+                    anchor: if extend {
+                        input.selection.anchor
+                    } else {
+                        target
+                    },
+                    caret: target,
+                },
+            );
+        }
         if command == TextCommand::Escape {
             return self.unmark_text(false);
         }
@@ -335,6 +446,7 @@ impl Host {
                     } else {
                         caret..next
                     };
+                    e.checkpoint();
                     e.replace("", range);
                     changed = true;
                     e.selection.caret

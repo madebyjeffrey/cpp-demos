@@ -22,6 +22,8 @@
 
 extern crate self as scars_ui;
 
+mod deadlines;
+mod draft;
 mod editing;
 mod geometry;
 mod host;
@@ -32,6 +34,7 @@ mod state;
 pub mod text;
 mod view;
 
+pub use draft::{Draft, Number, Numeric, numeric_field};
 pub use editing::{Selection, TextCommand, TextInput};
 pub use geometry::*;
 pub use host::{Error, Host, Node, NodeId};

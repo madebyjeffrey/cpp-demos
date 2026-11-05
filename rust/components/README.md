@@ -123,3 +123,32 @@ has no undo history or multiline/password/numeric editing; those belong to stage
 
 Tests: `cargo test --workspace`; native protocol/actions additionally use
 `SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test components` on an awake desktop.
+
+## Stage 3 — editing and typed drafts
+
+`cargo run --example stage3` demonstrates search, masked passwords, a multiline
+editor and an integer field with step buttons. Command-Z/Shift-Command-Z uses
+bounded (100 edit) history; composition is one undo step. External model changes
+reset history. Text storage stays UTF-8, with native UTF-16 conversion at the edge.
+Password text is excluded from shaping caches, copy/cut, and accessibility value
+and substring queries. Native secure input follows focus and application lifetime.
+Secure storage is an ordinary Rust `String`, not a cryptographic vault.
+
+`Draft<T>` owns editable text independently of a committed typed binding. Supply
+parser and formatter closures; `commit()` accepts only valid input, `cancel()`
+restores the model, and `error()` returns the current validation message. External
+model changes supersede drafts. `Numeric<T>` supplies bounded numeric validation
+and checked steps for i32/i64/u32/u64/f64; integer arithmetic never passes through
+f64. `numeric_field("Copies", &number)` composes the editor and step buttons;
+Enter or stepping commits. Invalid and incomplete drafts stay visible.
+
+The initial editable grammar is ungrouped ASCII numbers (`.` for decimal values).
+Grouping separators and localized digits are not accepted by these parsers. Use a
+custom `Draft` parser/formatter when an application selects a localized grammar.
+ICU4X localized integer display remains available independently.
+
+`Host::debounce(key, delay, action)` replaces pending work under the same key.
+Mounted windows schedule the earliest deadline as a one-shot redraw; detached
+portable hosts use `run_due` (or `run_due_at` in deterministic tests). Cancel with
+`cancel_deadline`. Tasks and callbacks run on the owning thread. Search is an
+ordinary bound field; applications decide filtering and debounce policy.
