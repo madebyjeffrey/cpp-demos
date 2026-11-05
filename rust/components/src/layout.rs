@@ -6,6 +6,15 @@ use std::collections::HashMap;
 
 impl Host {
     pub fn layout(&self, size: Size, measure: &dyn Measure) -> Result<(), Error> {
+        for _ in 0..4 {
+            self.layout_pass(size, measure)?;
+            if !self.0.observer.dirty.get() {
+                return Ok(());
+            }
+        }
+        Err(Error("Layout did not settle".into()))
+    }
+    fn layout_pass(&self, size: Size, measure: &dyn Measure) -> Result<(), Error> {
         if !size.width.is_finite()
             || !size.height.is_finite()
             || size.width < 0.
@@ -16,6 +25,15 @@ impl Host {
         self.refresh()?;
         self.0.viewport.set(size);
         let theme = self.theme();
+        {
+            let m = self.0.mounted.borrow();
+            let mut offsets = self.0.scroll.borrow_mut();
+            for n in &m.nodes {
+                if let Some(model) = &n.collection {
+                    offsets.insert(n.id, model.offset());
+                }
+            }
+        }
         let mut mounted = self.0.mounted.borrow_mut();
         let mut tree = Tree {
             children: HashMap::new(),
@@ -102,9 +120,26 @@ impl Host {
             }
         }
         mounted.layouts.extend(field_layouts);
+        let collections: Vec<_> = mounted
+            .nodes
+            .iter()
+            .filter_map(|n| {
+                n.collection.clone().map(|model| {
+                    (
+                        model,
+                        self.0.scroll.borrow().get(&n.id).copied().unwrap_or(0.),
+                        n.bounds.height,
+                    )
+                })
+            })
+            .collect();
         drop(editors);
         drop(mounted);
+        for (model, offset, height) in collections {
+            model.set_viewport(offset, height);
+        }
         self.reconcile_modal()?;
+        self.focus_pending_row()?;
         Ok(())
     }
     /// Scene order includes z-order while preserving each sibling subtree as a unit.
@@ -160,6 +195,7 @@ fn container(kind: Kind) -> bool {
             | Kind::Panel
             | Kind::RadioGroup
             | Kind::Segmented
+            | Kind::CollectionRow
             | Kind::Scroll
             | Kind::Modal
     )

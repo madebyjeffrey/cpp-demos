@@ -210,7 +210,7 @@ impl Renderer {
             };
             match n.kind {
                 Kind::Panel | Kind::GroupBox => bg = bg.or(Some(theme.panel)),
-                Kind::Button | Kind::Toggle | Kind::Segment => {
+                Kind::Button | Kind::Toggle | Kind::Segment | Kind::CollectionRow => {
                     bg = bg.or(Some(if n.value.selected() || n.pressed {
                         theme.selected
                     } else if n.hovered {

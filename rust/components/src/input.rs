@@ -57,6 +57,7 @@ pub(crate) struct Interaction {
     pub restore_focus: Option<NodeId>,
     pub hover_since: std::time::Instant,
     pub pointer: Point,
+    pub pending_row: Option<(NodeId, String)>,
 }
 impl Default for Interaction {
     fn default() -> Self {
@@ -70,6 +71,7 @@ impl Default for Interaction {
             restore_focus: None,
             hover_since: std::time::Instant::now(),
             pointer: Point::default(),
+            pending_row: None,
         }
     }
 }
@@ -143,6 +145,9 @@ impl Host {
             if next != *offset {
                 *offset = next;
                 drop(offsets);
+                if let Some(model) = &n.collection {
+                    model.set_viewport(next, n.bounds.height);
+                }
                 self.redraw();
                 return Ok(true);
             }
@@ -195,6 +200,52 @@ impl Host {
         let m = self.0.mounted.borrow();
         let d = m.descriptions.get(&id)?;
         (!d.tooltip.is_empty() && self.in_scope(id)).then(|| (d.tooltip.clone(), i.pointer))
+    }
+    pub fn select_collection_item(
+        &self,
+        id: NodeId,
+        index: usize,
+        extend: bool,
+    ) -> Result<bool, Error> {
+        self.refresh()?;
+        let model = self
+            .0
+            .mounted
+            .borrow()
+            .nodes
+            .iter()
+            .find(|n| n.id == id && n.enabled && !n.hidden && self.in_scope(n.id))
+            .and_then(|n| n.collection.clone());
+        let Some(model) = model else {
+            return Ok(false);
+        };
+        let Some(item) = model.item(index) else {
+            return Ok(false);
+        };
+        if !model.select(&item.key, extend) {
+            return Ok(false);
+        }
+        model.reveal(index);
+        self.0.interaction.borrow_mut().pending_row = Some((id, item.key));
+        self.redraw();
+        Ok(true)
+    }
+    pub(crate) fn focus_pending_row(&self) -> Result<(), Error> {
+        let pending = self.0.interaction.borrow_mut().pending_row.take();
+        if let Some((parent, key)) = pending {
+            let id = self
+                .0
+                .mounted
+                .borrow()
+                .nodes
+                .iter()
+                .find(|n| n.parent == Some(parent) && n.key.as_ref() == Some(&key))
+                .map(|n| n.id);
+            if let Some(id) = id {
+                self.focus(id)?;
+            }
+        }
+        Ok(())
     }
     pub fn focused(&self) -> Option<NodeId> {
         self.0.interaction.borrow().focus
@@ -400,7 +451,28 @@ impl Host {
                         .iter()
                         .find(|n| n.id == id)
                         .map(|n| n.kind);
-                    if !matches!(kind, Some(Kind::Slider | Kind::TextField)) {
+                    if kind == Some(Kind::CollectionRow) {
+                        let row = self.snapshot()?.into_iter().find(|n| n.id == id).unwrap();
+                        let parent = row.parent.unwrap();
+                        let model = self
+                            .0
+                            .mounted
+                            .borrow()
+                            .nodes
+                            .iter()
+                            .find(|n| n.id == parent)
+                            .and_then(|n| n.collection.clone());
+                        if let Some(model) = model
+                            && let Some(index) =
+                                row.key.as_deref().and_then(|key| model.index_of(key))
+                        {
+                            handled = self.select_collection_item(
+                                parent,
+                                index,
+                                event.modifiers.shift || event.modifiers.command,
+                            )?;
+                        }
+                    } else if !matches!(kind, Some(Kind::Slider | Kind::TextField)) {
                         handled = self.activate(id)?;
                     }
                 }
@@ -450,6 +522,38 @@ impl Host {
             .find(|n| n.id == id)
             .cloned();
         let Some(node) = node else { return Ok(false) };
+        if node.kind == Kind::CollectionRow
+            && matches!(
+                event.key,
+                Key::Up | Key::Down | Key::Home | Key::End | Key::PageUp | Key::PageDown
+            )
+        {
+            let parent = node.parent.unwrap();
+            let model = self
+                .0
+                .mounted
+                .borrow()
+                .nodes
+                .iter()
+                .find(|n| n.id == parent)
+                .and_then(|n| n.collection.clone());
+            if let Some(model) = model {
+                let current = node
+                    .key
+                    .as_deref()
+                    .and_then(|key| model.index_of(key))
+                    .unwrap_or(0);
+                let next = match event.key {
+                    Key::Home => 0,
+                    Key::End => model.len().saturating_sub(1),
+                    Key::Up => current.saturating_sub(1),
+                    Key::PageUp => current.saturating_sub(10),
+                    Key::PageDown => (current + 10).min(model.len().saturating_sub(1)),
+                    _ => (current + 1).min(model.len().saturating_sub(1)),
+                };
+                return self.select_collection_item(parent, next, event.modifiers.shift);
+            }
+        }
         if node.kind == Kind::Button
             && self.active_modal().is_some()
             && matches!(event.key, Key::Up | Key::Down)

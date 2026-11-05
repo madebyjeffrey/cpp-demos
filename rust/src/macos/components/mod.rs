@@ -1,6 +1,7 @@
 use super::*;
 use crate::ui;
 mod accessibility;
+mod collection_accessibility;
 mod input;
 pub(super) use accessibility::{children, focused, hit_test};
 

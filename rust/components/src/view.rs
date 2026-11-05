@@ -29,6 +29,7 @@ pub enum Kind {
     TextField,
     Scroll,
     Modal,
+    CollectionRow,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CheckState {
@@ -103,6 +104,7 @@ pub(crate) struct Description {
     pub secure: bool,
     pub multiline: bool,
     pub anchor: Option<String>,
+    pub collection: Option<crate::ListModel>,
     pub tooltip: String,
     pub context: Option<Rc<dyn Fn()>>,
 }
@@ -124,6 +126,7 @@ impl View {
             secure: false,
             multiline: false,
             anchor: None,
+            collection: None,
             tooltip: String::new(),
             context: None,
         }))

@@ -39,6 +39,7 @@ pub struct Node {
     pub multiline: bool,
     pub anchor: Option<String>,
     pub scroll_max: f64,
+    pub collection: Option<crate::ListModel>,
     pub label: String,
     pub focused: bool,
     pub pressed: bool,
@@ -69,7 +70,7 @@ pub(crate) struct Mounted {
 }
 pub(crate) struct Inner {
     builder: Box<dyn Fn() -> View>,
-    observer: Rc<Observer>,
+    pub observer: Rc<Observer>,
     pub mounted: RefCell<Mounted>,
     building: Cell<bool>,
     generation: Cell<u64>,
@@ -228,13 +229,13 @@ impl Host {
             return Ok(false);
         };
         match (&d.data, value) {
-            (Data::Bool(b), Value::Bool(v)) => {
-                b.set(if matches!(d.kind, Kind::Radio | Kind::Segment) {
+            (Data::Bool(b), Value::Bool(v)) => b.set(
+                if matches!(d.kind, Kind::Radio | Kind::Segment | Kind::CollectionRow) {
                     true
                 } else {
                     !v
-                })
-            }
+                },
+            ),
             (Data::Check(b), Value::Check(v)) => b.set(if v == crate::CheckState::Checked {
                 crate::CheckState::Unchecked
             } else {
@@ -297,6 +298,7 @@ pub(crate) fn focusable(kind: Kind) -> bool {
     matches!(
         kind,
         Kind::Button
+            | Kind::CollectionRow
             | Kind::Toggle
             | Kind::CheckBox
             | Kind::Radio
@@ -377,6 +379,7 @@ fn mount(
         multiline: d.multiline,
         anchor: d.anchor.clone(),
         scroll_max: 0.,
+        collection: d.collection.clone(),
         label: if d.accessible.is_empty() {
             d.text.clone()
         } else {

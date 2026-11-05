@@ -100,6 +100,37 @@ fn main() {
             msg_send![&*element,accessibilityStringForRange:NSRange::new(0,3)];
         assert!(value.is_none());
     }
+    let list = ui::ListModel::new(
+        (0..100_000)
+            .map(|i| ui::ListItem::new(i.to_string(), format!("Row {i}")))
+            .collect(),
+        32.,
+    );
+    let list_host = window
+        .set_view({
+            let list = list.clone();
+            move || list.view()
+        })
+        .unwrap();
+    unsafe {
+        let children: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        let container = children.objectAtIndex(0);
+        let attribute = NSString::from_str("AXChildren");
+        let count: usize = msg_send![&*container,accessibilityArrayAttributeCount:&*attribute];
+        assert_eq!(count, 100_000);
+        let rows: Retained<NSArray<AnyObject>> = msg_send![&*container,accessibilityArrayAttributeValues:&*attribute,index:99_998usize,maxCount:10usize];
+        assert_eq!(rows.len(), 2);
+        let row = rows.objectAtIndex(1);
+        let label: Retained<NSString> = msg_send![&*row, accessibilityLabel];
+        assert_eq!(label.to_string(), "Row 99999");
+        let pressed: bool = msg_send![&*row, accessibilityPerformPress];
+        assert!(pressed);
+        assert!(list.selected().contains("99999"));
+        assert!(list_host.snapshot().unwrap().len() < 100);
+        window.clear_view();
+        let pressed: bool = msg_send![&*row, accessibilityPerformPress];
+        assert!(!pressed);
+    }
     window.show();
     app.quit_after(std::time::Duration::from_millis(200));
     app.run().unwrap();

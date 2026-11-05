@@ -22,6 +22,7 @@
 
 extern crate self as scars_ui;
 
+mod collections;
 mod deadlines;
 mod draft;
 mod editing;
@@ -35,6 +36,7 @@ mod state;
 pub mod text;
 mod view;
 
+pub use collections::*;
 pub use draft::{Draft, Number, Numeric, numeric_field};
 pub use editing::{Selection, TextCommand, TextInput};
 pub use geometry::*;

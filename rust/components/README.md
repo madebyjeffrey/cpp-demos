@@ -185,3 +185,35 @@ existing `show_modal`/`dismiss` lifetime interface. `Popup::modal` is an in-wind
 presentation; it does not create an AppKit sheet or a new native window. Scrolling
 is currently vertical; kinetic scrolling follows native wheel events, without a
 second synthetic animation loop.
+
+## Stage 5 — virtual collections and structured edits
+
+`cargo run --example stage5` opens a 100,000-row table, an expandable tree, an editable
+combo box and a selected-cell editor. Click headers to sort; arrows/Home/End/Page
+keys move through a collection. The test fixture keeps fewer than 50 mounted nodes
+while selecting and revealing the last of 100,000 rows.
+
+`ListModel` stores keyed `ListItem` rows and selection. `view()` realizes the viewport
+plus two rows of overscan; `view_with` customizes each realized row. Fixed positive
+row heights make indexed geometry deterministic. `set_items` validates unique keys
+before replacing data; selection follows keys through sorting/reordering and is
+pruned on removal. Configure `.multiple()` before sharing a model; Shift/Command
+activation adds/removes an individual selection. Models and mutations stay on the
+owning thread, outside builders. Row descriptions should keep durable edit state
+outside the virtual viewport.
+
+`TreeModel` flattens expanded branches. Applications fetch lazy children and call
+`set_tree`; `toggle` changes expansion. `TableModel` adds keyed cell drafts and
+sorting: `begin_edit` snapshots the original cell, and `commit` rejects a removed
+row/column or an intervening cell change. The example edits in a popup so scrolling
+does not destroy a draft. `combo_box` preserves editable text beyond its suggested
+options and limits suggestions to 100 matches.
+
+macOS exposes logical row proxies with stable identifiers across scrolling/sorts.
+Indexed `AXChildren`/`AXRows` queries realize only the requested range; offscreen
+press/focus selects and reveals the row. Removal or unmount makes retained proxies
+inert; reinserting a key gets a new lifetime token. Ordinary child queries return
+the realized range. The indexed hooks follow Apple's
+[array-range accessibility contract](https://developer.apple.com/documentation/applicationservices/1462060-axuielementcopyattributevalues).
+Native protocol tests cover the final two rows of a 100,000-row collection and
+retained proxies after detach. A full VoiceOver interaction audit remains separate.

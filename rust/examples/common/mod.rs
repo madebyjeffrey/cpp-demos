@@ -12,6 +12,11 @@ pub fn run(
         let host = Host::new(builder);
         let renderer = Renderer::default();
         host.layout(Size::new(size.0 as f64, size.1 as f64), &renderer)?;
+        if args.iter().any(|v| v == "--inspect") {
+            for node in host.scene()? {
+                println!("{:?} {} {:?}", node.kind, node.text, node.bounds);
+            }
+        }
         let mut surface =
             skia::surfaces::raster_n32_premul(size).ok_or("Raster surface unavailable")?;
         surface

@@ -46,7 +46,7 @@ pub(super) fn element(m: &Mounted, id: NodeId) -> Retained<Element> {
     m.cache.borrow_mut().insert(id, element.clone());
     element
 }
-fn list(
+pub(super) fn list(
     m: &Mounted,
     parent_id: Option<NodeId>,
 ) -> std::result::Result<Retained<NSArray<AnyObject>>, ui::Error> {
@@ -119,7 +119,7 @@ fn role(kind: Kind) -> &'static NSString {
     }
 }
 pub(super) struct ElementIvars {
-    owner: Weak<Mounted>,
+    pub(super) owner: Weak<Mounted>,
     id: NodeId,
 }
 define_class!(
@@ -136,7 +136,13 @@ define_class!(
         }
         #[unsafe(method_id(accessibilityRole))]
         fn role(&self) -> Option<Retained<NSString>> {
-            self.node().map(|n| ns(&role(n.kind).to_string()))
+            self.node().map(|n| {
+                if n.collection.is_some() {
+                    unsafe { NSAccessibilityListRole.retain() }
+                } else {
+                    ns(&role(n.kind).to_string())
+                }
+            })
         }
         #[unsafe(method_id(accessibilityLabel))]
         fn label(&self) -> Option<Retained<NSString>> {
@@ -171,7 +177,25 @@ define_class!(
         }
         #[unsafe(method_id(accessibilityChildren))]
         fn children(&self) -> Option<Retained<NSArray<AnyObject>>> {
-            self.with(|m, _, n| list(m, Some(n.id)))
+            self.with(|m, _, n| {
+                if let Some(model) = &n.collection {
+                    let range = model.visible_range();
+                    Ok(super::collection_accessibility::rows(
+                        self.ivars().owner.clone(),
+                        n,
+                        range.start,
+                        range.len(),
+                    ))
+                } else {
+                    list(m, Some(n.id))
+                }
+            })
+        }
+        #[unsafe(method(accessibilityRowCount))]
+        fn row_count(&self) -> isize {
+            self.node()
+                .and_then(|n| n.collection)
+                .map_or(0, |m| m.len() as isize)
         }
         #[unsafe(method(isAccessibilityEnabled))]
         fn enabled(&self) -> bool {
@@ -371,9 +395,33 @@ define_class!(
                 })
         }
     }
+    impl Element {
+        #[unsafe(method(accessibilityArrayAttributeCount:))]
+        fn array_count(&self, attribute: &NSString) -> usize {
+            if matches!(attribute.to_string().as_str(), "AXChildren" | "AXRows") {
+                self.node().and_then(|n|n.collection).map_or_else(||self.accessibilityChildren().map_or(0,|v|v.len()),|m|m.len())
+            } else {
+                0
+            }
+        }
+        #[unsafe(method_id(accessibilityArrayAttributeValues:index:maxCount:))]
+        fn indexed_rows(
+            &self,
+            attribute: &NSString,
+            index: usize,
+            count: usize,
+        ) -> Option<Retained<NSArray<AnyObject>>> {
+            if matches!(attribute.to_string().as_str(), "AXChildren" | "AXRows") {
+                self.row_array(index, count)
+            } else {
+                None
+            }
+        }
+
+    }
 );
 impl Element {
-    fn with<T>(
+    pub(super) fn with<T>(
         &self,
         f: impl FnOnce(&Mounted, &Surface, &Node) -> std::result::Result<T, ui::Error>,
     ) -> Option<T> {
