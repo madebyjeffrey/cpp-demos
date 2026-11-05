@@ -6,10 +6,24 @@ pub fn run(
     size: (i32, i32),
     builder: impl Fn() -> View + 'static,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    run_inspected(title, size, None, builder)
+}
+pub fn run_inspected(
+    title: &str,
+    size: (i32, i32),
+    inspector: Option<Inspector>,
+    builder: impl Fn() -> View + 'static,
+) -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().collect();
     if let Some(i) = args.iter().position(|v| v == "--render") {
         let path = args.get(i + 1).ok_or("--render needs a PNG path")?;
         let host = Host::new(builder);
+        if let Some(inspector) = inspector.clone() {
+            host.set_inspector(inspector);
+        }
+        if args.iter().any(|v| v == "--light") {
+            host.set_theme(Theme::light());
+        }
         let renderer = Renderer::default();
         host.layout(Size::new(size.0 as f64, size.1 as f64), &renderer)?;
         if args.iter().any(|v| v == "--inspect") {
@@ -34,13 +48,20 @@ pub fn run(
     {
         use scars_window::{Appearance, Application, Window};
         let app = Application::named(title)?;
-        app.open_window(
+        let window = app.open_window(
             Window::builder(title)
                 .size(size.0 as f64, size.1 as f64)
-                .theme_toggle(Appearance::Dark)
+                .theme_toggle(if args.iter().any(|v| v == "--light") {
+                    Appearance::Light
+                } else {
+                    Appearance::Dark
+                })
                 .full_screen_button()
                 .view(builder),
         )?;
+        if let Some(inspector) = inspector {
+            window.view_host().unwrap().set_inspector(inspector);
+        }
         if args.iter().any(|v| v == "--smoke") {
             app.quit_after(std::time::Duration::from_secs(1));
         }

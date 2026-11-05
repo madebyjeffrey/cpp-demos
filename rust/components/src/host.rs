@@ -77,6 +77,7 @@ pub(crate) struct Inner {
     pub theme: Cell<Theme>,
     pub viewport: Cell<Size>,
     pub interaction: RefCell<crate::input::Interaction>,
+    pub inspector: RefCell<crate::Inspector>,
     pub scroll: RefCell<HashMap<NodeId, f64>>,
     pub deadlines: RefCell<Vec<crate::deadlines::Deadline>>,
     pub editors: RefCell<HashMap<NodeId, crate::editing::Editor>>,
@@ -99,6 +100,7 @@ impl Host {
             editors: RefCell::new(HashMap::new()),
             deadlines: RefCell::new(Vec::new()),
             scroll: RefCell::new(HashMap::new()),
+            inspector: RefCell::new(crate::Inspector::new()),
         }))
     }
     pub fn on_invalidate(&self, wake: impl Fn() + 'static) {
@@ -146,6 +148,11 @@ impl Host {
             &identities,
             &mut next,
         )?;
+        let inspector = self.0.inspector.borrow();
+        let _ = inspector.overrides.get();
+        let _ = inspector.selected.get();
+        let _ = inspector.picking.get();
+        drop(inspector);
         let deps = tracking.finish();
         let epoch = self.0.observer.epoch.get().wrapping_add(1);
         for dep in deps {
@@ -411,7 +418,7 @@ fn mount(
     }
     Ok(())
 }
-fn validate(d: &Description) -> Result<(), Error> {
+pub(crate) fn validate(d: &Description) -> Result<(), Error> {
     let s = d.style;
     if [
         s.padding,

@@ -447,6 +447,9 @@ impl Renderer {
             }
             canvas.restore();
         }
+        if let Some(info) = host.inspector().selected.get() {
+            round(canvas, info.bounds.inset(1.), 2., theme.accent, true);
+        }
         if let Some((text, p)) = host.tooltip() {
             let style = TextStyle {
                 size: 13.,

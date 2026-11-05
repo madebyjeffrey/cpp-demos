@@ -35,6 +35,19 @@ impl Host {
             }
         }
         let mut mounted = self.0.mounted.borrow_mut();
+        let overrides = self.inspector().overrides.get();
+        let descriptions = mounted.descriptions.clone();
+        for node in &mut mounted.nodes {
+            if let Some(style) = overrides.get(&node.id) {
+                let mut description = (*descriptions[&node.id]).clone();
+                description.style = *style;
+                crate::host::validate(&description)?;
+            }
+            node.style = overrides
+                .get(&node.id)
+                .copied()
+                .unwrap_or(descriptions[&node.id].style);
+        }
         let mut tree = Tree {
             children: HashMap::new(),
             desired: HashMap::new(),
@@ -139,7 +152,38 @@ impl Host {
             model.set_viewport(offset, height);
         }
         self.reconcile_modal()?;
+        if self.focused().is_none() {
+            let id = {
+                let m = self.0.mounted.borrow();
+                m.nodes
+                    .iter()
+                    .rev()
+                    .find(|n| {
+                        n.enabled
+                            && !n.hidden
+                            && self.in_scope(n.id)
+                            && m.descriptions[&n.id].autofocus
+                            && crate::host::focusable(n.kind)
+                    })
+                    .map(|n| n.id)
+            };
+            if let Some(id) = id {
+                self.focus(id)?;
+            }
+        }
         self.focus_pending_row()?;
+        let inspector = self.inspector();
+        if let Some(selected) = inspector.selected.get() {
+            let node = self
+                .0
+                .mounted
+                .borrow()
+                .nodes
+                .iter()
+                .find(|n| n.id == selected.id)
+                .cloned();
+            inspector.selected.set(node.map(crate::Inspection::from));
+        }
         Ok(())
     }
     /// Scene order includes z-order while preserving each sibling subtree as a unit.

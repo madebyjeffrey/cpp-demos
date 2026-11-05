@@ -347,7 +347,7 @@ fn expand(item: Item) -> Result<Tokens> {
                     "key" | "width" | "height" | "wrap" | "align" | "justify" | "bold"
                     | "foreground" | "background" | "enabled" | "visible" | "hidden"
                     | "position" | "left" | "right" | "top" | "bottom" | "z_index"
-                    | "accessible_label" | "tooltip" | "on_context" => quote!(#expr),
+                    | "accessible_label" | "tooltip" | "on_context" | "autofocus" => quote!(#expr),
                     "read_only"
                         if matches!(
                             kind.as_str(),

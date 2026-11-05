@@ -338,6 +338,13 @@ impl Host {
     }
     pub fn pointer(&self, event: Pointer) -> Result<bool, Error> {
         self.refresh()?;
+        let inspector = self.inspector();
+        if inspector.picking.get() && event.kind == PointerKind::Down && event.button == 0 {
+            self.blur();
+            inspector.selected.set(self.pick(event.position)?);
+            self.redraw();
+            return Ok(true);
+        }
         if event.kind == PointerKind::Cancel {
             self.0.interaction.borrow_mut().pressed = None;
             self.redraw();
@@ -502,6 +509,12 @@ impl Host {
             return Ok(false);
         }
         self.refresh()?;
+        let inspector = self.inspector();
+        if event.key == Key::Escape && inspector.picking.get() {
+            inspector.picking.set(false);
+            self.redraw();
+            return Ok(true);
+        }
         if event.key == Key::Escape
             && let Some(id) = self.active_modal()
         {

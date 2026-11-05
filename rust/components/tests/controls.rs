@@ -108,3 +108,25 @@ fn editing_preserves_graphemes_and_ime_draft_then_commits() {
     value.set("External".into());
     assert_eq!(host.text_input().unwrap().unwrap().text, "External");
 }
+
+#[test]
+fn inspector_picks_real_nodes_and_restores_style_overrides() {
+    let inspector = Inspector::new();
+    let host = Host::new(|| view! {column(padding:10){button("Inspect",on_click:||{});}});
+    host.set_inspector(inspector.clone());
+    host.layout(Size::new(400., 200.), &Metrics).unwrap();
+    let info = host.pick(Point { x: 20., y: 20. }).unwrap().unwrap();
+    assert_eq!(info.kind, Kind::Button);
+    let original = info.bounds.width;
+    let mut style = info.style;
+    style.width = Length::Points(120.);
+    inspector.selected.set(Some(info.clone()));
+    inspector.overrides.update(|map| {
+        map.insert(info.id, style);
+    });
+    host.layout(Size::new(400., 200.), &Metrics).unwrap();
+    assert_eq!(inspector.selected.get().unwrap().bounds.width, 120.);
+    inspector.overrides.set(Default::default());
+    host.layout(Size::new(400., 200.), &Metrics).unwrap();
+    assert_eq!(inspector.selected.get().unwrap().bounds.width, original);
+}

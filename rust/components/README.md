@@ -217,3 +217,32 @@ the realized range. The indexed hooks follow Apple's
 [array-range accessibility contract](https://developer.apple.com/documentation/applicationservices/1462060-axuielementcopyattributevalues).
 Native protocol tests cover the final two rows of a 100,000-row collection and
 retained proxies after detach. A full VoiceOver interaction audit remains separate.
+
+## Stage 6 — typed values and developer tools
+
+`cargo run --example stage6` shows sRGB RGBA channels/hex drafts, a calendar,
+ISO date/time drafts, named-zone editing and a live inspector. `cargo run --example
+lab` provides a small control catalog. Both support `--light`, `--render file.png`
+and `--smoke`; render mode additionally accepts `--inspect` for bounds output.
+
+`ColorPicker` and its `well` composition share a typed `Color` binding. Hex editing
+accepts `#RRGGBB` or `#RRGGBBAA`; the stored u32 uses ARGB. `DatePicker` uses Gregorian
+calendar values. Time/local datetime editing uses explicit ISO syntax. Jiff supplies
+civil validation and a bundled timezone database in Rust, alongside ICU4X's Unicode
+and localized integer services. The lockfile pins the data version; upgrading it
+is how applications receive timezone-rule updates.
+
+`ZonedPicker` accepts full zoned ISO strings with `[IANA/Zone]`, or local ISO text in
+the current zone. The default rejects gaps and overlaps; users may choose earlier
+or later resolution. Invalid drafts preserve the committed instant. This follows
+[Jiff's explicit disambiguation model](https://docs.rs/jiff/0.2.39/jiff/tz/enum.Disambiguation.html).
+These editors do not guess localized number/date grammars or convert civil dates
+into instants implicitly. Color editing is sRGB; wide-gamut profiles are not exposed.
+
+Create `Inspector` outside the builder, include `inspector.view()` if desired, and
+attach it using `window.view_host().unwrap().set_inspector(inspector)`. Picking
+outlines a real mounted node and reports its key, kind and bounds. Width overrides
+are keyed by mounted identity and can be reset; invalid style values return layout
+errors. Escape exits picking. `Host::pick` also works without the inspector panel.
+Use `autofocus: true` on a control to focus it when the host has no valid focus;
+newly mounted later autofocus controls take precedence (useful for inline editing).

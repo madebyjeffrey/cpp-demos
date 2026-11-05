@@ -11,6 +11,7 @@ scars-ui-macros = { path = "../macros" }
 icu_segmenter = "2.4"
 icu_decimal = { version = "2.4", features = ["alloc"] }
 icu_locale_core = "2.4"
+jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-always"] }
 
 [lints.rust]
 unsafe_code = "forbid"

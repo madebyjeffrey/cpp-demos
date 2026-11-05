@@ -101,6 +101,7 @@ pub(crate) struct Description {
     pub hidden: bool,
     pub accessible: String,
     pub read_only: bool,
+    pub autofocus: bool,
     pub secure: bool,
     pub multiline: bool,
     pub anchor: Option<String>,
@@ -123,6 +124,7 @@ impl View {
             hidden: false,
             accessible: String::new(),
             read_only: false,
+            autofocus: false,
             secure: false,
             multiline: false,
             anchor: None,
@@ -179,6 +181,10 @@ impl View {
             .align(Align::Start);
         Rc::make_mut(&mut v.0).anchor = Some(anchor.into());
         v
+    }
+    pub fn autofocus(mut self, value: bool) -> Self {
+        Rc::make_mut(&mut self.0).autofocus = value;
+        self
     }
     pub fn tooltip(mut self, text: impl Into<String>) -> Self {
         Rc::make_mut(&mut self.0).tooltip = text.into();
