@@ -353,8 +353,7 @@ macro_rules! property {
         }
     };
 }
-property!(padding, f64);
-property!(margin, f64);
+
 property!(gap, f64);
 property!(grow, f64);
 property!(shrink, f64);
@@ -363,6 +362,12 @@ property!(min_height, f64);
 property!(max_width, f64);
 property!(max_height, f64);
 property!(wrap, bool);
+property!(text_overflow, crate::TextOverflow);
+property!(text_align, Align);
+property!(max_lines, usize);
+property!(uppercase, bool);
+property!(orientation, crate::Orientation);
+property!(letter_spacing, f64);
 property!(align, Align);
 property!(justify, Justify);
 property!(bold, bool);
@@ -380,12 +385,45 @@ macro_rules! length {
     };
 }
 length!(width);
+length!(basis);
 length!(height);
 length!(left);
 length!(right);
 length!(top);
 length!(bottom);
 impl View {
+    pub fn padding(mut self, v: impl Into<crate::Insets>) -> Self {
+        Rc::make_mut(&mut self.0).style.padding = v.into();
+        self
+    }
+    pub fn margin(mut self, v: impl Into<crate::Insets>) -> Self {
+        Rc::make_mut(&mut self.0).style.margin = v.into();
+        self
+    }
+    pub fn align_self(mut self, v: Align) -> Self {
+        Rc::make_mut(&mut self.0).style.align_self = Some(v);
+        self
+    }
+    pub fn accent(mut self, v: u32) -> Self {
+        Rc::make_mut(&mut self.0).style.accent = Some(v);
+        self
+    }
+    pub fn density(mut self, v: crate::Density) -> Self {
+        Rc::make_mut(&mut self.0).style.density = Some(v);
+        self
+    }
+    pub fn text_wrap(mut self, v: crate::TextWrap) -> Self {
+        Rc::make_mut(&mut self.0).style.text_wrap = Some(v);
+        self
+    }
+    pub fn label_style(mut self, v: crate::LabelStyle) -> Self {
+        Rc::make_mut(&mut self.0).style.label_style = Some(v);
+        self
+    }
+    pub fn line_height(mut self, v: f64) -> Self {
+        Rc::make_mut(&mut self.0).style.line_height = Some(v);
+        self
+    }
     pub fn foreground(mut self, v: u32) -> Self {
         Rc::make_mut(&mut self.0).style.foreground = Some(v);
         self

@@ -31,3 +31,73 @@ fn themes_images_and_text_render_without_a_gpu() {
     }
     assert_ne!(colors[0], colors[1]);
 }
+
+#[test]
+fn paragraph_limits_alignment_and_line_metrics_use_the_shaping_cache_correctly() {
+    let renderer =
+        Renderer::with_font(include_bytes!("../../demo/assets/Roboto-Regular.ttf")).unwrap();
+    let base = TextStyle {
+        size: 20.,
+        ..TextStyle::default()
+    };
+    let right = Measure::text(
+        &renderer,
+        "ABC",
+        TextStyle {
+            align: Align::End,
+            ..base
+        },
+        140.,
+    );
+    let left = Measure::text(&renderer, "ABC", base, 140.);
+    assert!((right.range_rects)(0..3)[0].x > 80.);
+    assert!((left.range_rects)(0..3)[0].x < 1.);
+    let words =
+        "A deliberately long paragraph that takes several lines to fit into the assigned width.";
+    let full = Measure::text(
+        &renderer,
+        words,
+        TextStyle {
+            wrap: true,
+            line_height: 26.,
+            ..base
+        },
+        100.,
+    );
+    let limited = Measure::text(
+        &renderer,
+        words,
+        TextStyle {
+            wrap: true,
+            line_height: 26.,
+            max_lines: 2,
+            overflow: TextOverflow::Ellipsis,
+            ..base
+        },
+        100.,
+    );
+    assert!(full.size.height > limited.size.height);
+    assert!(limited.size.height <= 53.);
+    assert!(limited.size.width <= 100.);
+    let single = Measure::text(
+        &renderer,
+        words,
+        TextStyle {
+            overflow: TextOverflow::Ellipsis,
+            ..base
+        },
+        100.,
+    );
+    assert!(single.size.width <= 100.);
+    assert!(single.size.height < 30.);
+    let spaced = Measure::text(
+        &renderer,
+        "ABC",
+        TextStyle {
+            letter_spacing: 4.,
+            ..base
+        },
+        140.,
+    );
+    assert!(spaced.size.width > left.size.width + 8.);
+}

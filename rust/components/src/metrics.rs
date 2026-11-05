@@ -6,6 +6,33 @@ pub struct TextStyle {
     pub color: u32,
     pub bold: bool,
     pub wrap: bool,
+    pub align: crate::Align,
+    pub overflow: crate::TextOverflow,
+    pub max_lines: usize,
+    pub line_height: f64,
+    pub letter_spacing: f64,
+}
+impl Default for TextStyle {
+    fn default() -> Self {
+        Self {
+            size: 15.,
+            color: 0xff000000,
+            bold: false,
+            wrap: false,
+            align: crate::Align::Start,
+            overflow: crate::TextOverflow::Clip,
+            max_lines: 0,
+            line_height: 0.,
+            letter_spacing: 0.,
+        }
+    }
+}
+impl TextStyle {
+    pub fn constrained(self) -> bool {
+        self.wrap
+            || self.overflow == crate::TextOverflow::Ellipsis
+            || matches!(self.align, crate::Align::Center | crate::Align::End)
+    }
 }
 /// Shaped geometry in logical points and UTF-8 bytes, supplied by a renderer.
 #[derive(Clone)]

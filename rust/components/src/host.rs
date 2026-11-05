@@ -31,6 +31,8 @@ pub struct Node {
     pub clip: Rect,
     pub text_bounds: Rect,
     pub text_style: TextStyle,
+    pub accent: u32,
+    pub density: crate::Density,
     pub style: Style,
     pub enabled: bool,
     pub hidden: bool,
@@ -394,7 +396,10 @@ fn mount(
             color: 0xff000000,
             bold: false,
             wrap: false,
+            ..TextStyle::default()
         },
+        accent: crate::Theme::default().accent,
+        density: crate::Density::Standard,
         style: d.style,
         enabled: enabled && d.enabled,
         hidden: hidden || d.hidden,
@@ -438,8 +443,14 @@ fn mount(
 pub(crate) fn validate(d: &Description) -> Result<(), Error> {
     let s = d.style;
     if [
-        s.padding,
-        s.margin,
+        s.padding.top,
+        s.padding.right,
+        s.padding.bottom,
+        s.padding.left,
+        s.margin.top,
+        s.margin.right,
+        s.margin.bottom,
+        s.margin.left,
         s.gap,
         s.grow,
         s.shrink,
@@ -453,11 +464,13 @@ pub(crate) fn validate(d: &Description) -> Result<(), Error> {
         || s.max_height.is_nan()
         || s.max_width < s.min_width
         || s.max_height < s.min_height
+        || !s.letter_spacing.is_finite()
+        || s.line_height.is_some_and(|v| !v.is_finite() || v <= 0.)
         || s.font_size.is_some_and(|v| !v.is_finite() || v <= 0.)
     {
         return Err(Error("Invalid layout/style value".into()));
     }
-    for length in [s.width, s.height] {
+    for length in [s.width, s.height, s.basis] {
         if let crate::Length::Points(v) | crate::Length::Percent(v) = length
             && (!v.is_finite() || v < 0.)
         {

@@ -43,6 +43,7 @@ impl Host {
                 description.style = *style;
                 crate::host::validate(&description)?;
             }
+            node.text = descriptions[&node.id].text.clone();
             node.style = overrides
                 .get(&node.id)
                 .copied()
@@ -54,6 +55,7 @@ impl Host {
             layouts: HashMap::new(),
             measure,
             theme,
+            inherited: HashMap::new(),
             scroll: self.0.scroll.borrow().clone(),
         };
         for (i, n) in mounted.nodes.iter().enumerate() {
@@ -65,6 +67,7 @@ impl Host {
             color: theme.text,
             bold: false,
             wrap: false,
+            ..TextStyle::default()
         };
         for root in roots {
             tree.measure_node(root, size, text, &mut mounted.nodes)?;
@@ -72,6 +75,7 @@ impl Host {
                 root,
                 Rect::new(0., 0., size.width, size.height),
                 Rect::new(0., 0., size.width, size.height),
+                size,
                 &mut mounted.nodes,
             )?;
         }
@@ -223,6 +227,7 @@ struct Tree<'a> {
     layouts: HashMap<NodeId, TextLayout>,
     measure: &'a dyn Measure,
     theme: crate::Theme,
+    inherited: HashMap<NodeId, (u32, crate::Density)>,
     scroll: HashMap<NodeId, f64>,
 }
 fn horizontal(kind: Kind) -> bool {
@@ -260,16 +265,62 @@ impl Tree<'_> {
     ) -> Result<Size, Error> {
         let n = nodes[i].clone();
         let s = n.style;
-        let text = TextStyle {
-            size: s.font_size.unwrap_or(parent.size),
-            color: s.foreground.unwrap_or(parent.color),
-            bold: s.bold || parent.bold,
-            wrap: if n.kind == Kind::TextField {
-                n.multiline
-            } else {
-                s.wrap
-            },
+        let (parent_accent, parent_density) = n
+            .parent
+            .and_then(|id| self.inherited.get(&id).copied())
+            .unwrap_or((self.theme.accent, crate::Density::Standard));
+        let accent = s.accent.unwrap_or(parent_accent);
+        let density = s.density.unwrap_or(parent_density);
+        self.inherited.insert(n.id, (accent, density));
+        nodes[i].accent = accent;
+        nodes[i].density = density;
+        let control_height = if density == crate::Density::Standard {
+            self.theme.control_height
+        } else {
+            density.control_height()
         };
+        let mut text = parent;
+        if let Some(label) = s.label_style {
+            use crate::LabelStyle::*;
+            match label {
+                Standard => {}
+                Heading => {
+                    text.size = 28.;
+                    text.bold = true;
+                }
+                Section => {
+                    text.size = 13.;
+                    text.bold = true;
+                }
+                Secondary => text.color = self.theme.secondary,
+                Micro => {
+                    text.size = 11.;
+                    text.color = self.theme.secondary;
+                }
+                Status => {
+                    text.color = accent;
+                    text.bold = true;
+                }
+                Error => text.color = 0xffff8787,
+            }
+        }
+        text.size = s.font_size.unwrap_or(text.size);
+        text.color = s.foreground.unwrap_or(text.color);
+        text.bold |= s.bold;
+        text.wrap = if n.kind == Kind::TextField {
+            n.multiline
+        } else {
+            s.text_wrap
+                .map_or(s.wrap, |wrap| wrap != crate::TextWrap::NoWrap)
+        };
+        text.align = s.text_align;
+        text.overflow = s.text_overflow;
+        text.max_lines = s.max_lines;
+        text.line_height = s.line_height.unwrap_or(parent.line_height);
+        text.letter_spacing = s.letter_spacing;
+        if s.uppercase || s.label_style == Some(crate::LabelStyle::Section) {
+            nodes[i].text = n.text.to_uppercase();
+        }
         nodes[i].text_style = text;
         let width = s
             .width
@@ -277,10 +328,16 @@ impl Tree<'_> {
             .unwrap_or(available.width)
             .min(s.max_width)
             .max(s.min_width);
-        let inner = (width - 2. * s.padding).max(0.);
-        let layout =
-            self.measure
-                .text(&n.text, text, if text.wrap { inner } else { f64::INFINITY });
+        let inner = (width - s.padding.horizontal()).max(0.);
+        let layout = self.measure.text(
+            &nodes[i].text,
+            text,
+            if text.constrained() {
+                inner
+            } else {
+                f64::INFINITY
+            },
+        );
         let mut size = if container(n.kind) {
             let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
             let mut main: f64 = 0.;
@@ -294,11 +351,17 @@ impl Tree<'_> {
                 if nodes[child].style.position == Position::Absolute {
                     continue;
                 }
-                let m = nodes[child].style.margin * 2.;
+                let m = nodes[child].style.margin.main(horizontal(n.kind));
                 let (a, b) = if horizontal(n.kind) {
-                    (child_size.width + m, child_size.height + m)
+                    (
+                        child_size.width + m,
+                        child_size.height + nodes[child].style.margin.vertical(),
+                    )
                 } else {
-                    (child_size.height + m, child_size.width + m)
+                    (
+                        child_size.height + m,
+                        child_size.width + nodes[child].style.margin.horizontal(),
+                    )
                 };
                 if horizontal(n.kind) && s.wrap && line_main > 0. && line_main + s.gap + a > inner {
                     main = main.max(line_main);
@@ -331,7 +394,7 @@ impl Tree<'_> {
                     .get(&Some(n.id))
                     .into_iter()
                     .flatten()
-                    .filter(|c| nodes[**c].style.position == Position::Flow)
+                    .filter(|c| nodes[**c].style.position != Position::Absolute)
                     .map(|c| self.desired[&nodes[*c].id]);
                 let mut max = Size::default();
                 for v in sizes {
@@ -347,29 +410,35 @@ impl Tree<'_> {
         } else {
             match n.kind {
                 Kind::Label => layout.size,
-                Kind::TextField => Size::new(240., self.theme.control_height.max(text.size + 14.)),
+                Kind::TextField => Size::new(240., control_height.max(text.size + 14.)),
                 Kind::Button | Kind::Toggle | Kind::Segment => Size::new(
                     layout.size.width + 28.,
-                    self.theme.control_height.max(layout.size.height + 10.),
+                    control_height.max(layout.size.height + 10.),
                 ),
                 Kind::CheckBox | Kind::Radio => Size::new(
                     layout.size.width + 30.,
-                    self.theme.control_height.max(layout.size.height + 6.),
+                    control_height.max(layout.size.height + 6.),
                 ),
                 Kind::Switch => Size::new(
                     layout.size.width + 54.,
-                    self.theme.control_height.max(layout.size.height + 6.),
+                    control_height.max(layout.size.height + 6.),
                 ),
-                Kind::Slider => Size::new(180., self.theme.control_height),
+                Kind::Slider => Size::new(180., control_height),
                 Kind::Progress => Size::new(180., 8.),
-                Kind::Separator => Size::new(
-                    if available.width.is_finite() {
-                        available.width
+                Kind::Separator => {
+                    if s.orientation == crate::Orientation::Vertical {
+                        Size::new(1., 1.)
                     } else {
-                        1.
-                    },
-                    1.,
-                ),
+                        Size::new(
+                            if available.width.is_finite() {
+                                available.width
+                            } else {
+                                1.
+                            },
+                            1.,
+                        )
+                    }
+                }
                 Kind::Image => {
                     if let Some((image, _)) = &n.image {
                         self.measure.image(image)?
@@ -384,8 +453,8 @@ impl Tree<'_> {
             size.height += layout.size.height + s.gap;
             size.width = size.width.max(layout.size.width);
         }
-        size.width += 2. * s.padding;
-        size.height += 2. * s.padding;
+        size.width += s.padding.horizontal();
+        size.height += s.padding.vertical();
         size.width = s
             .width
             .resolve(available.width)
@@ -412,10 +481,22 @@ impl Tree<'_> {
         i: usize,
         bounds: Rect,
         clip: Rect,
+        containing: Size,
         nodes: &mut [Node],
     ) -> Result<(), Error> {
         let n = nodes[i].clone();
         let s = n.style;
+        let mut bounds = bounds;
+        if s.position == Position::Relative {
+            bounds.x += s
+                .left
+                .resolve(containing.width)
+                .unwrap_or_else(|| -s.right.resolve(containing.width).unwrap_or(0.));
+            bounds.y += s
+                .top
+                .resolve(containing.height)
+                .unwrap_or_else(|| -s.bottom.resolve(containing.height).unwrap_or(0.));
+        }
         nodes[i].bounds = bounds;
         nodes[i].clip = clip.intersection(bounds);
         let mut content = bounds.inset(s.padding);
@@ -429,7 +510,7 @@ impl Tree<'_> {
             let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
             let height = children
                 .iter()
-                .map(|c| self.desired[&nodes[*c].id].height + 2. * nodes[*c].style.margin)
+                .map(|c| self.desired[&nodes[*c].id].height + nodes[*c].style.margin.vertical())
                 .sum::<f64>()
                 + s.gap * children.len().saturating_sub(1) as f64;
             let max = (height - content.height).max(0.);
@@ -469,7 +550,7 @@ impl Tree<'_> {
             let flowing: Vec<_> = children
                 .iter()
                 .copied()
-                .filter(|c| nodes[*c].style.position == Position::Flow)
+                .filter(|c| nodes[*c].style.position != Position::Absolute)
                 .collect();
             if n.kind == Kind::Layer {
                 for child in flowing {
@@ -478,24 +559,25 @@ impl Tree<'_> {
                     self.arrange(
                         child,
                         Rect::new(
-                            content.x + m,
-                            content.y + m,
+                            content.x + m.left,
+                            content.y + m.top,
                             nodes[child].style.width.resolve(content.width).unwrap_or(
                                 if s.align == Align::Stretch {
-                                    (content.width - 2. * m).max(0.)
+                                    (content.width - m.horizontal()).max(0.)
                                 } else {
                                     d.width
                                 },
                             ),
                             nodes[child].style.height.resolve(content.height).unwrap_or(
                                 if s.align == Align::Stretch {
-                                    (content.height - 2. * m).max(0.)
+                                    (content.height - m.vertical()).max(0.)
                                 } else {
                                     d.height
                                 },
                             ),
                         ),
                         nodes[i].clip,
+                        Size::new(content.width, content.height),
                         nodes,
                     )?;
                 }
@@ -508,7 +590,7 @@ impl Tree<'_> {
                 let mut used = 0.;
                 for child in flowing {
                     let d = self.desired[&nodes[child].id];
-                    let m = nodes[child].style.margin * 2.;
+                    let m = nodes[child].style.margin.main(horizontal(n.kind));
                     let main = if horiz { d.width } else { d.height };
                     if horiz && s.wrap && used > 0. && used + gap + main + m > main_limit {
                         lines.push(Vec::new());
@@ -531,52 +613,47 @@ impl Tree<'_> {
                             let d = self.desired[&nodes[*c].id];
                             let style = nodes[*c].style;
                             if horiz {
-                                style.width.resolve(main_limit).unwrap_or(d.width)
+                                style
+                                    .basis
+                                    .resolve(main_limit)
+                                    .or_else(|| style.width.resolve(main_limit))
+                                    .unwrap_or(d.width)
                             } else {
-                                style.height.resolve(main_limit).unwrap_or(d.height)
+                                style
+                                    .basis
+                                    .resolve(main_limit)
+                                    .or_else(|| style.height.resolve(main_limit))
+                                    .unwrap_or(d.height)
                             }
                         })
                         .collect();
-                    let margins: f64 = line.iter().map(|c| 2. * nodes[*c].style.margin).sum();
+                    let margins: f64 = line
+                        .iter()
+                        .map(|c| nodes[*c].style.margin.main(horiz))
+                        .sum();
                     let available =
                         (main_limit - margins - gap * line.len().saturating_sub(1) as f64).max(0.);
-                    let sum: f64 = natural.iter().sum();
-                    let extra = available - sum;
-                    let grow: f64 = line.iter().map(|c| nodes[*c].style.grow).sum();
-                    let shrink: f64 = line
-                        .iter()
-                        .zip(&natural)
-                        .map(|(c, n)| nodes[*c].style.shrink * n)
-                        .sum();
-                    let mut sizes = natural.clone();
+                    let mut sizes = flex_sizes(
+                        &line,
+                        &natural,
+                        available,
+                        horiz,
+                        !matches!(n.kind, Kind::Block | Kind::Fragment | Kind::Scroll),
+                        nodes,
+                    );
                     if n.kind == Kind::Fragment
                         && line.len() == 1
                         && nodes[line[0]].style.height == Length::Auto
                     {
-                        sizes[0] = available;
-                    }
-                    for (j, child) in line.iter().enumerate() {
-                        let cs = nodes[*child].style;
-                        let mut value = sizes[j];
-                        if n.kind == Kind::Fragment && line.len() == 1 {
-                            continue;
-                        }
-                        if extra > 0. && grow > 0. {
-                            value += extra * cs.grow / grow;
-                        } else if extra < 0.
-                            && shrink > 0.
-                            && !matches!(n.kind, Kind::Block | Kind::Fragment | Kind::Scroll)
-                        {
-                            value += extra * cs.shrink * natural[j] / shrink;
-                        }
-                        sizes[j] = value.clamp(
-                            if horiz { cs.min_width } else { cs.min_height },
-                            if horiz { cs.max_width } else { cs.max_height },
+                        sizes[0] = available.clamp(
+                            nodes[line[0]].style.min_height,
+                            nodes[line[0]].style.max_height,
                         );
                     }
                     let allocated: f64 = sizes.iter().sum();
                     let remaining = (available - allocated).max(0.);
                     let mut cursor = match s.justify {
+                        Justify::SpaceAround => remaining / (2. * line.len() as f64),
                         Justify::Center => remaining / 2.,
                         Justify::End => remaining,
                         _ => 0.,
@@ -584,13 +661,16 @@ impl Tree<'_> {
                     let spacing = gap
                         + if s.justify == Justify::SpaceBetween && line.len() > 1 {
                             remaining / (line.len() - 1) as f64
+                        } else if s.justify == Justify::SpaceAround {
+                            remaining / line.len() as f64
                         } else {
                             0.
                         };
                     let line_cross = if horiz && s.wrap {
                         line.iter()
                             .map(|c| {
-                                self.desired[&nodes[*c].id].height + 2. * nodes[*c].style.margin
+                                self.desired[&nodes[*c].id].height
+                                    + nodes[*c].style.margin.vertical()
                             })
                             .fold(0., f64::max)
                     } else {
@@ -600,8 +680,8 @@ impl Tree<'_> {
                         .iter()
                         .map(|c| {
                             self.layouts[&nodes[*c].id].baseline
-                                + nodes[*c].style.padding
-                                + nodes[*c].style.margin
+                                + nodes[*c].style.padding.top
+                                + nodes[*c].style.margin.top
                         })
                         .fold(0., f64::max);
                     for (j, child) in line.iter().enumerate() {
@@ -610,22 +690,27 @@ impl Tree<'_> {
                         let natural_cross = if horiz { desired.height } else { desired.width };
                         let explicit = if horiz { cs.height } else { cs.width };
                         let natural_cross = explicit.resolve(cross_limit).unwrap_or(natural_cross);
-                        let cross = if s.align == Align::Stretch && explicit == Length::Auto {
-                            (line_cross - 2. * cs.margin).max(0.)
+                        let align = cs.align_self.unwrap_or(s.align);
+                        let cross = if align == Align::Stretch && explicit == Length::Auto {
+                            (line_cross - cs.margin.main(!horiz)).max(0.)
                         } else {
                             natural_cross
                         };
-                        let offset = match s.align {
+                        let cross = cross.clamp(
+                            if horiz { cs.min_height } else { cs.min_width },
+                            if horiz { cs.max_height } else { cs.max_width },
+                        );
+                        let offset = match align {
                             Align::Center => (line_cross - cross) / 2.,
-                            Align::End => line_cross - cross - cs.margin,
+                            Align::End => line_cross - cross - cs.margin.after(!horiz),
                             Align::Baseline if horiz => {
-                                baseline - self.layouts[&nodes[*child].id].baseline - cs.padding
+                                baseline - self.layouts[&nodes[*child].id].baseline - cs.padding.top
                             }
-                            _ => cs.margin,
+                            _ => cs.margin.before(!horiz),
                         };
                         let r = if horiz {
                             Rect::new(
-                                content.x + cursor + cs.margin,
+                                content.x + cursor + cs.margin.before(horiz),
                                 content.y + line_offset + offset,
                                 sizes[j],
                                 cross,
@@ -633,13 +718,19 @@ impl Tree<'_> {
                         } else {
                             Rect::new(
                                 content.x + offset,
-                                content.y + cursor + cs.margin,
+                                content.y + cursor + cs.margin.before(horiz),
                                 cross,
                                 sizes[j],
                             )
                         };
-                        self.arrange(*child, r, nodes[i].clip, nodes)?;
-                        cursor += sizes[j] + 2. * cs.margin + spacing;
+                        self.arrange(
+                            *child,
+                            r,
+                            nodes[i].clip,
+                            Size::new(content.width, content.height),
+                            nodes,
+                        )?;
+                        cursor += sizes[j] + cs.margin.main(horiz) + spacing;
                     }
                     line_offset += line_cross + gap;
                 }
@@ -677,35 +768,110 @@ impl Tree<'_> {
                         h,
                     ),
                     nodes[i].clip,
+                    Size::new(content.width, content.height),
                     nodes,
                 )?;
             }
         } else {
-            let layout = if n.kind == Kind::Label {
-                self.measure.text(
-                    &n.text,
-                    n.text_style,
-                    if s.wrap { content.width } else { f64::INFINITY },
-                )
-            } else {
-                self.layouts[&n.id].clone()
-            };
-            let x = match n.kind {
+            let mut text_area = content;
+            match n.kind {
                 Kind::Button | Kind::Toggle | Kind::Segment => {
-                    content.x + (content.width - layout.size.width) / 2.
+                    text_area.x += 14.;
+                    text_area.width = (text_area.width - 28.).max(0.);
                 }
-                Kind::CheckBox | Kind::Radio => content.x + 30.,
-                Kind::Switch => content.x + 54.,
-                _ => content.x,
+                Kind::CheckBox | Kind::Radio => {
+                    text_area.x += 30.;
+                    text_area.width = (text_area.width - 30.).max(0.);
+                }
+                Kind::Switch => {
+                    text_area.x += 54.;
+                    text_area.width = (text_area.width - 54.).max(0.);
+                }
+                _ => {}
+            }
+            let constrained = n.text_style.constrained();
+            let layout = self.measure.text(
+                &n.text,
+                n.text_style,
+                if constrained {
+                    text_area.width
+                } else {
+                    f64::INFINITY
+                },
+            );
+            let x = if matches!(n.kind, Kind::Button | Kind::Toggle | Kind::Segment) && !constrained
+            {
+                content.x + (content.width - layout.size.width) / 2.
+            } else {
+                text_area.x
             };
             nodes[i].text_bounds = Rect::new(
                 x,
                 content.y + (content.height - layout.size.height) / 2.,
-                layout.size.width,
+                if constrained {
+                    text_area.width
+                } else {
+                    layout.size.width
+                },
                 layout.size.height,
             );
             self.layouts.insert(n.id, layout);
         }
         Ok(())
     }
+}
+
+/// Distribute free space repeatedly so items frozen at min/max do not strand space.
+fn flex_sizes(
+    line: &[usize],
+    basis: &[f64],
+    available: f64,
+    horizontal: bool,
+    shrink: bool,
+    nodes: &[Node],
+) -> Vec<f64> {
+    let limits: Vec<_> = line
+        .iter()
+        .map(|i| {
+            let s = nodes[*i].style;
+            if horizontal {
+                (s.min_width, s.max_width)
+            } else {
+                (s.min_height, s.max_height)
+            }
+        })
+        .collect();
+    let mut sizes: Vec<_> = basis
+        .iter()
+        .zip(&limits)
+        .map(|(n, (min, max))| n.clamp(*min, *max))
+        .collect();
+    for _ in 0..=line.len() {
+        let free = available - sizes.iter().sum::<f64>();
+        if free.abs() < 0.000001 {
+            break;
+        }
+        let weights: Vec<_> = line
+            .iter()
+            .enumerate()
+            .map(|(j, i)| {
+                let s = nodes[*i].style;
+                if free > 0. && sizes[j] < limits[j].1 {
+                    s.grow
+                } else if free < 0. && shrink && sizes[j] > limits[j].0 {
+                    s.shrink * basis[j]
+                } else {
+                    0.
+                }
+            })
+            .collect();
+        let total = weights.iter().sum::<f64>();
+        if total <= 0. {
+            break;
+        }
+        for (j, value) in sizes.iter_mut().enumerate() {
+            *value = (*value + free * weights[j] / total).clamp(limits[j].0, limits[j].1);
+        }
+    }
+    sizes
 }

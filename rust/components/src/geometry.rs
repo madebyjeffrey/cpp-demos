@@ -13,6 +13,72 @@ impl Size {
         Self { width, height }
     }
 }
+/// Logical-point insets, clockwise from the top. Scalars apply to every edge.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Insets {
+    pub top: f64,
+    pub right: f64,
+    pub bottom: f64,
+    pub left: f64,
+}
+impl Insets {
+    pub const fn all(n: f64) -> Self {
+        Self {
+            top: n,
+            right: n,
+            bottom: n,
+            left: n,
+        }
+    }
+    pub const fn symmetric(vertical: f64, horizontal: f64) -> Self {
+        Self {
+            top: vertical,
+            right: horizontal,
+            bottom: vertical,
+            left: horizontal,
+        }
+    }
+    pub fn horizontal(self) -> f64 {
+        self.left + self.right
+    }
+    pub fn vertical(self) -> f64 {
+        self.top + self.bottom
+    }
+    pub(crate) fn main(self, horizontal: bool) -> f64 {
+        if horizontal {
+            self.horizontal()
+        } else {
+            self.vertical()
+        }
+    }
+    pub(crate) fn before(self, horizontal: bool) -> f64 {
+        if horizontal { self.left } else { self.top }
+    }
+    pub(crate) fn after(self, horizontal: bool) -> f64 {
+        if horizontal { self.right } else { self.bottom }
+    }
+}
+impl From<f64> for Insets {
+    fn from(n: f64) -> Self {
+        Self::all(n)
+    }
+}
+impl From<i32> for Insets {
+    fn from(n: i32) -> Self {
+        Self::all(n as f64)
+    }
+}
+impl From<[f64; 4]> for Insets {
+    fn from([top, right, bottom, left]: [f64; 4]) -> Self {
+        Self {
+            top,
+            right,
+            bottom,
+            left,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Rect {
     pub x: f64,
@@ -32,12 +98,13 @@ impl Rect {
     pub fn contains(self, p: Point) -> bool {
         p.x >= self.x && p.y >= self.y && p.x < self.x + self.width && p.y < self.y + self.height
     }
-    pub fn inset(self, n: f64) -> Self {
+    pub fn inset(self, insets: impl Into<Insets>) -> Self {
+        let i = insets.into();
         Self::new(
-            self.x + n,
-            self.y + n,
-            (self.width - 2. * n).max(0.),
-            (self.height - 2. * n).max(0.),
+            self.x + i.left,
+            self.y + i.top,
+            (self.width - i.horizontal()).max(0.),
+            (self.height - i.vertical()).max(0.),
         )
     }
     pub fn intersection(self, b: Self) -> Self {
@@ -100,13 +167,62 @@ pub enum Justify {
     Center,
     End,
     SpaceBetween,
+    SpaceAround,
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Position {
     #[default]
     Flow,
+    Relative,
     Absolute,
 }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TextWrap {
+    #[default]
+    NoWrap,
+    Wrap,
+    BreakWord,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TextOverflow {
+    #[default]
+    Clip,
+    Ellipsis,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LabelStyle {
+    #[default]
+    Standard,
+    Heading,
+    Section,
+    Secondary,
+    Micro,
+    Status,
+    Error,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Density {
+    Compact,
+    #[default]
+    Standard,
+    Spacious,
+}
+impl Density {
+    pub fn control_height(self) -> f64 {
+        match self {
+            Self::Compact => 28.,
+            Self::Standard => 34.,
+            Self::Spacious => 44.,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Orientation {
+    #[default]
+    Horizontal,
+    Vertical,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Style {
     pub width: Length,
@@ -115,8 +231,21 @@ pub struct Style {
     pub min_height: f64,
     pub max_width: f64,
     pub max_height: f64,
-    pub padding: f64,
-    pub margin: f64,
+    pub padding: Insets,
+    pub margin: Insets,
+    pub basis: Length,
+    pub align_self: Option<Align>,
+    pub accent: Option<u32>,
+    pub density: Option<Density>,
+    pub text_wrap: Option<TextWrap>,
+    pub text_overflow: TextOverflow,
+    pub text_align: Align,
+    pub max_lines: usize,
+    pub label_style: Option<LabelStyle>,
+    pub uppercase: bool,
+    pub line_height: Option<f64>,
+    pub letter_spacing: f64,
+    pub orientation: Orientation,
     pub gap: f64,
     pub grow: f64,
     pub shrink: f64,
@@ -144,8 +273,21 @@ impl Default for Style {
             min_height: 0.,
             max_width: f64::INFINITY,
             max_height: f64::INFINITY,
-            padding: 0.,
-            margin: 0.,
+            padding: Insets::default(),
+            margin: Insets::default(),
+            basis: Length::Auto,
+            align_self: None,
+            accent: None,
+            density: None,
+            text_wrap: None,
+            text_overflow: TextOverflow::Clip,
+            text_align: Align::Start,
+            max_lines: 0,
+            label_style: None,
+            uppercase: false,
+            line_height: None,
+            letter_spacing: 0.,
+            orientation: Orientation::Horizontal,
             gap: 8.,
             grow: 0.,
             shrink: 1.,

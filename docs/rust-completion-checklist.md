@@ -46,7 +46,7 @@ defines the intended evidence. Existing Rust contracts are in the
 
 ## M1 — Inventory, layout and scrolling
 
-- [ ] **M1.1 Inventory closure:** map every current SCARS control, model, modifier and option family to an implemented Rust equivalent or a remaining checklist item. Document intentional interface changes; no unexplained omissions.
+- [x] **M1.1 Inventory closure:** map every current SCARS control, model, modifier and option family to an implemented Rust equivalent or a remaining checklist item. Document intentional interface changes; no unexplained omissions.
 - [ ] **M1.2 Style coverage:** finish per-edge insets, flex basis/self-alignment/spacing, relative positioning, text alignment/overflow/line limits, label styles, accent/density and separator orientation where the inventory requires them.
 - [ ] **M1.3 Layout correctness:** exercise wrapping/reflow, grow/shrink redistribution at min/max limits, percentages, baselines, clipping and layered hit order under constrained sizes.
 - [ ] **M1.4 Two-axis scrolling:** horizontal/vertical/both axes, visible draggable scrollbars, wheel/trackpad transport and programmatic offset/query interfaces with clamping.
@@ -57,7 +57,21 @@ and cancellation tests; dark/light constrained previews. Likely changes:
 [geometry/layout](../rust/components/src/layout.rs),
 [input](../rust/components/src/input.rs), [native adapter](../rust/src/macos/components/input.rs).
 
-Completion record: pending.
+Completion record (in progress):
+
+- M1.1: [inventory matrix](rust-inventory.md) maps 162 exported types and all 47
+  view/annotation names to existing behavior or explicit closure items.
+  `python3 scripts/check_rust_inventory.py` verifies name coverage, not behavior.
+- M1.2/M1.3 checkpoint: per-edge insets, flex basis/self-alignment/space-around,
+  min/max redistribution, relative offsets, inherited accent/density, text roles,
+  line limits/ellipsis/alignment/spacing and vertical separators implemented.
+  Example: `cargo run --example m1_layout` (also `--light` / `--render file.png`).
+  Evidence: four portable style/geometry tests plus a real SkParagraph limits,
+  alignment and cache test; existing workspace tests and strict Clippy pass.
+- M1 remains open: rich inline text/box behavior, complete wrapping/reflow and
+  baseline cases, two-axis scrolling/scrollbars and input lifetime closure still
+  require implementation and evidence. The other M1 checkboxes remain unchecked.
+
 
 ## M2 — Editing and specialized fields
 

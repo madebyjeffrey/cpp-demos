@@ -17,6 +17,11 @@ struct TextKey {
     bold: bool,
     wrap: bool,
     width: u64,
+    align: u8,
+    overflow: u8,
+    max_lines: usize,
+    line_height: u64,
+    letter_spacing: u64,
 }
 struct Shaped {
     paragraph: Rc<RefCell<Paragraph>>,
@@ -60,7 +65,12 @@ impl Renderer {
             color: style.color,
             bold: style.bold,
             wrap: style.wrap,
-            width: if style.wrap {
+            align: style.align as u8,
+            overflow: style.overflow as u8,
+            max_lines: style.max_lines,
+            line_height: style.line_height.to_bits(),
+            letter_spacing: style.letter_spacing.to_bits(),
+            width: if style.constrained() {
                 width.max(1.).to_bits()
             } else {
                 1_000_000f64.to_bits()
@@ -84,14 +94,33 @@ impl Renderer {
         if style.bold {
             ts.set_font_style(skia::FontStyle::bold());
         }
+        ts.set_letter_spacing(style.letter_spacing as f32);
+        if style.line_height > 0. {
+            ts.set_height((style.line_height / style.size) as f32)
+                .set_height_override(true);
+        }
         let mut ps = ParagraphStyle::new();
+        ps.set_text_align(match style.align {
+            Align::Center => skia::textlayout::TextAlign::Center,
+            Align::End => skia::textlayout::TextAlign::Right,
+            _ => skia::textlayout::TextAlign::Left,
+        });
+        let max_lines = if !style.wrap && style.overflow == TextOverflow::Ellipsis {
+            Some(style.max_lines.max(1))
+        } else {
+            (style.max_lines > 0).then_some(style.max_lines)
+        };
+        ps.set_max_lines(max_lines);
+        if style.overflow == TextOverflow::Ellipsis {
+            ps.set_ellipsis("…");
+        }
         ps.set_text_style(&ts);
         let mut builder = ParagraphBuilder::new(&ps, self.fonts.clone());
         builder.add_text(text);
         let mut paragraph = builder.build();
         paragraph.layout(f64::from_bits(key.width).min(1_000_000.) as f32);
         let size = Size::new(
-            paragraph.longest_line() as f64,
+            (paragraph.longest_line() as f64).min(f64::from_bits(key.width)),
             paragraph.height().max(style.size as f32 * 1.2) as f64,
         );
         let baseline = paragraph.alphabetic_baseline() as f64;
@@ -236,7 +265,7 @@ impl Renderer {
                         canvas,
                         r,
                         if n.kind == Kind::Radio { 9. } else { 3. },
-                        if selected { theme.accent } else { theme.border },
+                        if selected { n.accent } else { theme.border },
                         !selected,
                     );
                     if selected {
@@ -252,7 +281,7 @@ impl Renderer {
                             canvas.draw_path(&path.detach(), &p);
                         }
                     } else if n.value == Value::Check(CheckState::Indeterminate) {
-                        round(canvas, r.inset(5.), 1., theme.accent, false);
+                        round(canvas, r.inset(5.), 1., n.accent, false);
                     }
                 }
                 Kind::Switch => {
@@ -262,7 +291,7 @@ impl Renderer {
                         r,
                         11.,
                         if n.value.selected() {
-                            theme.accent
+                            n.accent
                         } else {
                             theme.border
                         },
@@ -302,18 +331,14 @@ impl Renderer {
                         canvas,
                         Rect::new(r.x, r.y, r.width * t, 4.),
                         2.,
-                        theme.accent,
+                        n.accent,
                         false,
                     );
                     round(
                         canvas,
                         Rect::new(r.x + r.width * t - 7., b.y + b.height / 2. - 7., 14., 14.),
                         7.,
-                        if n.enabled {
-                            theme.accent
-                        } else {
-                            theme.secondary
-                        },
+                        if n.enabled { n.accent } else { theme.secondary },
                         false,
                     );
                 }
@@ -328,7 +353,7 @@ impl Renderer {
                         canvas,
                         Rect::new(b.x + b.width * start, b.y, b.width * width, b.height),
                         4.,
-                        theme.accent,
+                        n.accent,
                         false,
                     );
                 }
@@ -399,11 +424,11 @@ impl Renderer {
                 self.shaped(
                     text,
                     style,
-                    if style.wrap {
+                    if style.constrained() {
                         if n.kind == Kind::TextField {
                             b.width - 20.
                         } else {
-                            b.width - 2. * n.style.padding
+                            n.text_bounds.width
                         }
                     } else {
                         f64::INFINITY
@@ -426,7 +451,7 @@ impl Renderer {
                     for r in
                         host.text_rectangles(n.id, input.selection.caret..input.selection.caret)
                     {
-                        round(canvas, r, 0., theme.accent, false);
+                        round(canvas, r, 0., n.accent, false);
                     }
                 }
                 if let Some(marked) = &input.marked {
@@ -435,7 +460,7 @@ impl Renderer {
                             canvas,
                             Rect::new(r.x, r.y + r.height - 1., r.width, 1.),
                             0.,
-                            theme.accent,
+                            n.accent,
                             false,
                         );
                     }
@@ -443,7 +468,7 @@ impl Renderer {
                 canvas.restore();
             }
             if n.focused {
-                round(canvas, b.inset(1.), n.style.radius, theme.accent, true);
+                round(canvas, b.inset(1.), n.style.radius, n.accent, true);
             }
             canvas.restore();
         }
@@ -456,6 +481,7 @@ impl Renderer {
                 color: theme.text,
                 bold: false,
                 wrap: true,
+                ..TextStyle::default()
             };
             let shaped = self.shaped(&text, style, 260.);
             let size = canvas.base_layer_size();

@@ -346,14 +346,17 @@ fn expand(item: Item, root: &Tokens) -> Result<Tokens> {
             for (property, expr) in properties {
                 let p = property.to_string();
                 let expr = match p.as_str() {
-                    "padding" | "margin" | "gap" | "grow" | "shrink" | "min_width"
-                    | "max_width" | "min_height" | "max_height" | "font_size" | "radius" => {
+                    "gap" | "grow" | "shrink" | "min_width" | "max_width" | "min_height"
+                    | "max_height" | "font_size" | "radius" | "line_height" | "letter_spacing" => {
                         quote!((#expr)as f64)
                     }
                     "key" | "width" | "height" | "wrap" | "align" | "justify" | "bold"
                     | "foreground" | "background" | "enabled" | "visible" | "hidden"
                     | "position" | "left" | "right" | "top" | "bottom" | "z_index"
-                    | "accessible_label" | "tooltip" | "on_context" | "autofocus" => quote!(#expr),
+                    | "accessible_label" | "tooltip" | "on_context" | "autofocus" | "padding"
+                    | "margin" | "basis" | "align_self" | "accent" | "density" | "text_wrap"
+                    | "text_overflow" | "text_align" | "max_lines" | "label_style"
+                    | "uppercase" | "orientation" => quote!(#expr),
                     "read_only"
                         if matches!(
                             kind.as_str(),

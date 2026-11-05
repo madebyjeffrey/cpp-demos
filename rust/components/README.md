@@ -248,3 +248,30 @@ Use `autofocus: true` on a control to focus it when the host has no valid focus;
 a newly mounted autofocus control also takes focus, with later controls taking
 precedence (useful for inline editing). `on_cancel` runs on Escape after any IME
 composition has first been cancelled.
+
+
+## Completion M1 — styles and geometry checkpoint
+
+`cargo run --example m1_layout` demonstrates the current work; it also supports
+`--light`, `--render file.png` and resize. The full M1 milestone remains open in
+[the checklist](../../docs/rust-completion-checklist.md).
+
+`padding` and `margin` accept a scalar, `Insets::symmetric(vertical, horizontal)`,
+or `[top, right, bottom, left]` values. `basis` controls the flex main-axis basis;
+`align_self` overrides a parent's cross alignment, and `Justify::SpaceAround`
+distributes remaining space. Flex items that reach min/max limits give remaining
+space to eligible siblings. `Position::Relative` offsets the visual subtree while
+preserving its original flow slot; percentages use the containing content box.
+
+Typography properties include `label_style`, `text_wrap`, `text_overflow`,
+`max_lines` (0 means unlimited), `text_align`, `uppercase`, `line_height` and
+`letter_spacing`. Ellipsis with no wrapping defaults to one line. Uppercase affects
+presentation text, not bound editor values. `TextWrap::Wrap` and `BreakWord` use
+SkParagraph's Unicode line breaking, including fallback breaking of long words.
+`accent` and `density` inherit through containers; minimum text height still limits
+how small a compact control can be. Separators accept `orientation`.
+
+Custom `Measure` implementations can use `TextStyle::default()` for added text
+options. `Style.padding`/`margin` are now `Insets`; ordinary `.padding(24)` builder
+and macro code remains concise. Rich inline spans and complete reflow are still
+pending; the new properties alone do not close those checklist requirements.
