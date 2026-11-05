@@ -94,6 +94,9 @@ inspection. [Window contracts](../rust/README.md) cover ownership and rendering.
 
 ## Validation and current limits
 
+The [completion checklist](rust-completion-checklist.md) tracks the remaining
+behavior and validation work against the original SCARS inventory.
+
 ```sh
 cd rust
 cargo fmt --all -- --check
