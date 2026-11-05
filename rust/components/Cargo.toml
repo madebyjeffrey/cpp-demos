@@ -1,0 +1,16 @@
+[package]
+name = "scars-ui"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+publish = false
+description = "Portable reactive component foundation for SCARS"
+
+[dependencies]
+scars-ui-macros = { path = "../macros" }
+icu_segmenter = "2.4"
+icu_decimal = { version = "2.4", features = ["alloc"] }
+icu_locale_core = "2.4"
+
+[lints.rust]
+unsafe_code = "forbid"

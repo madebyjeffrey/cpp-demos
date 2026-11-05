@@ -2,19 +2,30 @@
 name = "scars-window"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.87"
+rust-version = "1.88"
 description = "Native macOS windows and Skia-on-Metal rendering for SCARS"
 publish = false
 
+[workspace]
+members = ["components", "macros"]
+resolver = "3"
+
+[workspace.dependencies]
+skia-safe = { version = "0.157.0", default-features = false, features = [
+    "binary-cache", "ganesh", "textlayout", "embed-icudtl", "svg", "jpeg", "webp",
+] }
+
 [dependencies]
 raw-window-handle = "0.6.2"
+skia-safe.workspace = true
+
+[dev-dependencies]
+scars-ui = { path = "components" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Upstream also uses binary-cache's archive support to fetch source dependencies.
 # FORCE_SKIA_BUILD in .cargo/config.toml forbids downloading prebuilt libraries.
-skia-safe = { version = "0.157.0", default-features = false, features = [
-    "binary-cache", "metal", "ganesh", "textlayout", "embed-icudtl", "svg", "jpeg", "webp",
-] }
+skia-safe = { workspace = true, features = ["metal"] }
 objc2 = "0.6.5"
 block2 = "0.6.2"
 dispatch2 = "0.3.1"

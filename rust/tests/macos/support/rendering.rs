@@ -54,7 +54,7 @@ pub fn skia_rendering(frame: &Frame<'_>) {
         500 * 4,
         (0, (70. * frame.info.scale) as i32),
     ));
-    assert!(pixels.chunks_exact(4).any(|rgba| rgba[0] > 200));
+    assert!(pixels.as_chunks::<4>().0.iter().any(|rgba| rgba[0] > 200));
 
     // Verify image codecs can encode/decode and upload onto the Metal canvas.
     let mut raster = skia::surfaces::raster_n32_premul((4, 4)).unwrap();

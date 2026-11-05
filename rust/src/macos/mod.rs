@@ -30,8 +30,6 @@ use objc2_metal::*;
 pub use objc2_quartz_core as quartz_core;
 use objc2_quartz_core::*;
 use raw_window_handle::*;
-/// Drawing, text shaping/layout, SVG and image APIs using the crate's Skia build.
-pub use skia_safe as skia;
 use std::{
     cell::{Cell, OnceCell, RefCell},
     ptr::NonNull,
@@ -372,15 +370,15 @@ impl Application {
                 .unwrap_or_else(|_| unreachable!());
             let bound = dispatch2::MainThreadBound::new(Rc::downgrade(&state), mtm);
             let block = RcBlock::new(move |_: NonNull<NSNotification>| {
-                if let Some(mtm) = MainThreadMarker::new() {
-                    if let Some(app) = bound.get(mtm).upgrade() {
-                        guarded(&app, || {
-                            let surfaces = app.surfaces.borrow().clone();
-                            for s in surfaces.into_iter().filter_map(|w| w.upgrade()) {
-                                view::refresh_motion(&s);
-                            }
-                        });
-                    }
+                if let Some(mtm) = MainThreadMarker::new()
+                    && let Some(app) = bound.get(mtm).upgrade()
+                {
+                    guarded(&app, || {
+                        let surfaces = app.surfaces.borrow().clone();
+                        for s in surfaces.into_iter().filter_map(|w| w.upgrade()) {
+                            view::refresh_motion(&s);
+                        }
+                    });
                 }
             });
             // SAFETY: A main-queue observer; the captured MainThreadBound is Send + Sync.
@@ -1009,13 +1007,13 @@ impl Surface {
             return;
         }
         let previous = self.state.text_input.borrow_mut().take();
-        if let Some(previous) = previous {
-            if let Some(app) = self.state.app.upgrade() {
-                guarded(&app, || {
-                    previous.unmark(true);
-                    previous.deactivate();
-                });
-            }
+        if let Some(previous) = previous
+            && let Some(app) = self.state.app.upgrade()
+        {
+            guarded(&app, || {
+                previous.unmark(true);
+                previous.deactivate();
+            });
         }
         if !self.is_open() {
             return;
@@ -1279,10 +1277,10 @@ fn emit(s: &Rc<SurfaceState>, event: Event) {
         return;
     }
     let callback = s.callbacks.borrow().on_event.clone();
-    if let Some(f) = callback {
-        if let Some(app) = s.app.upgrade() {
-            guarded(&app, || f(&event));
-        }
+    if let Some(f) = callback
+        && let Some(app) = s.app.upgrade()
+    {
+        guarded(&app, || f(&event));
     }
     sync_secure_input(s, false);
 }
@@ -1717,7 +1715,7 @@ define_class!(
         }
         #[unsafe(method(applicationShouldHandleReopen:hasVisibleWindows:))]
         fn reopen(&self, _: &NSApplication, visible: bool) -> bool {
-            if !visible { if let Some(app) = self.ivars().state.upgrade() { guarded(&app,|| new_window(&app)); } } true
+            if !visible && let Some(app) = self.ivars().state.upgrade() { guarded(&app,|| new_window(&app)); } true
         }
         #[unsafe(method(applicationDidResignActive:))]
         fn resigned(&self, _: &NSNotification) { if let Some(app) = self.ivars().state.upgrade() { guarded(&app,|| {

@@ -4,10 +4,10 @@ fn fullscreen_button(
 ) -> objc2::rc::Retained<scars_window::app_kit::NSButton> {
     for accessory in window.native_window().titlebarAccessoryViewControllers() {
         for child in accessory.view().subviews() {
-            if let Ok(button) = child.downcast::<scars_window::app_kit::NSButton>() {
-                if button.action() == Some(objc2::sel!(fullScreenButton:)) {
-                    return button;
-                }
+            if let Ok(button) = child.downcast::<scars_window::app_kit::NSButton>()
+                && button.action() == Some(objc2::sel!(fullScreenButton:))
+            {
+                return button;
             }
         }
     }

@@ -180,3 +180,18 @@ Establish Rust baselines for bounds, identities, text/ranges, committed values, 
 Confirmed decisions are eventual coverage of all current SCARS components, macOS-first delivery with a portable core, Rust-like nested macros with reactive state, and delivery ordered by shared dependencies. No additional product answers are needed to establish feasibility or propose that order. The initial localization/input scope remains deliberately open: the comparison above supports making that choice, and the recommended sequence does not settle it on the user's behalf.
 
 Implementation design should next settle the macro grammar and capture rules, event-dispatch contract, state API, layout conventions, and numeric/date input formats before those capabilities are built. ICU4X is the starting localization choice, subject to normal integration checks. The current Rust native/Skia layer is a suitable base for a Rust host and control system informed by the C++ work.
+
+## Stage checkpoints
+
+The user has requested a review stop after each completed stage, with a runnable
+example and focused tests. **Stage 1 is complete; stage 2 is pending review.**
+Stage 1's implemented interface and examples are
+documented in [the Rust component README](../rust/components/README.md). Layout,
+widget input, and widget accessibility remain stage 2 work. Localized integer
+display is exercised in stage 1; a localized input/parsing policy remains open.
+
+Stage 1 validation: six portable behavioral/Unicode tests, three documentation
+checks (including two compile-fail cases), one CPU Skia paragraph test, strict
+workspace Clippy/format checks, a Linux core compile check, the existing native
+window/full-screen suites, and console/native example smoke runs. The Linux check
+is compilation evidence, not a claim of a Linux native backend or runtime audit.

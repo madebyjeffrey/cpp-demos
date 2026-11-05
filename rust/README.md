@@ -6,7 +6,7 @@ implemented in Rust using `objc2` bindings to AppKit, QuartzCore and Metal, with
 in Rust. Cargo builds Skia and its C++ bindings through `skia-bindings`; there is
 no dependency on the parent C++ project's CMake build or Skia checkout.
 
-Requires macOS 26+, Rust 1.87+, the Xcode command-line tools, Python 3, Ninja and Git.
+Requires macOS 26+, Rust 1.88+, the Xcode command-line tools, Python 3, Ninja and Git.
 The first build needs internet access to fetch Skia sources, dependencies and GN.
 The native backend currently supports macOS only. Geometry, input, menu and text-input contracts
 are platform independent. The local Cargo configuration sets the macOS deployment
@@ -14,6 +14,8 @@ target to 26.0. The application also checks the OS version at runtime.
 
 ## Source layout
 
+- `components/` is the portable reactive foundation; `macros/` implements its
+  Rust-like `view!` syntax. See [stage 1 examples and contracts](components/README.md).
 - `src/lib.rs` exposes the public interface; `src/types.rs` holds shared geometry,
   input events, menus, options and text-input contracts.
 - `src/platform.rs` selects the backend with target configuration. A future backend
@@ -25,7 +27,14 @@ target to 26.0. The application also checks the OS version at runtime.
 
 Public paths such as `scars_window::Window`, `scars_window::Callbacks` and
 `scars_window::app_kit` are unchanged. Targets without a backend can still use the
-shared contracts; native windows and rendering remain available only on macOS.
+shared contracts and shared Skia types; native windows remain available only on macOS.
+
+Stage 1 examples (run from `rust/`):
+
+```sh
+cargo run --locked -p scars-ui --example foundation # portable console example
+cargo run --locked --example stage1                 # native diagnostic window
+```
 
 ## Run
 
@@ -282,11 +291,13 @@ outside its supported lifetime/rendering contract.
 
 ```sh
 cargo fmt --all -- --check
-cargo clippy --locked --all-targets -- -D warnings
-cargo test --locked
+cargo clippy --workspace --locked --all-targets -- -D warnings
+cargo test --workspace --locked
+cargo check -p scars-ui --lib --target x86_64-unknown-linux-gnu --locked
 SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --locked --test desktop
 SCARS_WINDOW_FULLSCREEN_TESTS=1 cargo test --locked --test fullscreen
 cargo run --locked --example windows -- --smoke
+cargo run --locked --example stage1 -- --smoke
 ```
 
 The desktop suite has its own main-thread harness. Normal `cargo test` reports it

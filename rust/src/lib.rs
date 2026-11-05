@@ -13,3 +13,6 @@ mod types;
 #[allow(unused_imports)]
 pub use platform::*;
 pub use types::*;
+
+/// Shared drawing types are available independently of the native window backend.
+pub use skia_safe as skia;
