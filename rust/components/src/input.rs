@@ -50,6 +50,7 @@ pub struct KeyEvent {
 pub(crate) struct Interaction {
     pub focus: Option<NodeId>,
     pub pressed: Option<NodeId>,
+    pub repeat: Option<(NodeId, std::time::Instant)>,
     pub scroll_drag: Option<crate::scroll::ScrollDrag>,
     pub drag_tick: Option<std::time::Instant>,
     pub hovered: Option<NodeId>,
@@ -68,6 +69,7 @@ impl Default for Interaction {
         Self {
             focus: None,
             pressed: None,
+            repeat: None,
             scroll_drag: None,
             drag_tick: None,
             hovered: None,
@@ -222,6 +224,9 @@ impl Host {
         self.0.interaction.borrow().focus
     }
     pub fn set_active(&self, active: bool) {
+        let lost_focus = (!active && self.0.interaction.borrow().active)
+            .then(|| self.focused())
+            .flatten();
         if !active {
             let _ = self.unmark_text(true);
             self.cancel_field_work();
@@ -232,9 +237,11 @@ impl Host {
             i.pressed = None;
             i.scroll_drag = None;
             i.drag_tick = None;
+            i.repeat = None;
             i.hovered = None;
         }
         drop(i);
+        self.blur_action(lost_focus);
         self.redraw();
     }
     pub fn focus(&self, id: NodeId) -> Result<bool, Error> {
@@ -256,11 +263,21 @@ impl Host {
         {
             state.revealed = false;
         }
-        self.0.interaction.borrow_mut().focus = Some(id);
+        let previous = self.0.interaction.borrow_mut().focus.replace(id);
+        if previous != Some(id) {
+            let mut i = self.0.interaction.borrow_mut();
+            i.pressed = None;
+            i.scroll_drag = None;
+            i.drag_tick = None;
+            i.repeat = None;
+        }
         if let Some(editor) = self.0.editors.borrow_mut().get_mut(&id) {
             editor.reveal = true;
         }
         self.reveal(id);
+        if previous != Some(id) && self.0.interaction.borrow().active {
+            self.blur_action(previous);
+        }
         self.redraw();
         Ok(true)
     }
@@ -268,11 +285,13 @@ impl Host {
         let _ = self.unmark_text(true);
         self.cancel_field_work();
         let mut i = self.0.interaction.borrow_mut();
-        i.focus = None;
+        let previous = i.focus.take().filter(|_| i.active);
         i.pressed = None;
         i.scroll_drag = None;
         i.drag_tick = None;
+        i.repeat = None;
         drop(i);
+        self.blur_action(previous);
         self.redraw();
     }
     pub fn focus_next(&self, back: bool) -> Result<bool, Error> {
@@ -288,6 +307,13 @@ impl Host {
                     && self.in_scope(n.id)
             })
             .filter(|n| {
+                if n.parent.is_some_and(|p| {
+                    nodes
+                        .iter()
+                        .any(|parent| parent.id == p && parent.kind == Kind::Stepper)
+                }) {
+                    return false;
+                }
                 if !matches!(n.kind, Kind::Radio | Kind::Segment) {
                     return true;
                 }
@@ -353,6 +379,7 @@ impl Host {
         if event.kind == PointerKind::Cancel {
             self.0.interaction.borrow_mut().pressed = None;
             self.0.interaction.borrow_mut().drag_tick = None;
+            self.0.interaction.borrow_mut().repeat = None;
             self.redraw();
             return Ok(true);
         }
@@ -403,7 +430,19 @@ impl Host {
                                 m.nodes.iter().find(|n| n.id == id).and_then(|n| n.parent)
                             })
                     };
-                    self.focus(field_parent.unwrap_or(id))?;
+                    let step_parent = {
+                        let m = self.0.mounted.borrow();
+                        m.nodes
+                            .iter()
+                            .find(|n| n.id == id)
+                            .and_then(|n| n.parent)
+                            .filter(|p| {
+                                m.nodes
+                                    .iter()
+                                    .any(|n| n.id == *p && n.kind == Kind::Stepper)
+                            })
+                    };
+                    self.focus(field_parent.or(step_parent).unwrap_or(id))?;
                     self.0.interaction.borrow_mut().pressed = Some(id);
                     let kind = self
                         .0
@@ -413,6 +452,9 @@ impl Host {
                         .iter()
                         .find(|n| n.id == id)
                         .map(|n| n.kind);
+                    if self.repeating(id).is_some() {
+                        self.start_repeat(id)?;
+                    }
                     if kind == Some(Kind::Slider) {
                         self.slider_pointer(id, event.position)?;
                     }
@@ -489,7 +531,9 @@ impl Host {
                                 event.modifiers.shift || event.modifiers.command,
                             )?;
                         }
-                    } else if !matches!(kind, Some(Kind::Slider | Kind::TextField)) {
+                    } else if !matches!(kind, Some(Kind::Slider | Kind::TextField))
+                        && self.repeating(id).is_none()
+                    {
                         handled = self.activate(id)?;
                     }
                 }
@@ -497,6 +541,7 @@ impl Host {
             _ => (),
         }
         self.update_drag_deadline(std::time::Instant::now());
+        self.update_repeat();
         self.redraw();
         Ok(handled)
     }
@@ -645,6 +690,11 @@ impl Host {
             self.focus(ids[next])?;
             return self.activate(ids[next]);
         }
+        if node.kind == Kind::Stepper
+            && matches!(event.key, Key::Up | Key::Right | Key::Down | Key::Left)
+        {
+            return self.step_control(id, matches!(event.key, Key::Up | Key::Right));
+        }
         if node.kind == Kind::Slider
             && let (Some((min, max, step)), Value::Number(value)) = (node.range, node.value)
         {
@@ -661,7 +711,9 @@ impl Host {
             };
             return self.set_number(id, value);
         }
-        if matches!(event.key, Key::Space | Key::Enter) && !event.repeat {
+        if matches!(event.key, Key::Space | Key::Enter)
+            && (!event.repeat || self.repeating(id).is_some())
+        {
             return self.activate(id);
         }
         self.scroll_key(Some(id), event)

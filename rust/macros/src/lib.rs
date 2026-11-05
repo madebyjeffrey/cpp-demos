@@ -377,7 +377,10 @@ fn expand(item: Item, root: &Tokens) -> Result<Tokens> {
                         quote!(#expr)
                     }
                     "allow_reveal" if kind == "password_field" => quote!(#expr),
-                    "on_submit" | "on_cancel"
+                    "repeat" if matches!(kind.as_str(), "button" | "command_button") => {
+                        quote!(#expr)
+                    }
+                    "on_submit" | "on_cancel" | "on_blur"
                         if matches!(
                             kind.as_str(),
                             "text_field" | "password_field" | "text_editor" | "search_field"

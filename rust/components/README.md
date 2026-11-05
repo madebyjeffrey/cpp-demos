@@ -140,7 +140,7 @@ restores the model, and `error()` returns the current validation message. Extern
 model changes supersede drafts. `Numeric<T>` supplies bounded numeric validation
 and checked steps for i32/i64/u32/u64/f64; integer arithmetic never passes through
 f64. `numeric_field("Copies", &number)` composes the editor and step buttons;
-Enter or stepping commits. Invalid and incomplete drafts stay visible.
+Blur, Enter or stepping applies valid edits by default. Invalid and incomplete drafts stay visible.
 
 The initial editable grammar is ungrouped ASCII numbers (`.` for decimal values).
 Grouping separators and localized digits are not accepted by these parsers. Use a
@@ -301,7 +301,8 @@ an unsupported error. `TextLayout.baseline` is relative to the paragraph origin.
 `cargo run --example m2_editor` demonstrates wrapping, readonly fields and a
 12-grapheme limit in both themes. `cargo run -p scars-ui --example text_buffer`
 demonstrates the same model without a window, native backend or Skia renderer.
-The remaining search/password/numeric policies are tracked in the checklist.
+Search/password and numeric policies are demonstrated by `m2_fields` and
+`m2_numbers`; the full evidence is recorded in the completion checklist.
 
 `TextBuffer::new(text)` owns selection, composition and history. `select`, `insert`,
 `replace`, `mark`/`unmark`, `undo`/`redo` and `set_text` work independently of a host.
@@ -367,3 +368,39 @@ foreground desktop to exercise actual Carbon ownership transitions. The normal
 unit test covers successful ownership, failed enables/disables and nested owners;
 the native harness verifies readonly/disable/focus/hide/deactivation/unmount/
 replacement/close without silently skipping unavailable activation.
+
+
+## Completion M2 — numeric fields and steppers
+
+`cargo run --example m2_numbers` demonstrates the final M2 policies in both themes.
+Store a `Numeric::new(value.binding(), min, max, positive_step)` alongside your
+state, then use `numeric_field("Count", &number)` or standalone
+`stepper("Count", &number)`. Steppers have one tab stop, arrow-key adjustment and
+native incrementor semantics; integer values/bounds never pass through `f64`.
+
+Builders include `significant_digits(1..=17)` (decimal display only), `read_only`,
+`commit_on_blur`, `repeat(Repeat { delay, interval })`, `on_validation`, `on_submit`
+and `on_cancel`. Default decimal formatting preserves a round trip; integer
+formatting always stays exact. Precision does not round an untouched value on
+blur/submit/step. Nonrepresentable rounded decimal displays fall back to a finite
+round-trip representation. Source values outside configured bounds remain invalid
+rather than becoming valid through rounded display text.
+
+`validation()` returns status/message/dirty state. Partial signs/decimal exponents
+are `Incomplete`, malformed/nonfinite syntax is `Invalid`, and bounds/integer
+overflow are `OutOfRange`. Invalid/incomplete drafts survive failed commit/step;
+rejected binding writes retain their edits. Enter applies a valid draft and calls
+`on_submit` only after acceptance. Escape restores the current source and invokes
+`on_cancel`. Blur applies valid drafts by default; `commit_on_blur(false)` retains
+them until explicit submit or stepping. Application source replacement supersedes
+a draft even if the formatted source text is unchanged. `Draft<T>` now requires
+`PartialEq` for that comparison; getters/formatters remain pure.
+
+Readonly models reject edits, commits and stepping. `can_step` checks draft validity
+and bounds; `step` reports an accepted change. Checked overflow clamps at the
+configured bound. `Repeat` defaults to a 400ms delay and 80ms interval. Press activates once,
+then deadlines repeat without catch-up bursts. Release, cancel, leaving the button,
+focus loss, hide/disable/removal and unmount cancel repeats; no idle animation is
+needed. `on_blur` and `repeat` also work on ordinary builder/macro controls (repeat
+requires a button and a nonzero interval). Call layout before geometric input on
+a detached host, as usual.

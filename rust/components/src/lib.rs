@@ -34,6 +34,7 @@ mod inspector;
 mod layout;
 mod metrics;
 mod presentation;
+mod repeat;
 mod rich_text;
 mod scroll;
 mod state;
@@ -43,7 +44,9 @@ mod values;
 mod view;
 
 pub use collections::*;
-pub use draft::{Draft, Number, Numeric, numeric_field};
+pub use draft::{
+    Draft, Number, Numeric, StepperInfo, Validation, ValidationStatus, numeric_field, stepper,
+};
 pub use editing::TextInput;
 pub use fields::TextFieldKind;
 pub use geometry::*;
@@ -52,6 +55,7 @@ pub use input::{Key, KeyEvent, Modifiers, Pointer, PointerKind};
 pub use inspector::{Inspection, Inspector};
 pub use metrics::*;
 pub use presentation::*;
+pub use repeat::Repeat;
 pub use rich_text::{Inline, Span, SpanStyle};
 pub use scars_ui_macros::view;
 pub use scroll::{ScrollAxes, ScrollInfo, Scrollbar};

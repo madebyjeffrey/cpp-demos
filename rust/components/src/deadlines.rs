@@ -34,6 +34,7 @@ impl Host {
     pub fn next_deadline(&self) -> Option<Duration> {
         let _ = self.refresh();
         self.reconcile_fields();
+        self.update_repeat();
         self.0
             .deadlines
             .borrow()
@@ -42,6 +43,7 @@ impl Host {
             .chain(self.tooltip_delay())
             .chain(self.drag_delay())
             .chain(self.field_delay())
+            .chain(self.repeat_delay())
             .min()
     }
     pub fn run_due(&self) {
@@ -50,6 +52,7 @@ impl Host {
     pub fn run_due_at(&self, now: Instant) {
         self.run_drag_due(now);
         self.run_search_due(now);
+        self.run_repeat_due(now);
         let tasks = {
             let mut deadlines = self.0.deadlines.borrow_mut();
             let mut tasks = Vec::new();

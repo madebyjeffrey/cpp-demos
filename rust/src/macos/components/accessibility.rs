@@ -100,6 +100,19 @@ fn screen(s: &Surface, r: ui::Rect) -> NSRect {
             None,
         ))
 }
+fn numeric(value: &str) -> Option<Retained<AnyObject>> {
+    if let Ok(v) = value.parse::<i64>() {
+        Some(any(NSNumber::new_i64(v)))
+    } else if let Ok(v) = value.parse::<u64>() {
+        Some(any(NSNumber::new_u64(v)))
+    } else {
+        value
+            .parse::<f64>()
+            .ok()
+            .filter(|v| v.is_finite())
+            .map(|v| any(NSNumber::new_f64(v)))
+    }
+}
 fn role(kind: Kind) -> &'static NSString {
     // SAFETY: Immutable role constants exported by AppKit.
     unsafe {
@@ -110,6 +123,7 @@ fn role(kind: Kind) -> &'static NSString {
             Kind::Radio | Kind::Segment => NSAccessibilityRadioButtonRole,
             Kind::RadioGroup => NSAccessibilityRadioGroupRole,
             Kind::Slider => NSAccessibilitySliderRole,
+            Kind::Stepper => NSAccessibilityIncrementorRole,
             Kind::Progress => NSAccessibilityProgressIndicatorRole,
             Kind::Image => NSAccessibilityImageRole,
             Kind::TextField => NSAccessibilityTextFieldRole,
@@ -223,21 +237,18 @@ define_class!(
             }
         }
         #[unsafe(method_id(accessibilityValue))]
-        fn value(&self) -> Option<Retained<AnyObject>> {
-            self.node()
-                .filter(|n| !n.secure)
-                .and_then(|n| match n.value {
-                    Value::Text(v) => Some(any(ns(&v))),
-                    Value::Bool(v) => Some(any(NSNumber::new_bool(v))),
-                    Value::Check(v) => Some(any(NSNumber::new_i32(match v {
-                        ui::CheckState::Unchecked => 0,
-                        ui::CheckState::Checked => 1,
-                        ui::CheckState::Indeterminate => 2,
-                    }))),
-                    Value::Number(v) => Some(any(NSNumber::new_f64(v))),
-                    Value::None if n.kind == Kind::Label => Some(any(ns(&n.text))),
-                    _ => None,
-                })
+        fn value(&self)->Option<Retained<AnyObject>>{
+            self.node().filter(|n|!n.secure).and_then(|n|{
+                if let Some(stepper)=&n.stepper{return numeric(&stepper.value)}
+                match n.value{
+                    Value::Text(v)=>Some(any(ns(&v))),
+                    Value::Bool(v)=>Some(any(NSNumber::new_bool(v))),
+                    Value::Check(v)=>Some(any(NSNumber::new_i32(match v{ui::CheckState::Unchecked=>0,ui::CheckState::Checked=>1,ui::CheckState::Indeterminate=>2}))),
+                    Value::Number(v)=>Some(any(NSNumber::new_f64(v))),
+                    Value::None if n.kind==Kind::Label=>Some(any(ns(&n.text))),
+                    _=>None,
+                }
+            })
         }
         #[unsafe(method(setAccessibilityValue:))]
         unsafe fn set_value(&self, value: Option<&AnyObject>) {
@@ -260,12 +271,12 @@ define_class!(
         #[unsafe(method_id(accessibilityMinValue))]
         fn min(&self) -> Option<Retained<AnyObject>> {
             self.node()
-                .and_then(|n| n.range.map(|r| any(NSNumber::new_f64(r.0))))
+                .and_then(|n|if let Some(stepper)=&n.stepper{numeric(&stepper.min)}else{n.range.map(|r|any(NSNumber::new_f64(r.0)))})
         }
         #[unsafe(method_id(accessibilityMaxValue))]
         fn max(&self) -> Option<Retained<AnyObject>> {
             self.node()
-                .and_then(|n| n.range.map(|r| any(NSNumber::new_f64(r.1))))
+                .and_then(|n|if let Some(stepper)=&n.stepper{numeric(&stepper.max)}else{n.range.map(|r|any(NSNumber::new_f64(r.1)))})
         }
         #[unsafe(method(accessibilityPerformPress))]
         fn press(&self) -> bool {
@@ -449,6 +460,9 @@ impl Element {
     }
     fn adjust(&self, delta: f64) -> bool {
         self.with(|m, _, n| {
+            if n.kind == Kind::Stepper {
+                return m.host.step_control(n.id, delta > 0.);
+            }
             let (Some((min, max, step)), Value::Number(value)) = (n.range, &n.value) else {
                 return Ok(false);
             };

@@ -384,6 +384,7 @@ impl Host {
         }
         if i.pressed.is_none() {
             i.drag_tick = None;
+            i.repeat = None;
         }
         if i.hovered.is_some_and(|id| !valid(id)) {
             i.hovered = None;

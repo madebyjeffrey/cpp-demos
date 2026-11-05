@@ -32,7 +32,7 @@ overall goal complete while an in-scope item remains open.
 | --- | --- | --- |
 | State and descriptions | Reactive bindings, keys, macro conditions/repetition, host identity and inventory mapping | Ergonomic coverage of remaining component behaviors |
 | Layout and basic controls | Inventory, constrained layout, rich text, style coverage and two-axis scrolling verified | Final cross-component visual/semantic audit in M5/M8 |
-| Editing | Shared text buffer, visual/logical navigation, selection gestures, composition and bounded/coalesced history | Numeric/stepper policy; final interactive IME audit |
+| Editing | Shared buffer, visual navigation/gestures, search/password/numeric policies and held steppers | Localization/value-control expansion in M6; final interactive IME audit in M5 |
 | Presentation | Popups, focus scopes, simple menus, tabs, slider-controlled split, basic alerts | Complete interactions, retained page state and presentation transactions |
 | Collections | Fixed-height virtualization, keyed selection, basic trees/tables, cell conflict checks | Lazy tree lifecycle, cell/column interactions, richer selection and semantics |
 | Values and tooling | Typed drafts, sRGB/hex, calendar, ISO/zoned editing, picking/width overrides | Complete value-control policies and inspector/Lab coverage |
@@ -97,13 +97,13 @@ Completion record:
 - [x] **M2.3 Selection and history:** word/line selection gestures, drag selection outside the viewport, appropriate typing coalescing and history limits; composition, readonly and grapheme-counted maximum-length cases.
 - [x] **M2.4 Search field:** integrated clear/cancel, query/submit callbacks and configurable debounce. Cancel pending work on replacement, removal and deactivation without an idle animation loop.
 - [x] **M2.5 Password policy:** explicit reveal, undo, readonly and length options; verify masking, clipboard/accessibility restrictions, composition and balanced native secure-input ownership through every transition.
-- [ ] **M2.6 Numeric/stepper policy:** standalone stepper, configurable precision/validation states, blur/submit/cancel policy and press-and-hold repeat deadlines; preserve exact integer arithmetic and invalid/incomplete drafts.
+- [x] **M2.6 Numeric/stepper policy:** standalone stepper, configurable precision/validation states, blur/submit/cancel policy and press-and-hold repeat deadlines; preserve exact integer arithmetic and invalid/incomplete drafts.
 
 Evidence: extend the editor example; Unicode/visual navigation and IME/history tests;
 native clipboard/candidate-geometry checks. Main implementation:
 [editing](../rust/components/src/editing.rs), [drafts](../rust/components/src/draft.rs).
 
-Completion record (in progress):
+Completion record:
 
 - M2.1: public `TextBuffer`/`TextOptions` now own selection, committed/composing
   text, replacement, readonly/length policy and history. Mounted fields use the
@@ -147,7 +147,26 @@ Completion record (in progress):
   Clippy and portable compilation pass. `m2_fields` dark/light previews inspected
   and native smoke run passes. These protocol/ownership checks do not replace the
   actual VoiceOver/IME audit in M5.5 or final Metal pixel runs in M8.1.
-- M2 remains open for numeric/standalone-stepper policies (M2.6).
+- M2.6: `Numeric<T>` provides significant-digit display precision, readonly,
+  blur/submit/cancel policy and `Validation` (`Valid`, `Incomplete`, `Invalid`,
+  `OutOfRange`, message/dirty). Integer formatting and checked stepping stay exact;
+  invalid/incomplete or rejected edits stay visible. An untouched precision-formatted
+  value is never rounded on blur. Drafts compare typed source values as well as
+  their formatting, so external changes cannot hide behind rounded display text.
+- `stepper(label, &number)` is a real compound control with one keyboard stop,
+  arrow-key actions, exact value/bounds snapshots and native AX incrementor
+  values/actions. Held buttons use one-shot repeat deadlines; bounds, release,
+  cancel, focus change, deactivation, hide/disable/removal and unmount stop capture.
+- Evidence: six portable numeric/repeat tests (including integer overflow, formatter
+  collisions, commit/cancel, readonly and capture lifetimes); native NSNumber
+  value/bounds/actions and repeat-unmount checks. Workspace tests, strict Clippy,
+  portable compilation and native input/secure-ownership suites pass.
+  `cargo run --example m2_numbers` demonstrates the completed policies; dark/light
+  previews inspected and its native smoke run passes.
+- M2 checkpoint commits: `8524b99` (buffer/navigation), `024a26d` (search/password),
+  plus the numeric/stepper implementation in this checklist revision. Localization
+  and fuller typed value controls remain M6; the actual VoiceOver/IME audit remains
+  M5.5 and final Metal/visual/resource evidence remains M8.
 
 
 ## M3 — Navigation and presentation

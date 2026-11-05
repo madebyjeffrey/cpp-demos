@@ -31,6 +31,7 @@ All stages have runnable examples:
 | 1 | `foundation` (`-p scars-ui`), `stage1` | State, keys, macros and Unicode services |
 | 2 | `stage2` | Layout, basic controls, native input and semantics |
 | 3 | `stage3` | History, password/multiline fields, typed numeric drafts |
+| M2 | `m2_editor`, `m2_fields`, `m2_numbers` | Completed editing, scoped field policies and repeating steppers |
 | 4 | `stage4` | Scroll, popup/menu, focus restoration, tabs and split views |
 | 5 | `stage5` | 100,000 virtual rows, trees, sorting and conflict-checked edits |
 | 6 | `stage6`, `lab` | Color/date/time values, inspector and control catalog |

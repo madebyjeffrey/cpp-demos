@@ -39,7 +39,10 @@ impl FromStr for Color {
         })
     }
 }
-pub fn value_field<T: Clone + 'static>(label: impl Into<String>, draft: &Draft<T>) -> View {
+pub fn value_field<T: Clone + PartialEq + 'static>(
+    label: impl Into<String>,
+    draft: &Draft<T>,
+) -> View {
     let commit = draft.clone();
     let apply = draft.clone();
     let cancel = draft.clone();

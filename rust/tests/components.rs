@@ -234,6 +234,61 @@ fn main() {
     assert!(search_host.next_deadline().is_none());
     search_host.run_due_at(std::time::Instant::now() + std::time::Duration::from_secs(20));
     assert_eq!(called.get(), 0);
+    let exact = State::new(9_007_199_254_740_993i64);
+    let number = ui::Numeric::new(exact.binding(), i64::MIN, i64::MAX, 1);
+    let step_host = window
+        .set_view(move || ui::stepper("Count", &number))
+        .unwrap();
+    step_host.set_active(true);
+    unsafe {
+        let children: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        let step = children.objectAtIndex(0);
+        let role: Retained<NSString> = msg_send![&*step, accessibilityRole];
+        assert_eq!(role.to_string(), "AXIncrementor");
+        let value: Retained<foundation::NSNumber> = msg_send![&*step, accessibilityValue];
+        assert_eq!(value.longLongValue(), 9_007_199_254_740_993);
+        let min: Retained<foundation::NSNumber> = msg_send![&*step, accessibilityMinValue];
+        assert_eq!(min.longLongValue(), i64::MIN);
+        let max: Retained<foundation::NSNumber> = msg_send![&*step, accessibilityMaxValue];
+        assert_eq!(max.longLongValue(), i64::MAX);
+        let increased: bool = msg_send![&*step, accessibilityPerformIncrement];
+        assert!(increased);
+        assert_eq!(exact.get(), 9_007_199_254_740_994);
+        let decreased: bool = msg_send![&*step, accessibilityPerformDecrement];
+        assert!(decreased);
+        assert_eq!(exact.get(), 9_007_199_254_740_993);
+        let renderer = ui::Renderer::default();
+        step_host
+            .layout(ui::Size::new(240., 60.), &renderer)
+            .unwrap();
+        let up = step_host
+            .snapshot()
+            .unwrap()
+            .into_iter()
+            .find(|n| n.label == "Increase Count")
+            .unwrap();
+        step_host
+            .pointer(ui::Pointer {
+                kind: ui::PointerKind::Down,
+                position: ui::Point {
+                    x: up.bounds.x + 5.,
+                    y: up.bounds.y + 5.,
+                },
+                button: 0,
+                modifiers: Default::default(),
+            })
+            .unwrap();
+        step_host
+            .layout(ui::Size::new(240., 60.), &renderer)
+            .unwrap();
+        assert!(step_host.next_deadline().is_some());
+        window.clear_view();
+        assert!(step_host.next_deadline().is_none());
+        step_host.run_due_at(std::time::Instant::now() + std::time::Duration::from_secs(1));
+        assert_eq!(exact.get(), 9_007_199_254_740_994);
+        let increased: bool = msg_send![&*step, accessibilityPerformIncrement];
+        assert!(!increased);
+    }
     let list = ui::ListModel::new(
         (0..100_000)
             .map(|i| ui::ListItem::new(i.to_string(), format!("Row {i}")))

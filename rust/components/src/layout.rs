@@ -282,7 +282,10 @@ struct Tree<'a> {
     baselines: HashMap<NodeId, f64>,
 }
 fn horizontal(kind: Kind) -> bool {
-    matches!(kind, Kind::Row | Kind::Inline | Kind::Segmented)
+    matches!(
+        kind,
+        Kind::Row | Kind::Stepper | Kind::Inline | Kind::Segmented
+    )
 }
 fn container(kind: Kind) -> bool {
     matches!(
@@ -290,6 +293,7 @@ fn container(kind: Kind) -> bool {
         Kind::Fragment
             | Kind::Column
             | Kind::Row
+            | Kind::Stepper
             | Kind::Block
             | Kind::Inline
             | Kind::Layer

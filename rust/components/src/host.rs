@@ -57,6 +57,7 @@ pub struct Node {
     pub pressed: bool,
     pub hovered: bool,
     pub range: Option<(f64, f64, f64)>,
+    pub stepper: Option<crate::StepperInfo>,
     pub image: Option<(Bitmap, ContentMode)>,
 }
 impl Node {
@@ -221,7 +222,9 @@ impl Host {
                     .is_some_and(|d| d.kind == Kind::TextField)
             });
             for n in &mounted.nodes {
-                if let Value::Text(value) = &n.value {
+                if n.kind == Kind::TextField
+                    && let Value::Text(value) = &n.value
+                {
                     let editor = editors.entry(n.id).or_default();
                     let mut options = mounted.descriptions[&n.id].text_options;
                     options.multiline = n.multiline;
@@ -388,6 +391,7 @@ pub(crate) fn focusable(kind: Kind) -> bool {
             | Kind::Segment
             | Kind::Switch
             | Kind::Slider
+            | Kind::Stepper
             | Kind::TextField
     )
 }
@@ -419,7 +423,10 @@ fn mount(
         .get(&path)
         .copied()
         .unwrap_or_else(|| NodeId(NEXT.fetch_add(1, Ordering::Relaxed)));
-    let value = d.data.value();
+    let stepper = d.stepper.as_ref().map(|s| (s.read)());
+    let value = stepper
+        .as_ref()
+        .map_or_else(|| d.data.value(), |s| Value::Text(s.value.clone()));
     if let Value::Number(v) = value
         && !v.is_finite()
     {
@@ -489,6 +496,7 @@ fn mount(
         pressed: false,
         hovered: false,
         range,
+        stepper,
         image,
     });
     let mut keys = HashSet::new();
@@ -518,6 +526,20 @@ pub(crate) fn validate(d: &Description) -> Result<(), Error> {
             .is_none()
     {
         return Err(Error("Search debounce is too large".into()));
+    }
+    if d.repeat.is_some() && d.kind != Kind::Button {
+        return Err(Error("Repeat requires a button".into()));
+    }
+    if let Some(repeat) = d.repeat
+        && (repeat.interval.is_zero()
+            || std::time::Instant::now()
+                .checked_add(repeat.delay)
+                .is_none()
+            || std::time::Instant::now()
+                .checked_add(repeat.interval)
+                .is_none())
+    {
+        return Err(Error("Invalid repeat timing".into()));
     }
     let s = d.style;
     if let Some(runs) = &d.rich {

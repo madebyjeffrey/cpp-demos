@@ -50,7 +50,7 @@ wrapping a row of independent labels alone does not close that behavior.
 | `TextField`, `TextFieldOptions`, `TextEditor` | Single/multiline controls share TextBuffer; readonly/length/history policy, visual navigation and word/line selection implemented | M2.1–M2.3 |
 | `SearchField`, `SearchFieldOptions` | Integrated clear/cancel, committed query/submit hooks, scoped one-shot debounce and lifetime cancellation implemented | M2.4 |
 | `PasswordField`, `PasswordFieldOptions` | Explicit reveal/undo, readonly/grapheme limits, uncached sensitive painting and clipboard/AX restrictions implemented; actual native ownership transitions tested | M2.5 |
-| `NumericField`, `Stepper`, `NumericOptions`, `NumericStatus`, `NumericValidation` | Exact `Numeric<T>`/`Draft<T>` and +/- composition exist; standalone repeat stepper and complete precision/commit/validation policies pending | M2.6, M6.1–M6.2, M6.6 |
+| `NumericField`, `Stepper`, `NumericOptions`, `NumericStatus`, `NumericValidation` | Exact `Numeric<T>`/`Draft<T>`, `Validation`/`ValidationStatus`, precision/blur/submit/cancel and standalone repeating `stepper` implemented; localized grammar and shared typed-control expansion remain | M2.6, M6.1–M6.2, M6.6 |
 | `MenuButton`, `MenuItem`, `MenuItemKind`, `Action` | Flat `Popup::menu`/`MenuAction` composition; menu kinds, hierarchy, metadata and navigation partial | M3.2 |
 | `SelectionDropdown` | Existing dropdown/button+overlay composition; richer menu navigation and semantics pending | M3.2, M5.3 |
 | `SplitActionButton` | Existing primary+arrow composition; selected default action and full menu behavior pending | M3.2 |
