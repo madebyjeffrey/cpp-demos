@@ -1,0 +1,7 @@
+/build/
+/.deps/
+.idea/
+/cmake-build-*/
+*.gputrace
+.DS_Store
+__pycache__/

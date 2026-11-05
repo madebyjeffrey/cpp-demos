@@ -1,0 +1,4 @@
+[env]
+MACOSX_DEPLOYMENT_TARGET = "26.0"
+# Skia's binary-cache feature supplies source-download support too. Always compile it.
+FORCE_SKIA_BUILD = { value = "1", force = true }

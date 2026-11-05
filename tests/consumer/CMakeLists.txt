@@ -1,0 +1,12 @@
+cmake_minimum_required(VERSION 3.25)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  project(skia_window_consumer LANGUAGES CXX)
+  set(SKIA_WINDOW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  set(SKIA_WINDOW_BUILD_DEMO OFF CACHE BOOL "" FORCE)
+  enable_testing()
+  add_subdirectory(../.. skia-window)
+endif()
+# Deliberately C++ only: this client neither includes native headers nor compiles Objective-C++.
+add_executable(skia_window_cpp_consumer main.cpp)
+target_link_libraries(skia_window_cpp_consumer PRIVATE skia_window::skia_window)
+add_test(NAME skia_window.cpp_consumer COMMAND skia_window_cpp_consumer)
