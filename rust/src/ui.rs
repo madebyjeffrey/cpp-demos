@@ -283,7 +283,27 @@ impl Renderer {
     pub fn paint(&self, host: &Host, canvas: &skia::Canvas, elapsed: f64) -> Result<(), Error> {
         let theme = host.theme();
         let input = host.text_input()?;
+        let mut scrollbars: Vec<(usize, Rect, ScrollInfo, bool)> = Vec::new();
         for n in host.scene()? {
+            while scrollbars
+                .last()
+                .is_some_and(|(depth, ..)| *depth >= n.depth)
+            {
+                let (_, clip, info, enabled) = scrollbars.pop().unwrap();
+                draw_scrollbars(
+                    canvas,
+                    clip,
+                    info,
+                    if enabled {
+                        theme.secondary
+                    } else {
+                        theme.border
+                    },
+                );
+            }
+            if let Some(info) = n.scroll.filter(|_| !n.hidden) {
+                scrollbars.push((n.depth, n.clip, info, n.enabled));
+            }
             if n.hidden || n.clip.width <= 0. || n.clip.height <= 0. {
                 continue;
             }
@@ -553,6 +573,18 @@ impl Renderer {
         if let Some(info) = host.inspector().selected.get() {
             round(canvas, info.bounds.inset(1.), 2., theme.accent, true);
         }
+        for (_, clip, info, enabled) in scrollbars.into_iter().rev() {
+            draw_scrollbars(
+                canvas,
+                clip,
+                info,
+                if enabled {
+                    theme.secondary
+                } else {
+                    theme.border
+                },
+            );
+        }
         if let Some((text, p)) = host.tooltip() {
             let style = TextStyle {
                 size: 13.,
@@ -647,4 +679,20 @@ fn round(canvas: &skia::Canvas, r: Rect, radius: f64, color: u32, stroke: bool) 
         p.set_style(skia::PaintStyle::Stroke).set_stroke_width(1.);
     }
     canvas.draw_round_rect(skrect(r), radius as f32, radius as f32, &p);
+}
+
+fn draw_scrollbars(canvas: &skia::Canvas, clip: Rect, info: ScrollInfo, color: u32) {
+    canvas.save();
+    canvas.clip_rect(skrect(clip), None, true);
+    for bar in info.bars() {
+        round(
+            canvas,
+            bar.track,
+            4.,
+            (color & 0x00ffffff) | 0x20000000,
+            false,
+        );
+        round(canvas, bar.thumb, 4., color, false);
+    }
+    canvas.restore();
 }

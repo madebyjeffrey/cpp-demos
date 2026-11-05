@@ -31,7 +31,7 @@ overall goal complete while an in-scope item remains open.
 | Area | Implemented foundation | Remaining closure |
 | --- | --- | --- |
 | State and descriptions | Reactive bindings, keys, macro conditions/repetition, host identity | Complete inventory mapping and ergonomic coverage of the remaining behaviors |
-| Layout and basic controls | Themes, containers, basic controls, Skia text/images | Two-axis scrolling, fuller styling/text options and interaction hardening |
+| Layout and basic controls | Inventory, constrained layout, rich text, style coverage and two-axis scrolling verified | Final cross-component visual/semantic audit in M5/M8 |
 | Editing | Grapheme-safe edits, history, composition, secure fields, multiline text | Visual navigation, selection gestures, specialized field policies and reusable buffer interface |
 | Presentation | Popups, focus scopes, simple menus, tabs, slider-controlled split, basic alerts | Complete interactions, retained page state and presentation transactions |
 | Collections | Fixed-height virtualization, keyed selection, basic trees/tables, cell conflict checks | Lazy tree lifecycle, cell/column interactions, richer selection and semantics |
@@ -49,15 +49,15 @@ defines the intended evidence. Existing Rust contracts are in the
 - [x] **M1.1 Inventory closure:** map every current SCARS control, model, modifier and option family to an implemented Rust equivalent or a remaining checklist item. Document intentional interface changes; no unexplained omissions.
 - [x] **M1.2 Style coverage:** finish per-edge insets, flex basis/self-alignment/spacing, relative positioning, text alignment/overflow/line limits, label styles, accent/density and separator orientation where the inventory requires them.
 - [x] **M1.3 Layout correctness:** exercise wrapping/reflow, grow/shrink redistribution at min/max limits, percentages, baselines, clipping and layered hit order under constrained sizes.
-- [ ] **M1.4 Two-axis scrolling:** horizontal/vertical/both axes, visible draggable scrollbars, wheel/trackpad transport and programmatic offset/query interfaces with clamping.
-- [ ] **M1.5 Scroll/input lifetime:** nested wheel propagation, two-axis focus/caret reveal, keyboard scrolling, drag autoscroll and capture cancellation on blur, hide, removal and unmount.
+- [x] **M1.4 Two-axis scrolling:** horizontal/vertical/both axes, visible draggable scrollbars, wheel/trackpad transport and programmatic offset/query interfaces with clamping.
+- [x] **M1.5 Scroll/input lifetime:** nested wheel propagation, two-axis focus/caret reveal, keyboard scrolling, drag autoscroll and capture cancellation on blur, hide, removal and unmount.
 
 Evidence: extend the layout/scroll examples; deterministic geometry, edge propagation
 and cancellation tests; dark/light constrained previews. Likely changes:
 [geometry/layout](../rust/components/src/layout.rs),
 [input](../rust/components/src/input.rs), [native adapter](../rust/src/macos/components/input.rs).
 
-Completion record (in progress):
+Completion record:
 
 - M1.1: [inventory matrix](rust-inventory.md) maps 162 exported types and all 47
   view/annotation names to existing behavior or explicit closure items.
@@ -75,9 +75,19 @@ Completion record (in progress):
   become inert. Five portable reflow/order tests and four raster rich-text tests
   cover resizing, baselines, clipping, subtree stacking, painting and interaction.
   Workspace tests and strict Clippy pass; dark/light `m1_layout` previews inspected.
-  Checkpoint commits: `53a4202` (styles), next commit (reflow/rich text).
-- M1 remains open for two-axis scrolling/scrollbars and input lifetime closure
-  (M1.4–M1.5). Native visual/interactive audits remain in M5/M8.
+  Checkpoint commits: `53a4202` (styles), `24156ef` (reflow/rich text).
+- M1.4/M1.5: `ScrollAxes::{Vertical, Horizontal, Both}`, clamped `scroll_info`,
+  `scroll_to`/`scroll_by`, draggable overlay bars and track paging implemented.
+  Native wheel transport includes both axes; residual diagonal deltas travel only
+  through containing ancestors. Focus/caret reveal, keyboard movement and stationary
+  drag-selection deadlines work through nested viewports; user scrolling does not
+  repeatedly snap back to an unchanged caret. Blur/deactivation/hide/removal/cancel
+  end capture. Native unmount ends the selection deadline and focus.
+- Example: `cargo run --example m1_scroll` (`--light`, `--render file.png`, `--smoke`).
+  Six portable scroll tests and three actual SkParagraph/raster tests pass, as do
+  workspace tests, strict Clippy, portable Linux compilation and native component
+  protocol tests. Dark/light previews inspected; native example smoke run passes.
+  These are M1 checks; final visible GPU and interactive audits remain in M5/M8.
 
 
 ## M2 — Editing and specialized fields

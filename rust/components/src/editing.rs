@@ -57,6 +57,7 @@ pub(crate) struct Editor {
     base: Option<(String, Selection)>,
     pub scroll: f64,
     pub scroll_y: f64,
+    pub reveal: bool,
     undo: Vec<(String, Selection)>,
     redo: Vec<(String, Selection)>,
 }
@@ -83,6 +84,7 @@ impl Editor {
             self.marked = None;
             self.base = None;
             self.scroll = 0.;
+            self.reveal = true;
             self.undo.clear();
             self.redo.clear();
         }
@@ -98,6 +100,7 @@ impl Editor {
         self.redo.clear();
     }
     fn replace(&mut self, value: &str, range: Range<usize>) -> Range<usize> {
+        self.reveal = true;
         let start = floor(&self.text, range.start.min(self.text.len()));
         let end = if range.start == range.end {
             start
@@ -192,6 +195,7 @@ impl Host {
         let Some(e) = editors.get_mut(&id) else {
             return Ok(false);
         };
+        e.reveal = true;
         e.selection = Selection {
             anchor: floor(&e.text, selection.anchor),
             caret: floor(&e.text, selection.caret),
@@ -338,6 +342,7 @@ impl Host {
                     }
                     e.text = text;
                     e.selection = selection;
+                    e.reveal = true;
                     true
                 } else {
                     false
@@ -419,6 +424,7 @@ impl Host {
             let Some(e) = editors.get_mut(&input.id) else {
                 return Ok(false);
             };
+            e.reveal = true;
             let selection = e.selection.range();
             let caret = e.selection.caret;
             let boundaries = grapheme_boundaries(&e.text);

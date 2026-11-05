@@ -221,12 +221,15 @@ pub(super) fn event(m: &Mounted, event: &Event) -> std::result::Result<bool, ui:
                 PointerKind::Move | PointerKind::Enter => ui::PointerKind::Move,
                 PointerKind::Leave => ui::PointerKind::Leave,
                 PointerKind::Scroll => {
-                    return m.host.scroll(
+                    return m.host.scroll_at(
                         ui::Point {
                             x: p.position.x,
                             y: p.position.y,
                         },
-                        -p.scroll_y,
+                        ui::Point {
+                            x: -p.scroll_x,
+                            y: -p.scroll_y,
+                        },
                     );
                 }
             };

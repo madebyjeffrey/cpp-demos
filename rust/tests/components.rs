@@ -68,6 +68,37 @@ fn main() {
         let acted: bool = msg_send![&*check, accessibilityPerformPress];
         assert!(!acted);
     }
+    // Unmount must end a stationary selection drag and its redraw deadline.
+    let drag_text = State::new(
+        (0..80)
+            .map(|i| format!("Line {i} words here\n"))
+            .collect::<String>(),
+    );
+    let drag_host = window
+        .set_view(move || view! {text_editor("",bind:drag_text,key:"drag",height:80);})
+        .unwrap();
+    drag_host.set_active(true);
+    let renderer = ui::Renderer::default();
+    drag_host
+        .layout(ui::Size::new(240., 80.), &renderer)
+        .unwrap();
+    for (kind, y) in [(ui::PointerKind::Down, 20.), (ui::PointerKind::Move, 110.)] {
+        drag_host
+            .pointer(ui::Pointer {
+                kind,
+                position: ui::Point { x: 50., y },
+                button: 0,
+                modifiers: Default::default(),
+            })
+            .unwrap();
+    }
+    drag_host
+        .layout(ui::Size::new(240., 80.), &renderer)
+        .unwrap();
+    assert!(drag_host.next_deadline().is_some());
+    window.clear_view();
+    assert!(drag_host.focused().is_none());
+    assert!(drag_host.next_deadline().is_none());
     // Invalid replacement must preserve the existing mount.
     window.set_view(|| view! { label("retained"); }).unwrap();
     assert!(

@@ -159,9 +159,20 @@ ordinary bound field; applications decide filtering and debounce policy.
 split ratio, anchored dropdown and action menus, and an alert. `embed(view)` inserts
 an already-built description into `view!`; custom functions also compose directly.
 
-`scroll { … }` clips a vertical document, clamps wheel movement at its edges, and
-reveals focused descendants. Scroll offsets belong to mounted identity. Give the
-scroll container a height or `grow: 1`; long documents do not expand its viewport.
+`scroll { … }` defaults to vertical. `scroll_axes: ScrollAxes::Horizontal` or
+`Both` enables horizontal documents. Offsets belong to mounted identity. Give the
+container a height or `grow: 1`; long documents do not expand its viewport. Set a
+child width/minimum width when it should exceed the horizontal viewport.
+Visible overlay scrollbars support dragging and track paging; `scrollbars: false`
+hides them. Wheel residuals pass to ancestors at each axis edge. Arrow/page/home/end
+keys scroll when the focused control does not consume them (Shift selects the
+horizontal axis for page/home/end). Focus and caret movement reveal through nested
+viewports; an unchanged caret does not override explicit user scrolling.
+`Host::scroll_info(id)` queries viewport/content/offset/limits; `scroll_to` and
+`scroll_by` accept a `Point` and clamp both axes. `scroll_at(point, delta)` routes a
+wheel delta; `scroll(point, delta_y)` is the vertical shorthand. Call layout after
+changes before geometric queries. Drag selection beyond a viewport uses one-shot
+deadlines while needed and cancels on release, blur, deactivation or unmount.
 `layer` stretches ordinary auto-sized children to its bounds and orders absolute
 children by z-index. Headers/footers may use `shrink: 0` in constrained layouts.
 
@@ -182,9 +193,8 @@ compositions, and applications may build other presentations from the same piece
 
 For an actual macOS sheet, attach components with `Dialog::set_view` and use the
 existing `show_modal`/`dismiss` lifetime interface. `Popup::modal` is an in-window
-presentation; it does not create an AppKit sheet or a new native window. Scrolling
-is currently vertical; kinetic scrolling follows native wheel events, without a
-second synthetic animation loop.
+presentation; it does not create an AppKit sheet or a new native window. Kinetic
+scrolling follows native wheel events without a second synthetic animation loop.
 
 ## Stage 5 — virtual collections and structured edits
 
@@ -250,11 +260,12 @@ precedence (useful for inline editing). `on_cancel` runs on Escape after any IME
 composition has first been cancelled.
 
 
-## Completion M1 — styles and geometry checkpoint
+## Completion M1 — layout, typography and scrolling
 
 `cargo run --example m1_layout` demonstrates the current work; it also supports
-`--light`, `--render file.png` and resize. The full M1 milestone remains open in
-[the checklist](../../docs/rust-completion-checklist.md).
+`--light`, `--render file.png` and resize. `cargo run --example m1_scroll` demonstrates
+nested two-axis scrolling. M1 evidence is recorded in
+[the checklist](../../docs/rust-completion-checklist.md); later milestones remain open.
 
 `padding` and `margin` accept a scalar, `Insets::symmetric(vertical, horizontal)`,
 or `[top, right, bottom, left]` values. `basis` controls the flex main-axis basis;

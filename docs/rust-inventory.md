@@ -24,7 +24,7 @@ The older UI engine and C++ `detail` namespace are excluded.
 | `TextInlineBox`, `TextSpan`, `TextLayoutOptions`, `TextPlacement`, `GlyphPosition`, `TextLine`, `TextLayout`, `TextLayoutEngine` | `Measure`/`TextLayout`, styled `Span`, inline `View` boxes and cached SkParagraph implemented; visual line geometry/navigation remains. Renderer types stay out of the portable core | M1.2, M2.2 |
 | `TextRange`, `TextSelection`, `TextCommand`, `TextBuffer` | Standard byte ranges/`Selection` and host editor commands exist; reusable buffer and remaining navigation/selection/history behavior pending | M2.1–M2.3 |
 | `Clipboard`, `TextInputSnapshot` | Native clipboard and Rust `TextInputClient`/`TextInputState`; portable `TextInput` | M2.3, M5.4–M5.5 |
-| `PointerKind`, `PointerEvent`, `Key`, `KeyEvent`, `Cursor` | Portable/native event types exist; full click/scroll/cancel transport and keyboard command coverage incomplete | M1.5, M2.2–M2.3, M3.1 |
+| `PointerKind`, `PointerEvent`, `Key`, `KeyEvent`, `Cursor` | Portable/native events include both wheel axes and capture cancellation; richer click gestures, visual editor commands and resize cursors remain | M1.5, M2.2–M2.3, M3.1 |
 | `Role`, `Element`, `LogicalItem`, `LogicalCell`, `LogicalColumn` | Native semantic adapter and logical row proxies exist; complete portable semantic snapshots, cells/columns/tree metadata/actions pending | M5.1–M5.4 |
 | `HostOptions`, `Host` | Host refresh/layout/input/mount exist; relevant invalidation, cursor, scroll, text, selection, presentation, inspection and logical-query contracts are assigned across the checklist | M1.4–M1.5, M2, M3, M4, M5, M7 |
 
@@ -40,13 +40,13 @@ wrapping a row of independent labels alone does not close that behavior.
 | --- | --- | --- |
 | `Label`, `Text`, `Button`, `CommandButton` | Existing label/button constructors and macro aliases | M1.2 text options, M5.3, M7.3 |
 | `ToggleButton`, `CheckBox`, `CheckState`, `Switch`, `RadioGroup`, `SegmentedControl`, `Option` | Existing bound controls, `CheckState`, `OptionItem` | M1.5, M5.3, M7.3 |
-| `Slider`, `SliderOptions` | Existing stepped bounded slider; page-step configuration and complete gesture/key/lifetime behavior partial | M1.5, M2.6, M5.3 |
+| `Slider`, `SliderOptions` | Stepped bounded slider with pointer/key/capture lifetime; configurable page-step and repeat policy remain | M1.5, M2.6, M5.3 |
 | `ProgressBar` | Existing determinate/indeterminate progress | M5.3, M8.4 |
 | `Bitmap`, `Image`, `ContentMode` | Existing validated encoded/RGBA data and fit/fill/stretch/center rendering; resource lifetime and preview coverage retained | M7.3, M8.2–M8.4 |
 | `FlexRow`, `FlexColumn`, `Block`, `Inline`, `Layer` | Row/column/block/inline/layer and shaped rich inline text implemented with width-dependent reflow and baselines | M1.2–M1.3 |
 | `Section`, `GroupBox`, `Panel`, `Spacer`, `Separator` | Grouping/spacer and both separator orientations implemented | M1.2 |
 | `ForEach`, `If` | Rust `for`/`if` inside `view!`, stable keyed descriptions; no duplicate wrapper classes required | M7.3 |
-| `ScrollView`, `ScrollAxes`, `ScrollViewOptions` | Vertical `scroll` exists; axes, scrollbar and input/query contracts incomplete | M1.4–M1.5 |
+| `ScrollView`, `ScrollAxes`, `ScrollViewOptions` | Both-axis scrolling, overlay bars, clamped queries/actions, nested wheel transport, keyboard/caret reveal and capture lifetime implemented | M1.4–M1.5 |
 | `TextField`, `TextFieldOptions`, `TextEditor` | Existing single/multiline editable controls; maximum length, visual navigation, rich gestures and remaining editor policies partial | M2.1–M2.3 |
 | `SearchField`, `SearchFieldOptions` | Currently a plain field alias with generic deadline primitives; integrated search semantics/options missing | M2.4 |
 | `PasswordField`, `PasswordFieldOptions` | Masking/native secure input/clipboard restrictions exist; reveal, undo and length policies partial | M2.5 |

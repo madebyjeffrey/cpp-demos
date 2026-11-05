@@ -8,14 +8,14 @@ mod flow;
 impl Host {
     pub fn layout(&self, size: Size, measure: &dyn Measure) -> Result<(), Error> {
         for _ in 0..4 {
-            self.layout_pass(size, measure)?;
-            if !self.0.observer.dirty.get() {
+            let offsets_changed = self.layout_pass(size, measure)?;
+            if !offsets_changed && !self.0.observer.dirty.get() {
                 return Ok(());
             }
         }
         Err(Error("Layout did not settle".into()))
     }
-    fn layout_pass(&self, size: Size, measure: &dyn Measure) -> Result<(), Error> {
+    fn layout_pass(&self, size: Size, measure: &dyn Measure) -> Result<bool, Error> {
         if !size.width.is_finite()
             || !size.height.is_finite()
             || size.width < 0.
@@ -24,6 +24,7 @@ impl Host {
             return Err(Error("Invalid viewport".into()));
         }
         self.refresh()?;
+        let previous_offsets = self.0.scroll.borrow().clone();
         self.0.viewport.set(size);
         let theme = self.theme();
         {
@@ -31,7 +32,13 @@ impl Host {
             let mut offsets = self.0.scroll.borrow_mut();
             for n in &m.nodes {
                 if let Some(model) = &n.collection {
-                    offsets.insert(n.id, model.offset());
+                    offsets.insert(
+                        n.id,
+                        crate::Point {
+                            x: 0.,
+                            y: model.offset(),
+                        },
+                    );
                 }
             }
         }
@@ -88,6 +95,7 @@ impl Host {
         mounted.layouts = tree.layouts;
         let mut editors = self.0.editors.borrow_mut();
         let mut field_layouts = Vec::new();
+        let mut reveal_caret = None;
         for node in &mut mounted.nodes {
             if let Some(editor) = editors.get_mut(&node.id) {
                 let layout = crate::metrics::field_layout(
@@ -138,6 +146,18 @@ impl Host {
                     layout.size.width,
                     layout.size.height,
                 );
+                if editor.reveal && self.focused() == Some(node.id) {
+                    reveal_caret = Some((
+                        node.id,
+                        Rect::new(
+                            node.text_bounds.x + caret.x,
+                            node.text_bounds.y + caret.y,
+                            2.,
+                            caret.height,
+                        ),
+                    ));
+                    editor.reveal = false;
+                }
                 field_layouts.push((node.id, layout));
             }
         }
@@ -149,7 +169,13 @@ impl Host {
                 n.collection.clone().map(|model| {
                     (
                         model,
-                        self.0.scroll.borrow().get(&n.id).copied().unwrap_or(0.),
+                        self.0
+                            .scroll
+                            .borrow()
+                            .get(&n.id)
+                            .copied()
+                            .unwrap_or_default()
+                            .y,
                         n.bounds.height,
                     )
                 })
@@ -160,6 +186,11 @@ impl Host {
         for (model, offset, height) in collections {
             model.set_viewport(offset, height);
         }
+        self.reconcile_capture();
+        if let Some((id, rect)) = reveal_caret {
+            self.reveal_rect(id, rect);
+        }
+        self.update_drag_deadline(std::time::Instant::now());
         self.reconcile_modal()?;
         if let Some(id) = self.0.autofocus.take().filter(|id| self.in_scope(*id)) {
             self.focus(id)?;
@@ -196,7 +227,7 @@ impl Host {
                 .cloned();
             inspector.selected.set(node.map(crate::Inspection::from));
         }
-        Ok(())
+        Ok(previous_offsets != *self.0.scroll.borrow())
     }
     /// Scene order includes z-order while preserving each sibling subtree as a unit.
     pub fn scene(&self) -> Result<Vec<Node>, Error> {
@@ -233,7 +264,7 @@ struct Tree<'a> {
     measure: &'a dyn Measure,
     theme: crate::Theme,
     inherited: HashMap<NodeId, (u32, crate::Density)>,
-    scroll: HashMap<NodeId, f64>,
+    scroll: HashMap<NodeId, crate::Point>,
     reflowed: HashMap<NodeId, (f64, Option<f64>)>,
     baselines: HashMap<NodeId, f64>,
 }
@@ -491,6 +522,13 @@ impl Tree<'_> {
             .resolve(available.height)
             .unwrap_or(size.height)
             .clamp(s.min_height, s.max_height);
+        if n.kind == Kind::Scroll && n.scroll_axes.x() && s.width == Length::Auto {
+            size.width = size.width.min(if available.width.is_finite() {
+                available.width
+            } else {
+                240.
+            });
+        }
         if n.kind == Kind::Scroll && s.height == Length::Auto {
             size.height = size.height.min(if available.height.is_finite() {
                 available.height
@@ -533,18 +571,53 @@ impl Tree<'_> {
             content.height = (content.height - height - s.gap).max(0.);
         }
         if n.kind == Kind::Scroll {
-            let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
+            let children: Vec<_> = self
+                .children
+                .get(&Some(n.id))
+                .into_iter()
+                .flatten()
+                .copied()
+                .filter(|c| nodes[*c].style.position != Position::Absolute)
+                .collect();
+            let width = children
+                .iter()
+                .map(|c| self.desired[&nodes[*c].id].width + nodes[*c].style.margin.horizontal())
+                .fold(content.width, f64::max);
             let height = children
                 .iter()
                 .map(|c| self.desired[&nodes[*c].id].height + nodes[*c].style.margin.vertical())
                 .sum::<f64>()
                 + s.gap * children.len().saturating_sub(1) as f64;
-            let max = (height - content.height).max(0.);
-            nodes[i].scroll_max = max;
-            let offset = self.scroll.entry(n.id).or_default();
-            *offset = offset.clamp(0., max);
-            content.y -= *offset;
-            content.height = height.max(content.height);
+            let extent = Size::new(
+                if n.scroll_axes.x() {
+                    width.max(content.width)
+                } else {
+                    content.width
+                },
+                if n.scroll_axes.y() {
+                    height.max(content.height)
+                } else {
+                    content.height
+                },
+            );
+            let mut info = crate::ScrollInfo {
+                axes: n.scroll_axes,
+                viewport: content,
+                content: extent,
+                offset: *self.scroll.entry(n.id).or_default(),
+                max: crate::Point {
+                    x: (extent.width - content.width).max(0.),
+                    y: (extent.height - content.height).max(0.),
+                },
+                scrollbars: n.scrollbars,
+            };
+            info.offset = info.clamp(info.offset);
+            self.scroll.insert(n.id, info.offset);
+            nodes[i].scroll = Some(info);
+            content.x -= info.offset.x;
+            content.y -= info.offset.y;
+            content.width = extent.width;
+            content.height = extent.height;
         }
         if let Some(anchor) = &n.anchor
             && let Some(target) = nodes.iter().find(|n| n.key.as_ref() == Some(anchor))

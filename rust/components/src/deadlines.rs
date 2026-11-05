@@ -38,12 +38,14 @@ impl Host {
             .iter()
             .map(|d| d.at.saturating_duration_since(Instant::now()))
             .chain(self.tooltip_delay())
+            .chain(self.drag_delay())
             .min()
     }
     pub fn run_due(&self) {
         self.run_due_at(Instant::now());
     }
     pub fn run_due_at(&self, now: Instant) {
+        self.run_drag_due(now);
         let tasks = {
             let mut deadlines = self.0.deadlines.borrow_mut();
             let mut tasks = Vec::new();

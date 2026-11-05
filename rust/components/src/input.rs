@@ -50,6 +50,8 @@ pub struct KeyEvent {
 pub(crate) struct Interaction {
     pub focus: Option<NodeId>,
     pub pressed: Option<NodeId>,
+    pub scroll_drag: Option<crate::scroll::ScrollDrag>,
+    pub drag_tick: Option<std::time::Instant>,
     pub hovered: Option<NodeId>,
     pub active: bool,
     pub text_anchor: usize,
@@ -64,6 +66,8 @@ impl Default for Interaction {
         Self {
             focus: None,
             pressed: None,
+            scroll_drag: None,
+            drag_tick: None,
             hovered: None,
             active: true,
             text_anchor: 0,
@@ -128,56 +132,17 @@ impl Host {
         }
         Ok(())
     }
-    /// Scroll the deepest scroll container under the pointer. Returns false at an edge.
-    pub fn scroll(&self, point: Point, delta: f64) -> Result<bool, Error> {
-        if !delta.is_finite() {
-            return Ok(false);
-        }
-        let nodes = self.scene()?;
-        for n in nodes
-            .iter()
-            .rev()
-            .filter(|n| n.kind == Kind::Scroll && n.clip.contains(point) && self.in_scope(n.id))
-        {
-            let mut offsets = self.0.scroll.borrow_mut();
-            let offset = offsets.entry(n.id).or_default();
-            let next = (*offset + delta).clamp(0., n.scroll_max);
-            if next != *offset {
-                *offset = next;
-                drop(offsets);
-                if let Some(model) = &n.collection {
-                    model.set_viewport(next, n.bounds.height);
-                }
-                self.redraw();
-                return Ok(true);
-            }
-        }
-        Ok(false)
-    }
     fn reveal(&self, id: NodeId) {
-        let m = self.0.mounted.borrow();
-        let Some(node) = m.nodes.iter().find(|n| n.id == id) else {
-            return;
-        };
-        let mut parent = node.parent;
-        while let Some(id) = parent {
-            let Some(n) = m.nodes.iter().find(|n| n.id == id) else {
-                break;
-            };
-            if n.kind == Kind::Scroll {
-                let viewport = n.bounds.inset(n.style.padding);
-                let delta = if node.bounds.y < viewport.y {
-                    node.bounds.y - viewport.y
-                } else if node.bounds.y + node.bounds.height > viewport.y + viewport.height {
-                    node.bounds.y + node.bounds.height - viewport.y - viewport.height
-                } else {
-                    0.
-                };
-                let mut offsets = self.0.scroll.borrow_mut();
-                let offset = offsets.entry(id).or_default();
-                *offset = (*offset + delta).clamp(0., n.scroll_max);
-            }
-            parent = n.parent;
+        let bounds = self
+            .0
+            .mounted
+            .borrow()
+            .nodes
+            .iter()
+            .find(|n| n.id == id)
+            .map(|n| n.bounds);
+        if let Some(bounds) = bounds {
+            self.reveal_rect(id, bounds);
         }
     }
     pub(crate) fn tooltip_delay(&self) -> Option<std::time::Duration> {
@@ -260,6 +225,8 @@ impl Host {
         i.active = active;
         if !active {
             i.pressed = None;
+            i.scroll_drag = None;
+            i.drag_tick = None;
             i.hovered = None;
         }
         drop(i);
@@ -273,12 +240,15 @@ impl Host {
                 && n.enabled
                 && !n.hidden
                 && !n.layout_hidden
-                && focusable(n.kind)
+                && (focusable(n.kind) || n.kind == Kind::Scroll)
                 && self.in_scope(n.id)
         }) {
             return Ok(false);
         }
         self.0.interaction.borrow_mut().focus = Some(id);
+        if let Some(editor) = self.0.editors.borrow_mut().get_mut(&id) {
+            editor.reveal = true;
+        }
         self.reveal(id);
         self.redraw();
         Ok(true)
@@ -288,6 +258,8 @@ impl Host {
         let mut i = self.0.interaction.borrow_mut();
         i.focus = None;
         i.pressed = None;
+        i.scroll_drag = None;
+        i.drag_tick = None;
         drop(i);
         self.redraw();
     }
@@ -359,8 +331,12 @@ impl Host {
             self.redraw();
             return Ok(true);
         }
+        if self.scrollbar_pointer(event)? {
+            return Ok(true);
+        }
         if event.kind == PointerKind::Cancel {
             self.0.interaction.borrow_mut().pressed = None;
+            self.0.interaction.borrow_mut().drag_tick = None;
             self.redraw();
             return Ok(true);
         }
@@ -501,6 +477,7 @@ impl Host {
             }
             _ => (),
         }
+        self.update_drag_deadline(std::time::Instant::now());
         self.redraw();
         Ok(handled)
     }
@@ -539,7 +516,7 @@ impl Host {
             return self.focus_next(event.modifiers.shift);
         }
         let Some(id) = self.focused() else {
-            return Ok(false);
+            return self.scroll_key(None, event);
         };
         let node = self
             .0
@@ -656,6 +633,6 @@ impl Host {
         if matches!(event.key, Key::Space | Key::Enter) && !event.repeat {
             return self.activate(id);
         }
-        Ok(false)
+        self.scroll_key(Some(id), event)
     }
 }

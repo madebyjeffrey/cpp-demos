@@ -358,9 +358,9 @@ fn expand(item: Item, root: &Tokens) -> Result<Tokens> {
                     | "foreground" | "background" | "enabled" | "visible" | "hidden"
                     | "position" | "left" | "right" | "top" | "bottom" | "z_index"
                     | "accessible_label" | "tooltip" | "on_context" | "autofocus" | "padding"
-                    | "margin" | "basis" | "align_self" | "accent" | "density" | "text_wrap"
-                    | "text_overflow" | "text_align" | "max_lines" | "label_style"
-                    | "uppercase" | "orientation" => quote!(#expr),
+                    | "margin" | "basis" | "align_self" | "accent" | "scroll_axes"
+                    | "scrollbars" | "density" | "text_wrap" | "text_overflow" | "text_align"
+                    | "max_lines" | "label_style" | "uppercase" | "orientation" => quote!(#expr),
                     "read_only"
                         if matches!(
                             kind.as_str(),

@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         row(justify:Justify::SpaceAround){button("A",on_click:||{});button("B",on_click:||{});}
                     }
                 }
-                label("Styled paragraphs and reflow are implemented. Two-axis scrolling is next on the checklist.",label_style:LabelStyle::Micro,wrap:true,shrink:0);
+                label("Styled paragraphs and reflow share the portable core. See m1_scroll for nested scrolling.",label_style:LabelStyle::Micro,wrap:true,shrink:0);
             }
         }
     })

@@ -273,7 +273,16 @@ impl Tree<'_> {
                     .collect();
                 for (count, child) in flowing.iter().copied().enumerate() {
                     let cs = nodes[child].style;
-                    let child_width = self.child_width(child, s, inner, nodes);
+                    let child_width = if n.kind == Kind::Scroll
+                        && n.scroll_axes.x()
+                        && cs.width == Length::Auto
+                    {
+                        self.desired[&nodes[child].id]
+                            .width
+                            .max((inner - cs.margin.horizontal()).max(0.))
+                    } else {
+                        self.child_width(child, s, inner, nodes)
+                    };
                     let child_height = if n.kind == Kind::Fragment
                         && flowing.len() == 1
                         && cs.height == Length::Auto

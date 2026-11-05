@@ -110,6 +110,8 @@ pub(crate) struct Description {
     pub collection: Option<crate::ListModel>,
     pub tooltip: String,
     pub rich: Option<Vec<crate::rich_text::Run>>,
+    pub scroll_axes: crate::ScrollAxes,
+    pub scrollbars: bool,
     pub context: Option<Rc<dyn Fn()>>,
 }
 impl View {
@@ -135,6 +137,8 @@ impl View {
             collection: None,
             tooltip: String::new(),
             rich: None,
+            scroll_axes: crate::ScrollAxes::Vertical,
+            scrollbars: true,
             context: None,
         }))
     }

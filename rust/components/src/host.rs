@@ -45,7 +45,9 @@ pub struct Node {
     pub secure: bool,
     pub multiline: bool,
     pub anchor: Option<String>,
-    pub scroll_max: f64,
+    pub scroll: Option<crate::ScrollInfo>,
+    pub(crate) scroll_axes: crate::ScrollAxes,
+    pub(crate) scrollbars: bool,
     pub collection: Option<crate::ListModel>,
     pub label: String,
     pub focused: bool,
@@ -86,7 +88,7 @@ pub(crate) struct Inner {
     pub interaction: RefCell<crate::input::Interaction>,
     pub autofocus: Cell<Option<NodeId>>,
     pub inspector: RefCell<crate::Inspector>,
-    pub scroll: RefCell<HashMap<NodeId, f64>>,
+    pub scroll: RefCell<HashMap<NodeId, crate::Point>>,
     pub deadlines: RefCell<Vec<crate::deadlines::Deadline>>,
     pub editors: RefCell<HashMap<NodeId, crate::editing::Editor>>,
 }
@@ -211,7 +213,11 @@ impl Host {
             let mut i = self.0.interaction.borrow_mut();
             if i.focus.is_some_and(|id| {
                 !mounted.nodes.iter().any(|n| {
-                    n.id == id && n.enabled && !n.hidden && !n.layout_hidden && focusable(n.kind)
+                    n.id == id
+                        && n.enabled
+                        && !n.hidden
+                        && !n.layout_hidden
+                        && (focusable(n.kind) || n.kind == Kind::Scroll)
                 })
             }) {
                 i.focus = None;
@@ -226,6 +232,7 @@ impl Host {
             }
         }
         drop(old);
+        self.reconcile_capture();
         Ok(true)
     }
     pub fn snapshot(&self) -> Result<Vec<Node>, Error> {
@@ -425,7 +432,9 @@ fn mount(
         secure: d.secure,
         multiline: d.multiline,
         anchor: d.anchor.clone(),
-        scroll_max: 0.,
+        scroll: None,
+        scroll_axes: d.scroll_axes,
+        scrollbars: d.scrollbars,
         collection: d.collection.clone(),
         label: if d.accessible.is_empty() {
             d.text.clone()
