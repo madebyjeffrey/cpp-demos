@@ -37,6 +37,8 @@ pub struct Node {
     pub read_only: bool,
     pub secure: bool,
     pub multiline: bool,
+    pub anchor: Option<String>,
+    pub scroll_max: f64,
     pub label: String,
     pub focused: bool,
     pub pressed: bool,
@@ -74,6 +76,7 @@ pub(crate) struct Inner {
     pub theme: Cell<Theme>,
     pub viewport: Cell<Size>,
     pub interaction: RefCell<crate::input::Interaction>,
+    pub scroll: RefCell<HashMap<NodeId, f64>>,
     pub deadlines: RefCell<Vec<crate::deadlines::Deadline>>,
     pub editors: RefCell<HashMap<NodeId, crate::editing::Editor>>,
 }
@@ -94,6 +97,7 @@ impl Host {
             interaction: RefCell::new(Default::default()),
             editors: RefCell::new(HashMap::new()),
             deadlines: RefCell::new(Vec::new()),
+            scroll: RefCell::new(HashMap::new()),
         }))
     }
     pub fn on_invalidate(&self, wake: impl Fn() + 'static) {
@@ -156,6 +160,10 @@ impl Host {
         {
             let mounted = self.0.mounted.borrow();
             let mut editors = self.0.editors.borrow_mut();
+            self.0
+                .scroll
+                .borrow_mut()
+                .retain(|id, _| mounted.nodes.iter().any(|n| n.id == *id));
             editors.retain(|id, _| {
                 mounted
                     .descriptions
@@ -209,7 +217,7 @@ impl Host {
             let m = self.0.mounted.borrow();
             m.nodes
                 .iter()
-                .find(|n| n.id == id && n.enabled && !n.hidden)
+                .find(|n| n.id == id && n.enabled && !n.hidden && self.in_scope(n.id))
                 .and_then(|n| {
                     m.descriptions
                         .get(&id)
@@ -256,7 +264,12 @@ impl Host {
             m.nodes
                 .iter()
                 .find(|n| {
-                    n.id == id && n.enabled && !n.hidden && !n.read_only && n.kind == Kind::Slider
+                    n.id == id
+                        && n.enabled
+                        && !n.hidden
+                        && !n.read_only
+                        && self.in_scope(n.id)
+                        && n.kind == Kind::Slider
                 })
                 .and_then(|_| m.descriptions.get(&id))
                 .map(|d| d.data.clone())
@@ -362,6 +375,8 @@ fn mount(
         read_only: d.read_only,
         secure: d.secure,
         multiline: d.multiline,
+        anchor: d.anchor.clone(),
+        scroll_max: 0.,
         label: if d.accessible.is_empty() {
             d.text.clone()
         } else {

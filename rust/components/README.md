@@ -152,3 +152,36 @@ Mounted windows schedule the earliest deadline as a one-shot redraw; detached
 portable hosts use `run_due` (or `run_due_at` in deterministic tests). Cancel with
 `cancel_deadline`. Tasks and callbacks run on the owning thread. Search is an
 ordinary bound field; applications decide filtering and debounce policy.
+
+## Stage 4 — scrolling and presentation
+
+`cargo run --example stage4` demonstrates a scrolling workspace, tabs, a resizable
+split ratio, anchored dropdown and action menus, and an alert. `embed(view)` inserts
+an already-built description into `view!`; custom functions also compose directly.
+
+`scroll { … }` clips a vertical document, clamps wheel movement at its edges, and
+reveals focused descendants. Scroll offsets belong to mounted identity. Give the
+scroll container a height or `grow: 1`; long documents do not expand its viewport.
+`layer` stretches ordinary auto-sized children to its bounds and orders absolute
+children by z-index. Headers/footers may use `shrink: 0` in constrained layouts.
+
+Keep `Popup` in application state. `modal(title, body)`, `popover(anchor_key, body)`
+and `menu(anchor_key, actions)` return descriptions for a top-level `layer`.
+Popovers clamp to the viewport and flip above their anchor when needed. Escape and
+outside clicks dismiss; Tab stays inside the topmost popup; dismissal restores
+focus. Background accessibility elements and actions are unavailable while modal
+content is mounted. Put overlays after their anchors in the same layer.
+
+`dropdown` returns a button and its overlay so the button can live in a toolbar
+while the overlay lives in the root layer. Menus support enabled actions, arrows,
+Tab and activation. `on_context` handles a secondary click; `tooltip` displays
+help after a 600ms one-shot deadline. `tabs` mounts the active page; `wizard` adds
+step navigation; `split_button` combines a primary action with a menu anchor.
+`split_view` uses an accessible slider for the pane ratio. These are Rust
+compositions, and applications may build other presentations from the same pieces.
+
+For an actual macOS sheet, attach components with `Dialog::set_view` and use the
+existing `show_modal`/`dismiss` lifetime interface. `Popup::modal` is an in-window
+presentation; it does not create an AppKit sheet or a new native window. Scrolling
+is currently vertical; kinetic scrolling follows native wheel events, without a
+second synthetic animation loop.

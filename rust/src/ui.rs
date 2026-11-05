@@ -447,6 +447,35 @@ impl Renderer {
             }
             canvas.restore();
         }
+        if let Some((text, p)) = host.tooltip() {
+            let style = TextStyle {
+                size: 13.,
+                color: theme.text,
+                bold: false,
+                wrap: true,
+            };
+            let shaped = self.shaped(&text, style, 260.);
+            let size = canvas.base_layer_size();
+            let x =
+                p.x.min((size.width as f64 - shaped.layout.size.width - 20.).max(0.));
+            let y = (p.y + 20.).min((size.height as f64 - shaped.layout.size.height - 16.).max(0.));
+            round(
+                canvas,
+                Rect::new(
+                    x,
+                    y,
+                    shaped.layout.size.width + 16.,
+                    shaped.layout.size.height + 12.,
+                ),
+                5.,
+                theme.panel,
+                false,
+            );
+            shaped
+                .paragraph
+                .borrow()
+                .paint(canvas, ((x + 8.) as f32, (y + 6.) as f32));
+        }
         Ok(())
     }
 }

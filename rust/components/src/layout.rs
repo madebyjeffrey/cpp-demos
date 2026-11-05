@@ -23,6 +23,7 @@ impl Host {
             layouts: HashMap::new(),
             measure,
             theme,
+            scroll: self.0.scroll.borrow().clone(),
         };
         for (i, n) in mounted.nodes.iter().enumerate() {
             tree.children.entry(n.parent).or_default().push(i);
@@ -43,6 +44,7 @@ impl Host {
                 &mut mounted.nodes,
             )?;
         }
+        *self.0.scroll.borrow_mut() = tree.scroll;
         mounted.layouts = tree.layouts;
         let mut editors = self.0.editors.borrow_mut();
         let mut field_layouts = Vec::new();
@@ -100,6 +102,9 @@ impl Host {
             }
         }
         mounted.layouts.extend(field_layouts);
+        drop(editors);
+        drop(mounted);
+        self.reconcile_modal()?;
         Ok(())
     }
     /// Scene order includes z-order while preserving each sibling subtree as a unit.
@@ -136,6 +141,7 @@ struct Tree<'a> {
     layouts: HashMap<NodeId, TextLayout>,
     measure: &'a dyn Measure,
     theme: crate::Theme,
+    scroll: HashMap<NodeId, f64>,
 }
 fn horizontal(kind: Kind) -> bool {
     matches!(kind, Kind::Row | Kind::Inline | Kind::Segmented)
@@ -154,6 +160,8 @@ fn container(kind: Kind) -> bool {
             | Kind::Panel
             | Kind::RadioGroup
             | Kind::Segmented
+            | Kind::Scroll
+            | Kind::Modal
     )
 }
 fn header(kind: Kind) -> bool {
@@ -305,6 +313,13 @@ impl Tree<'_> {
             .resolve(available.height)
             .unwrap_or(size.height)
             .clamp(s.min_height, s.max_height);
+        if n.kind == Kind::Scroll && s.height == Length::Auto {
+            size.height = size.height.min(if available.height.is_finite() {
+                available.height
+            } else {
+                240.
+            });
+        }
         self.desired.insert(n.id, size);
         self.layouts.insert(n.id, layout);
         Ok(size)
@@ -327,6 +342,45 @@ impl Tree<'_> {
             content.y += height + s.gap;
             content.height = (content.height - height - s.gap).max(0.);
         }
+        if n.kind == Kind::Scroll {
+            let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
+            let height = children
+                .iter()
+                .map(|c| self.desired[&nodes[*c].id].height + 2. * nodes[*c].style.margin)
+                .sum::<f64>()
+                + s.gap * children.len().saturating_sub(1) as f64;
+            let max = (height - content.height).max(0.);
+            nodes[i].scroll_max = max;
+            let offset = self.scroll.entry(n.id).or_default();
+            *offset = offset.clamp(0., max);
+            content.y -= *offset;
+            content.height = height.max(content.height);
+        }
+        if let Some(anchor) = &n.anchor
+            && let Some(target) = nodes.iter().find(|n| n.key.as_ref() == Some(anchor))
+        {
+            let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
+            let width = children
+                .iter()
+                .map(|c| self.desired[&nodes[*c].id].width)
+                .fold(0., f64::max);
+            let height = children
+                .iter()
+                .map(|c| self.desired[&nodes[*c].id].height)
+                .sum::<f64>();
+            content.x = target
+                .bounds
+                .x
+                .clamp(bounds.x, (bounds.x + bounds.width - width).max(bounds.x));
+            content.y =
+                if target.bounds.y + target.bounds.height + height > bounds.y + bounds.height {
+                    (target.bounds.y - height).max(bounds.y)
+                } else {
+                    target.bounds.y + target.bounds.height + 6.
+                };
+            content.width = width.min(bounds.width);
+            content.height = height.min(bounds.height);
+        }
         let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
         if container(n.kind) {
             let flowing: Vec<_> = children
@@ -340,7 +394,24 @@ impl Tree<'_> {
                     let m = nodes[child].style.margin;
                     self.arrange(
                         child,
-                        Rect::new(content.x + m, content.y + m, d.width, d.height),
+                        Rect::new(
+                            content.x + m,
+                            content.y + m,
+                            nodes[child].style.width.resolve(content.width).unwrap_or(
+                                if s.align == Align::Stretch {
+                                    (content.width - 2. * m).max(0.)
+                                } else {
+                                    d.width
+                                },
+                            ),
+                            nodes[child].style.height.resolve(content.height).unwrap_or(
+                                if s.align == Align::Stretch {
+                                    (content.height - 2. * m).max(0.)
+                                } else {
+                                    d.height
+                                },
+                            ),
+                        ),
                         nodes[i].clip,
                         nodes,
                     )?;
@@ -406,7 +477,7 @@ impl Tree<'_> {
                             value += extra * cs.grow / grow;
                         } else if extra < 0.
                             && shrink > 0.
-                            && !matches!(n.kind, Kind::Block | Kind::Fragment)
+                            && !matches!(n.kind, Kind::Block | Kind::Fragment | Kind::Scroll)
                         {
                             value += extra * cs.shrink * natural[j] / shrink;
                         }

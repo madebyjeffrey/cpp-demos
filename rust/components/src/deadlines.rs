@@ -37,6 +37,7 @@ impl Host {
             .borrow()
             .iter()
             .map(|d| d.at.saturating_duration_since(Instant::now()))
+            .chain(self.tooltip_delay())
             .min()
     }
     pub fn run_due(&self) {

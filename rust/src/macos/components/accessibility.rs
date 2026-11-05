@@ -53,7 +53,11 @@ fn list(
     let nodes = m.host.snapshot()?;
     let elements: Vec<_> = nodes
         .iter()
-        .filter(|n| semantic(n) && parent(n, &nodes) == parent_id)
+        .filter(|n| {
+            semantic(n)
+                && m.host.in_scope(n.id)
+                && parent(n, &nodes).filter(|id| m.host.in_scope(*id)) == parent_id
+        })
         .map(|n| any(element(m, n.id)))
         .collect();
     Ok(NSArray::from_retained_slice(&elements))
@@ -109,6 +113,7 @@ fn role(kind: Kind) -> &'static NSString {
             Kind::Progress => NSAccessibilityProgressIndicatorRole,
             Kind::Image => NSAccessibilityImageRole,
             Kind::TextField => NSAccessibilityTextFieldRole,
+            Kind::Scroll => NSAccessibilityScrollAreaRole,
             _ => NSAccessibilityGroupRole,
         }
     }
@@ -378,7 +383,7 @@ impl Element {
                 .host
                 .snapshot()?
                 .into_iter()
-                .find(|n| n.id == self.ivars().id && semantic(n));
+                .find(|n| n.id == self.ivars().id && semantic(n) && m.host.in_scope(n.id));
             node.map(|n| f(m, s, &n)).transpose()
         })
         .flatten()

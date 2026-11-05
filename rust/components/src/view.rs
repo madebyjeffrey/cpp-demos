@@ -27,6 +27,8 @@ pub enum Kind {
     Separator,
     Spacer,
     TextField,
+    Scroll,
+    Modal,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CheckState {
@@ -100,6 +102,9 @@ pub(crate) struct Description {
     pub read_only: bool,
     pub secure: bool,
     pub multiline: bool,
+    pub anchor: Option<String>,
+    pub tooltip: String,
+    pub context: Option<Rc<dyn Fn()>>,
 }
 impl View {
     fn new(kind: Kind, text: String, children: Vec<Self>) -> Self {
@@ -118,6 +123,9 @@ impl View {
             read_only: false,
             secure: false,
             multiline: false,
+            anchor: None,
+            tooltip: String::new(),
+            context: None,
         }))
     }
     pub fn fragment(v: Vec<Self>) -> Self {
@@ -139,6 +147,43 @@ impl View {
     }
     pub fn layer(v: Vec<Self>) -> Self {
         Self::new(Kind::Layer, String::new(), v)
+    }
+    pub fn scroll(children: Vec<Self>) -> Self {
+        Self::new(Kind::Scroll, String::new(), children)
+    }
+    pub fn modal(children: Vec<Self>, dismiss: impl Fn() + 'static) -> Self {
+        let mut v = Self::new(Kind::Modal, String::new(), children)
+            .position(Position::Absolute)
+            .left(0)
+            .right(0)
+            .top(0)
+            .bottom(0)
+            .z_index(1000)
+            .background(0x99000000)
+            .align(Align::Center)
+            .justify(Justify::Center);
+        Rc::make_mut(&mut v.0).action = Some(Rc::new(dismiss));
+        v
+    }
+    pub fn popover(
+        anchor: impl Into<String>,
+        children: Vec<Self>,
+        dismiss: impl Fn() + 'static,
+    ) -> Self {
+        let mut v = Self::modal(children, dismiss)
+            .background(0x00000000)
+            .justify(Justify::Start)
+            .align(Align::Start);
+        Rc::make_mut(&mut v.0).anchor = Some(anchor.into());
+        v
+    }
+    pub fn tooltip(mut self, text: impl Into<String>) -> Self {
+        Rc::make_mut(&mut self.0).tooltip = text.into();
+        self
+    }
+    pub fn on_context(mut self, action: impl Fn() + 'static) -> Self {
+        Rc::make_mut(&mut self.0).context = Some(Rc::new(action));
+        self
     }
     pub fn label(text: impl Into<String>) -> Self {
         Self::new(Kind::Label, text.into(), Vec::new())

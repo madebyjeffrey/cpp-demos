@@ -164,6 +164,7 @@ fn expand(item: Item) -> Result<Tokens> {
             let step = take(&mut properties, "step");
             let containers = [
                 "column",
+                "scroll",
                 "row",
                 "block",
                 "inline",
@@ -214,6 +215,10 @@ fn expand(item: Item) -> Result<Tokens> {
                 }
             } else {
                 match kind.as_str() {
+                    "embed" => {
+                        let value = one(&mut positional)?;
+                        quote!(#value)
+                    }
                     "label" | "text" => {
                         let text = one(&mut positional)?;
                         quote!(::scars_ui::View::label(#text))
@@ -342,7 +347,7 @@ fn expand(item: Item) -> Result<Tokens> {
                     "key" | "width" | "height" | "wrap" | "align" | "justify" | "bold"
                     | "foreground" | "background" | "enabled" | "visible" | "hidden"
                     | "position" | "left" | "right" | "top" | "bottom" | "z_index"
-                    | "accessible_label" => quote!(#expr),
+                    | "accessible_label" | "tooltip" | "on_context" => quote!(#expr),
                     "read_only"
                         if matches!(
                             kind.as_str(),

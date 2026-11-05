@@ -53,6 +53,10 @@ pub(crate) struct Interaction {
     pub hovered: Option<NodeId>,
     pub active: bool,
     pub text_anchor: usize,
+    pub modal: Option<NodeId>,
+    pub restore_focus: Option<NodeId>,
+    pub hover_since: std::time::Instant,
+    pub pointer: Point,
 }
 impl Default for Interaction {
     fn default() -> Self {
@@ -62,10 +66,136 @@ impl Default for Interaction {
             hovered: None,
             active: true,
             text_anchor: 0,
+            modal: None,
+            restore_focus: None,
+            hover_since: std::time::Instant::now(),
+            pointer: Point::default(),
         }
     }
 }
 impl Host {
+    pub fn active_modal(&self) -> Option<NodeId> {
+        self.0
+            .mounted
+            .borrow()
+            .nodes
+            .iter()
+            .rev()
+            .find(|n| n.kind == Kind::Modal && !n.hidden)
+            .map(|n| n.id)
+    }
+    pub fn in_scope(&self, id: NodeId) -> bool {
+        let Some(modal) = self.active_modal() else {
+            return true;
+        };
+        let m = self.0.mounted.borrow();
+        let mut current = Some(id);
+        while let Some(id) = current {
+            if id == modal {
+                return true;
+            }
+            current = m.nodes.iter().find(|n| n.id == id).and_then(|n| n.parent);
+        }
+        false
+    }
+    pub(crate) fn reconcile_modal(&self) -> Result<(), Error> {
+        let active = self.active_modal();
+        let (changed, restore) = {
+            let mut i = self.0.interaction.borrow_mut();
+            if i.modal == active {
+                (false, None)
+            } else {
+                let restore = if active.is_none() {
+                    i.restore_focus.take()
+                } else {
+                    if i.modal.is_none() {
+                        i.restore_focus = i.focus;
+                    }
+                    None
+                };
+                i.modal = active;
+                (true, restore)
+            }
+        };
+        if changed {
+            if let Some(id) = restore {
+                self.focus(id)?;
+            } else if active.is_some() {
+                self.focus_next(false)?;
+            }
+        }
+        Ok(())
+    }
+    /// Scroll the deepest scroll container under the pointer. Returns false at an edge.
+    pub fn scroll(&self, point: Point, delta: f64) -> Result<bool, Error> {
+        if !delta.is_finite() {
+            return Ok(false);
+        }
+        let nodes = self.scene()?;
+        for n in nodes
+            .iter()
+            .rev()
+            .filter(|n| n.kind == Kind::Scroll && n.clip.contains(point) && self.in_scope(n.id))
+        {
+            let mut offsets = self.0.scroll.borrow_mut();
+            let offset = offsets.entry(n.id).or_default();
+            let next = (*offset + delta).clamp(0., n.scroll_max);
+            if next != *offset {
+                *offset = next;
+                drop(offsets);
+                self.redraw();
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+    fn reveal(&self, id: NodeId) {
+        let m = self.0.mounted.borrow();
+        let Some(node) = m.nodes.iter().find(|n| n.id == id) else {
+            return;
+        };
+        let mut parent = node.parent;
+        while let Some(id) = parent {
+            let Some(n) = m.nodes.iter().find(|n| n.id == id) else {
+                break;
+            };
+            if n.kind == Kind::Scroll {
+                let viewport = n.bounds.inset(n.style.padding);
+                let delta = if node.bounds.y < viewport.y {
+                    node.bounds.y - viewport.y
+                } else if node.bounds.y + node.bounds.height > viewport.y + viewport.height {
+                    node.bounds.y + node.bounds.height - viewport.y - viewport.height
+                } else {
+                    0.
+                };
+                let mut offsets = self.0.scroll.borrow_mut();
+                let offset = offsets.entry(id).or_default();
+                *offset = (*offset + delta).clamp(0., n.scroll_max);
+            }
+            parent = n.parent;
+        }
+    }
+    pub(crate) fn tooltip_delay(&self) -> Option<std::time::Duration> {
+        let i = self.0.interaction.borrow();
+        let id = i.hovered?;
+        let m = self.0.mounted.borrow();
+        let d = m.descriptions.get(&id)?;
+        if d.tooltip.is_empty() {
+            return None;
+        }
+        let wait = std::time::Duration::from_millis(600).saturating_sub(i.hover_since.elapsed());
+        (!wait.is_zero()).then_some(wait)
+    }
+    pub fn tooltip(&self) -> Option<(String, Point)> {
+        let i = self.0.interaction.borrow();
+        if i.hover_since.elapsed() < std::time::Duration::from_millis(600) {
+            return None;
+        }
+        let id = i.hovered?;
+        let m = self.0.mounted.borrow();
+        let d = m.descriptions.get(&id)?;
+        (!d.tooltip.is_empty() && self.in_scope(id)).then(|| (d.tooltip.clone(), i.pointer))
+    }
     pub fn focused(&self) -> Option<NodeId> {
         self.0.interaction.borrow().focus
     }
@@ -85,17 +215,13 @@ impl Host {
     pub fn focus(&self, id: NodeId) -> Result<bool, Error> {
         self.unmark_text(true)?;
         self.refresh()?;
-        if !self
-            .0
-            .mounted
-            .borrow()
-            .nodes
-            .iter()
-            .any(|n| n.id == id && n.enabled && !n.hidden && focusable(n.kind))
-        {
+        if !self.0.mounted.borrow().nodes.iter().any(|n| {
+            n.id == id && n.enabled && !n.hidden && focusable(n.kind) && self.in_scope(n.id)
+        }) {
             return Ok(false);
         }
         self.0.interaction.borrow_mut().focus = Some(id);
+        self.reveal(id);
         self.redraw();
         Ok(true)
     }
@@ -112,7 +238,7 @@ impl Host {
         let nodes = self.snapshot()?;
         let ids: Vec<_> = nodes
             .iter()
-            .filter(|n| n.enabled && !n.hidden && focusable(n.kind))
+            .filter(|n| n.enabled && !n.hidden && focusable(n.kind) && self.in_scope(n.id))
             .filter(|n| {
                 if !matches!(n.kind, Kind::Radio | Kind::Segment) {
                     return true;
@@ -151,6 +277,7 @@ impl Host {
             .rev()
             .find(|n| {
                 n.enabled
+                    && self.in_scope(n.id)
                     && !n.hidden
                     && focusable(n.kind)
                     && n.bounds.contains(point)
@@ -170,7 +297,33 @@ impl Host {
         } else {
             self.hit_test(event.position)?
         };
-        self.0.interaction.borrow_mut().hovered = hit;
+        {
+            let mut i = self.0.interaction.borrow_mut();
+            if i.hovered != hit {
+                i.hover_since = std::time::Instant::now();
+            }
+            i.hovered = hit;
+            i.pointer = event.position;
+        }
+        if event.kind == PointerKind::Down && event.button == 1 {
+            let action = {
+                let m = self.0.mounted.borrow();
+                m.nodes
+                    .iter()
+                    .rev()
+                    .filter(|n| {
+                        n.enabled
+                            && !n.hidden
+                            && self.in_scope(n.id)
+                            && n.clip.contains(event.position)
+                    })
+                    .find_map(|n| m.descriptions.get(&n.id).and_then(|d| d.context.clone()))
+            };
+            if let Some(action) = action {
+                action();
+                return Ok(true);
+            }
+        }
         let pressed = self.0.interaction.borrow().pressed;
         let mut handled = hit.is_some() || pressed.is_some();
         match event.kind {
@@ -202,6 +355,14 @@ impl Host {
                         };
                         self.0.interaction.borrow_mut().text_anchor = anchor;
                         self.select_text(id, Selection { anchor, caret })?;
+                    }
+                } else if let Some(modal) = self.active_modal() {
+                    let nodes = self.snapshot()?;
+                    let inside = nodes
+                        .iter()
+                        .any(|n| n.parent == Some(modal) && n.bounds.contains(event.position));
+                    if !inside {
+                        self.activate(modal)?;
                     }
                 } else {
                     self.blur();
@@ -269,6 +430,11 @@ impl Host {
             return Ok(false);
         }
         self.refresh()?;
+        if event.key == Key::Escape
+            && let Some(id) = self.active_modal()
+        {
+            return self.activate(id);
+        }
         if event.key == Key::Tab {
             return self.focus_next(event.modifiers.shift);
         }
@@ -284,6 +450,12 @@ impl Host {
             .find(|n| n.id == id)
             .cloned();
         let Some(node) = node else { return Ok(false) };
+        if node.kind == Kind::Button
+            && self.active_modal().is_some()
+            && matches!(event.key, Key::Up | Key::Down)
+        {
+            return self.focus_next(event.key == Key::Up);
+        }
         if node.kind == Kind::TextField {
             let command = match event.key {
                 Key::Left if event.modifiers.command => TextCommand::Start,
