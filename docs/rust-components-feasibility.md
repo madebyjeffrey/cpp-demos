@@ -195,3 +195,22 @@ checks (including two compile-fail cases), one CPU Skia paragraph test, strict
 workspace Clippy/format checks, a Linux core compile check, the existing native
 window/full-screen suites, and console/native example smoke runs. The Linux check
 is compilation evidence, not a claim of a Linux native backend or runtime audit.
+
+## Rust implementation checkpoints
+
+The six implementation stages now have committed Rust examples and focused tests.
+See the [quick guide](rust-guide.md) for commands and explicit current limits, and
+[component contracts](../rust/components/README.md) for behavior. The original
+feasibility discussion above is historical planning context, not a parity claim.
+
+| Stage | Commit |
+| --- | --- |
+| Reactive foundation | `c0a2206` |
+| Layout/basic controls/native mount | `536dbc7` |
+| Editing/typed drafts/deadlines | `64c217d` |
+| Scrolling/presentation | `aebbe14` |
+| Virtual collections/structured edits | `5fc900f` |
+| Composite values/developer tools | `cc9afc9` |
+
+The final todo example exercises application-level bindings, keyed rows, inline
+editing, filtering and persistence without application-side reference counting.

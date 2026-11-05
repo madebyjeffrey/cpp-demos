@@ -42,12 +42,13 @@ Build one architecture at a time. `SKIA_SOURCE_DIR` and `SKIA_LIBRARY_DIR` can p
 
 ## SCARS: independent module-based controls
 
-A standalone Rust native window-management crate is available in [`rust/`](rust/README.md).
+A Rust windowing and reactive component workspace is available in [`rust/`](rust/README.md).
 It provides AppKit windows/dialogs, per-window menus, native light/dark and full-screen
 titlebar buttons, input/IME, and Skia canvases backed by Metal without
 depending on the C++ build. Cargo builds Skia from source through `skia-safe` /
 `skia-bindings`. Run it with `cd rust` then `cargo run --locked --example windows`;
-see the Rust README for source-build prerequisites.
+see the Rust README for source-build prerequisites. The [Rust quick guide](docs/rust-guide.md)
+covers the staged examples, component contracts, and themed todo app.
 
 [SCARS API quick guide](docs/scars-api.md) · [Build and detailed contracts](docs/scars.md) · [Control implementation plan](docs/scars-controls-plan.md)
 

@@ -1,4 +1,4 @@
-# SCARS Window for Rust
+# SCARS for Rust
 
 `scars-window` is a standalone macOS window-management and rendering crate,
 implemented in Rust using `objc2` bindings to AppKit, QuartzCore and Metal, with
@@ -11,6 +11,10 @@ The first build needs internet access to fetch Skia sources, dependencies and GN
 The native backend currently supports macOS only. Geometry, input, menu and text-input contracts
 are platform independent. The local Cargo configuration sets the macOS deployment
 target to 26.0. The application also checks the OS version at runtime.
+
+Start with the [Rust quick guide](../docs/rust-guide.md) for reactive components and
+`cargo run --locked --example todo`. Each stage has its own example and focused
+tests; [component contracts](components/README.md) describe the current coverage.
 
 ## Source layout
 
