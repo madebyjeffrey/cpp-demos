@@ -16,12 +16,12 @@ The older UI engine and C++ `detail` namespace are excluded.
 | C++ types/family | Rust equivalent and status | Closure |
 | --- | --- | --- |
 | `Color` | Existing ARGB u32 styling and typed sRGB `Color` value | M6.5 |
-| `Point`, `Size`, `Rect`, `Length`, `Constraints`, `Insets` | Geometry/points/percent/Auto exist; constraints represented by min/max style and viewport, not a duplicate public constraint object; per-edge insets pending | M1.2–M1.3 |
-| `Align`, `Justify`, `Position`, `Orientation`, `Density`, `TextWrap`, `TextOverflow`, `LabelStyle` | Partial style enums; missing variants/options mapped below | M1.2 |
-| `Theme` | Existing light/dark palette; density, label/accent roles, font configuration and remaining relevant style values partial | M1.2, M7.3 |
+| `Point`, `Size`, `Rect`, `Length`, `Constraints`, `Insets` | Geometry/points/percent/Auto and per-edge insets implemented; constraints represented by min/max style and viewport, not a duplicate public constraint object | M1.2–M1.3 |
+| `Align`, `Justify`, `Position`, `Orientation`, `Density`, `TextWrap`, `TextOverflow`, `LabelStyle` | Typed style enums and required variants implemented; regression coverage in styles/reflow tests | M1.2 |
+| `Theme` | Light/dark palette, inherited density/accent and label roles implemented; full Lab coverage remains | M1.2, M7.3 |
 | `State`, `Binding` | Existing tracked owned Rust handles; thread confinement enforced by types | M8.4 |
 | `View` | Existing immutable descriptions, typed constructors and `view!`; description internals stay private, inspection uses snapshots | M1.2, M7.3 |
-| `TextInlineBox`, `TextSpan`, `TextLayoutOptions`, `TextPlacement`, `GlyphPosition`, `TextLine`, `TextLayout`, `TextLayoutEngine` | `Measure`/`TextLayout` and cached SkParagraph renderer exist; span/inline-box, line geometry and richer text options remain. Keep renderer types out of the portable core | M1.2, M2.2 |
+| `TextInlineBox`, `TextSpan`, `TextLayoutOptions`, `TextPlacement`, `GlyphPosition`, `TextLine`, `TextLayout`, `TextLayoutEngine` | `Measure`/`TextLayout`, styled `Span`, inline `View` boxes and cached SkParagraph implemented; visual line geometry/navigation remains. Renderer types stay out of the portable core | M1.2, M2.2 |
 | `TextRange`, `TextSelection`, `TextCommand`, `TextBuffer` | Standard byte ranges/`Selection` and host editor commands exist; reusable buffer and remaining navigation/selection/history behavior pending | M2.1–M2.3 |
 | `Clipboard`, `TextInputSnapshot` | Native clipboard and Rust `TextInputClient`/`TextInputState`; portable `TextInput` | M2.3, M5.4–M5.5 |
 | `PointerKind`, `PointerEvent`, `Key`, `KeyEvent`, `Cursor` | Portable/native event types exist; full click/scroll/cancel transport and keyboard command coverage incomplete | M1.5, M2.2–M2.3, M3.1 |
@@ -43,8 +43,8 @@ wrapping a row of independent labels alone does not close that behavior.
 | `Slider`, `SliderOptions` | Existing stepped bounded slider; page-step configuration and complete gesture/key/lifetime behavior partial | M1.5, M2.6, M5.3 |
 | `ProgressBar` | Existing determinate/indeterminate progress | M5.3, M8.4 |
 | `Bitmap`, `Image`, `ContentMode` | Existing validated encoded/RGBA data and fit/fill/stretch/center rendering; resource lifetime and preview coverage retained | M7.3, M8.2–M8.4 |
-| `FlexRow`, `FlexColumn`, `Block`, `Inline`, `Layer` | Existing row/column/block/inline/layer; complete layout and rich inline text behavior partial | M1.2–M1.3 |
-| `Section`, `GroupBox`, `Panel`, `Spacer`, `Separator` | Existing grouping/spacer and horizontal separator; orientation/styles partial | M1.2 |
+| `FlexRow`, `FlexColumn`, `Block`, `Inline`, `Layer` | Row/column/block/inline/layer and shaped rich inline text implemented with width-dependent reflow and baselines | M1.2–M1.3 |
+| `Section`, `GroupBox`, `Panel`, `Spacer`, `Separator` | Grouping/spacer and both separator orientations implemented | M1.2 |
 | `ForEach`, `If` | Rust `for`/`if` inside `view!`, stable keyed descriptions; no duplicate wrapper classes required | M7.3 |
 | `ScrollView`, `ScrollAxes`, `ScrollViewOptions` | Vertical `scroll` exists; axes, scrollbar and input/query contracts incomplete | M1.4–M1.5 |
 | `TextField`, `TextFieldOptions`, `TextEditor` | Existing single/multiline editable controls; maximum length, visual navigation, rich gestures and remaining editor policies partial | M2.1–M2.3 |
@@ -82,12 +82,12 @@ Every public C++ `View` modifier is listed, including those with existing Rust n
 | --- | --- | --- |
 | `key`, `enabled`, `visible`, `hidden`, `accessible_label` | Existing matching modifiers; lifetime, interaction and semantic consequences require coverage | M1.5, M5.3–M5.4 |
 | `width`, `height`, `min_width`, `max_width`, `min_height`, `max_height` | Existing typed dimensions and limits; min/max redistribution and percentage reflow coverage | M1.3 |
-| `padding`, `margin` | Existing uniform values; per-edge `Insets` overloads missing | M1.2 |
-| `gap`, `grow`, `shrink`, `basis` | First three exist; basis and min/max-aware redistribution pending | M1.2–M1.3 |
-| `wrap`, `align_items`, `align_self`, `justify` | `wrap`, `align`, `justify` exist; self-alignment/space-around and full reflow partial | M1.2–M1.3 |
-| `foreground`, `background`, `accent`, `corner_radius` | Existing foreground/background/`radius`; inherited accent pending | M1.2 |
-| `font_size`, `bold`, `label_style`, `text_wrap`, `text_overflow`, `max_lines`, `text_align`, `uppercase`, `density` | Size/bold/basic wrap exist; remaining typed text/density roles and shaping/paint behavior pending | M1.2 |
-| `position`, `left`, `top`, `right`, `bottom`, `z_index` | Flow/absolute/anchors/z-order exist; relative positioning and regression coverage pending | M1.2–M1.3 |
+| `padding`, `margin` | Scalar and per-edge `Insets` overloads implemented | M1.2 |
+| `gap`, `grow`, `shrink`, `basis` | Basis and min/max-aware grow/shrink redistribution implemented | M1.2–M1.3 |
+| `wrap`, `align_items`, `align_self`, `justify` | Wrapping, `align`, self-alignment, space-around and width-dependent reflow implemented | M1.2–M1.3 |
+| `foreground`, `background`, `accent`, `corner_radius` | Foreground/background/`radius` and inherited accent implemented | M1.2 |
+| `font_size`, `bold`, `label_style`, `text_wrap`, `text_overflow`, `max_lines`, `text_align`, `uppercase`, `density` | Typed text/density roles, line limits, ellipsis, alignment and spacing implemented and raster tested | M1.2 |
+| `position`, `left`, `top`, `right`, `bottom`, `z_index` | Flow/relative/absolute/anchors/z-order implemented with constrained layout and subtree hit-order coverage | M1.2–M1.3 |
 | `content_mode` | Existing image constructor mode (`content_mode:` in macro); no need for a second stateful modifier | M7.3 |
 | `expanded` | Tree expansion state exists separately; public disclosure annotation and semantics partial | M4.3–M4.4, M5.1/M5.3 |
 | `tooltip`, `popover`, `context_menu` | Existing `tooltip`, `Popup` compositions and `on_context`; full options and menu-tree contracts pending | M3.2–M3.3 |

@@ -10,6 +10,7 @@ pub enum Kind {
     Inline,
     Layer,
     Label,
+    RichText,
     Button,
     Toggle,
     CheckBox,
@@ -108,10 +109,11 @@ pub(crate) struct Description {
     pub anchor: Option<String>,
     pub collection: Option<crate::ListModel>,
     pub tooltip: String,
+    pub rich: Option<Vec<crate::rich_text::Run>>,
     pub context: Option<Rc<dyn Fn()>>,
 }
 impl View {
-    fn new(kind: Kind, text: String, children: Vec<Self>) -> Self {
+    pub(crate) fn new(kind: Kind, text: String, children: Vec<Self>) -> Self {
         Self(Rc::new(Description {
             kind,
             key: None,
@@ -132,6 +134,7 @@ impl View {
             anchor: None,
             collection: None,
             tooltip: String::new(),
+            rich: None,
             context: None,
         }))
     }

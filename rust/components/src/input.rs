@@ -83,7 +83,7 @@ impl Host {
             .nodes
             .iter()
             .rev()
-            .find(|n| n.kind == Kind::Modal && !n.hidden)
+            .find(|n| n.kind == Kind::Modal && !n.hidden && !n.layout_hidden)
             .map(|n| n.id)
     }
     pub fn in_scope(&self, id: NodeId) -> bool {
@@ -214,7 +214,9 @@ impl Host {
             .borrow()
             .nodes
             .iter()
-            .find(|n| n.id == id && n.enabled && !n.hidden && self.in_scope(n.id))
+            .find(|n| {
+                n.id == id && n.enabled && !n.hidden && !n.layout_hidden && self.in_scope(n.id)
+            })
             .and_then(|n| n.collection.clone());
         let Some(model) = model else {
             return Ok(false);
@@ -267,7 +269,12 @@ impl Host {
         self.unmark_text(true)?;
         self.refresh()?;
         if !self.0.mounted.borrow().nodes.iter().any(|n| {
-            n.id == id && n.enabled && !n.hidden && focusable(n.kind) && self.in_scope(n.id)
+            n.id == id
+                && n.enabled
+                && !n.hidden
+                && !n.layout_hidden
+                && focusable(n.kind)
+                && self.in_scope(n.id)
         }) {
             return Ok(false);
         }
@@ -289,7 +296,13 @@ impl Host {
         let nodes = self.snapshot()?;
         let ids: Vec<_> = nodes
             .iter()
-            .filter(|n| n.enabled && !n.hidden && focusable(n.kind) && self.in_scope(n.id))
+            .filter(|n| {
+                n.enabled
+                    && !n.hidden
+                    && !n.layout_hidden
+                    && focusable(n.kind)
+                    && self.in_scope(n.id)
+            })
             .filter(|n| {
                 if !matches!(n.kind, Kind::Radio | Kind::Segment) {
                     return true;
@@ -330,6 +343,7 @@ impl Host {
                 n.enabled
                     && self.in_scope(n.id)
                     && !n.hidden
+                    && !n.layout_hidden
                     && focusable(n.kind)
                     && n.bounds.contains(point)
                     && n.clip.contains(point)
@@ -372,6 +386,7 @@ impl Host {
                     .filter(|n| {
                         n.enabled
                             && !n.hidden
+                            && !n.layout_hidden
                             && self.in_scope(n.id)
                             && n.clip.contains(event.position)
                     })
@@ -604,7 +619,11 @@ impl Host {
                 .snapshot()?
                 .iter()
                 .filter(|n| {
-                    n.parent == node.parent && n.kind == node.kind && n.enabled && !n.hidden
+                    n.parent == node.parent
+                        && n.kind == node.kind
+                        && n.enabled
+                        && !n.hidden
+                        && !n.layout_hidden
                 })
                 .map(|n| n.id)
                 .collect();

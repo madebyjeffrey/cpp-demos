@@ -225,6 +225,10 @@ fn expand(item: Item, root: &Tokens) -> Result<Tokens> {
                         let value = one(&mut positional)?;
                         quote!(#value)
                     }
+                    "rich_text" => {
+                        let runs = one(&mut positional)?;
+                        quote!(#root::View::rich_text(#runs))
+                    }
                     "label" | "text" => {
                         let text = one(&mut positional)?;
                         quote!(#root::View::label(#text))

@@ -12,6 +12,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 #[derive(Hash, PartialEq, Eq)]
 struct TextKey {
     text: String,
+    runs: Vec<SpanKey>,
     size: u64,
     color: u32,
     bold: bool,
@@ -22,6 +23,11 @@ struct TextKey {
     max_lines: usize,
     line_height: u64,
     letter_spacing: u64,
+}
+#[derive(Hash, PartialEq, Eq)]
+enum SpanKey {
+    Text(Box<TextKey>),
+    Box(u64, u64, u64),
 }
 struct Shaped {
     paragraph: Rc<RefCell<Paragraph>>,
@@ -61,6 +67,7 @@ impl Renderer {
     fn key(text: &str, style: TextStyle, width: f64) -> TextKey {
         TextKey {
             text: text.into(),
+            runs: Vec::new(),
             size: style.size.to_bits(),
             color: style.color,
             bold: style.bold,
@@ -78,13 +85,16 @@ impl Renderer {
         }
     }
     fn shaped(&self, text: &str, style: TextStyle, width: f64) -> Shaped {
-        let key = Self::key(text, style, width);
-        if let Some(shaped) = self.text.borrow().get(&key) {
-            return Shaped {
-                paragraph: shaped.paragraph.clone(),
-                layout: shaped.layout.clone(),
-            };
-        }
+        self.shaped_runs(
+            &[ParagraphSpan::Text {
+                text: text.into(),
+                style,
+            }],
+            style,
+            width,
+        )
+    }
+    fn sk_text_style(&self, style: TextStyle) -> SkTextStyle {
         let mut ts = SkTextStyle::new();
         ts.set_font_size(style.size as f32)
             .set_color(skia::Color::new(style.color));
@@ -99,6 +109,30 @@ impl Renderer {
             ts.set_height((style.line_height / style.size) as f32)
                 .set_height_override(true);
         }
+        ts
+    }
+    fn shaped_runs(&self, spans: &[ParagraphSpan], style: TextStyle, width: f64) -> Shaped {
+        let mut key = Self::key("", style, width);
+        key.runs = spans
+            .iter()
+            .map(|span| match span {
+                ParagraphSpan::Text { text, style } => {
+                    SpanKey::Text(Box::new(Self::key(text, *style, 0.)))
+                }
+                ParagraphSpan::Box { size, baseline } => SpanKey::Box(
+                    size.width.to_bits(),
+                    size.height.to_bits(),
+                    baseline.to_bits(),
+                ),
+            })
+            .collect();
+        if let Some(shaped) = self.text.borrow().get(&key) {
+            return Shaped {
+                paragraph: shaped.paragraph.clone(),
+                layout: shaped.layout.clone(),
+            };
+        }
+        let ts = self.sk_text_style(style);
         let mut ps = ParagraphStyle::new();
         ps.set_text_align(match style.align {
             Align::Center => skia::textlayout::TextAlign::Center,
@@ -116,7 +150,27 @@ impl Renderer {
         }
         ps.set_text_style(&ts);
         let mut builder = ParagraphBuilder::new(&ps, self.fonts.clone());
-        builder.add_text(text);
+        let mut source = String::new();
+        for span in spans {
+            match span {
+                ParagraphSpan::Text { text, style } => {
+                    builder.push_style(&self.sk_text_style(*style));
+                    builder.add_text(text);
+                    builder.pop();
+                    source.push_str(text);
+                }
+                ParagraphSpan::Box { size, baseline } => {
+                    builder.add_placeholder(&skia::textlayout::PlaceholderStyle::new(
+                        size.width as f32,
+                        size.height as f32,
+                        skia::textlayout::PlaceholderAlignment::Baseline,
+                        skia::textlayout::TextBaseline::Alphabetic,
+                        *baseline as f32,
+                    ));
+                    source.push('\u{fffc}');
+                }
+            }
+        }
         let mut paragraph = builder.build();
         paragraph.layout(f64::from_bits(key.width).min(1_000_000.) as f32);
         let size = Size::new(
@@ -124,14 +178,19 @@ impl Renderer {
             paragraph.height().max(style.size as f32 * 1.2) as f64,
         );
         let baseline = paragraph.alphabetic_baseline() as f64;
+        let placeholders = paragraph
+            .get_rects_for_placeholders()
+            .into_iter()
+            .map(|b| rect(b.rect))
+            .collect();
         let paragraph = Rc::new(RefCell::new(paragraph));
         let hit = paragraph.clone();
         let ranges = paragraph.clone();
-        let source = text.to_owned();
         let source2 = source.clone();
         let font = style.size;
         let layout = TextLayout {
             size,
+            placeholders,
             baseline,
             hit_test: Rc::new(move |p| {
                 let position = (hit
@@ -383,6 +442,20 @@ impl Renderer {
                 }
                 _ => (),
             }
+            if let Some(spans) = &n.spans {
+                let mut spans = spans.clone();
+                if !n.enabled {
+                    for span in &mut spans {
+                        if let ParagraphSpan::Text { style, .. } = span {
+                            style.color = theme.secondary;
+                        }
+                    }
+                }
+                self.shaped_runs(&spans, n.text_style, n.text_bounds.width)
+                    .paragraph
+                    .borrow()
+                    .paint(canvas, (n.text_bounds.x as f32, n.text_bounds.y as f32));
+            }
             let masked = if n.secure {
                 if let Value::Text(v) = &n.value {
                     "•".repeat(text::grapheme_boundaries(v).len().saturating_sub(1))
@@ -407,7 +480,12 @@ impl Renderer {
             } else {
                 n.text.as_str()
             };
-            if !text.is_empty() && !matches!(n.kind, Kind::Image | Kind::Slider | Kind::Progress) {
+            if !text.is_empty()
+                && !matches!(
+                    n.kind,
+                    Kind::Image | Kind::Slider | Kind::Progress | Kind::RichText
+                )
+            {
                 let mut style = n.text_style;
                 style.color = fg;
                 if n.kind == Kind::TextField {
@@ -511,6 +589,36 @@ impl Renderer {
 impl Measure for Renderer {
     fn text(&self, text: &str, style: TextStyle, width: f64) -> TextLayout {
         self.shaped(text, style, width).layout
+    }
+    fn paragraph(
+        &self,
+        spans: &[ParagraphSpan],
+        style: TextStyle,
+        width: f64,
+    ) -> Result<TextLayout, Error> {
+        for span in spans {
+            match span {
+                ParagraphSpan::Box { size, baseline }
+                    if !size.width.is_finite()
+                        || !size.height.is_finite()
+                        || !baseline.is_finite()
+                        || size.width < 0.
+                        || size.height < 0. =>
+                {
+                    return Err(Error("Invalid inline box geometry".into()));
+                }
+                ParagraphSpan::Text { style, .. }
+                    if !style.size.is_finite()
+                        || style.size <= 0.
+                        || !style.line_height.is_finite()
+                        || !style.letter_spacing.is_finite() =>
+                {
+                    return Err(Error("Invalid paragraph span style".into()));
+                }
+                _ => {}
+            }
+        }
+        Ok(self.shaped_runs(spans, style, width).layout)
     }
     fn image(&self, image: &Bitmap) -> Result<Size, Error> {
         let image = self.image(image)?;

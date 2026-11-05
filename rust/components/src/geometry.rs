@@ -143,11 +143,7 @@ impl Length {
         match self {
             Self::Auto => None,
             Self::Points(v) => Some(v),
-            Self::Percent(v) => Some(if available.is_finite() {
-                v * available
-            } else {
-                0.
-            }),
+            Self::Percent(v) => available.is_finite().then_some(v * available),
         }
     }
 }

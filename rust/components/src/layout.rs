@@ -3,6 +3,7 @@ use crate::{
     TextLayout, TextStyle,
 };
 use std::collections::HashMap;
+mod flow;
 
 impl Host {
     pub fn layout(&self, size: Size, measure: &dyn Measure) -> Result<(), Error> {
@@ -43,6 +44,7 @@ impl Host {
                 description.style = *style;
                 crate::host::validate(&description)?;
             }
+            node.layout_hidden = false;
             node.text = descriptions[&node.id].text.clone();
             node.style = overrides
                 .get(&node.id)
@@ -56,6 +58,8 @@ impl Host {
             measure,
             theme,
             inherited: HashMap::new(),
+            reflowed: HashMap::new(),
+            baselines: HashMap::new(),
             scroll: self.0.scroll.borrow().clone(),
         };
         for (i, n) in mounted.nodes.iter().enumerate() {
@@ -71,6 +75,7 @@ impl Host {
         };
         for root in roots {
             tree.measure_node(root, size, text, &mut mounted.nodes)?;
+            tree.reflow(root, size.width, Some(size.height), &mut mounted.nodes)?;
             tree.arrange(
                 root,
                 Rect::new(0., 0., size.width, size.height),
@@ -229,6 +234,8 @@ struct Tree<'a> {
     theme: crate::Theme,
     inherited: HashMap<NodeId, (u32, crate::Density)>,
     scroll: HashMap<NodeId, f64>,
+    reflowed: HashMap<NodeId, (f64, Option<f64>)>,
+    baselines: HashMap<NodeId, f64>,
 }
 fn horizontal(kind: Kind) -> bool {
     matches!(kind, Kind::Row | Kind::Inline | Kind::Segmented)
@@ -329,7 +336,7 @@ impl Tree<'_> {
             .min(s.max_width)
             .max(s.min_width);
         let inner = (width - s.padding.horizontal()).max(0.);
-        let layout = self.measure.text(
+        let mut layout = self.measure.text(
             &nodes[i].text,
             text,
             if text.constrained() {
@@ -338,7 +345,26 @@ impl Tree<'_> {
                 f64::INFINITY
             },
         );
-        let mut size = if container(n.kind) {
+        let mut size = if n.kind == Kind::RichText {
+            let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
+            for child in &children {
+                let size =
+                    self.measure_node(*child, Size::new(inner, f64::INFINITY), text, nodes)?;
+                self.reflow(*child, size.width, None, nodes)?;
+            }
+            let spans = self.rich_runs(&nodes[i], &children, nodes);
+            layout = self.measure.paragraph(
+                &spans,
+                text,
+                if text.constrained() {
+                    inner
+                } else {
+                    f64::INFINITY
+                },
+            )?;
+            nodes[i].spans = Some(spans);
+            layout.size
+        } else if container(n.kind) {
             let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
             let mut main: f64 = 0.;
             let mut cross: f64 = 0.;
@@ -546,7 +572,44 @@ impl Tree<'_> {
             content.height = height.min(bounds.height);
         }
         let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
-        if container(n.kind) {
+        if n.kind == Kind::RichText {
+            let layout = self.layouts[&n.id].clone();
+            let y = content.y + (content.height - layout.size.height) / 2.;
+            nodes[i].text_bounds = Rect::new(content.x, y, content.width, layout.size.height);
+            let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
+            for (index, child) in children.into_iter().enumerate() {
+                if let Some(box_rect) = layout
+                    .placeholders
+                    .get(index)
+                    .filter(|r| r.width > 0. && r.height > 0.)
+                {
+                    let margin = nodes[child].style.margin;
+                    let r = Rect::new(
+                        content.x + box_rect.x + margin.left,
+                        y + box_rect.y + margin.top,
+                        (box_rect.width - margin.horizontal()).max(0.),
+                        (box_rect.height - margin.vertical()).max(0.),
+                    );
+                    self.arrange(
+                        child,
+                        r,
+                        nodes[i].clip,
+                        Size::new(content.width, content.height),
+                        nodes,
+                    )?;
+                } else {
+                    // Ellipsized placeholders retain identity but have no visible/input geometry.
+                    self.arrange(
+                        child,
+                        Rect::new(content.x, y, 0., 0.),
+                        Rect::default(),
+                        Size::new(content.width, content.height),
+                        nodes,
+                    )?;
+                    self.hide_subtree(child, nodes);
+                }
+            }
+        } else if container(n.kind) {
             let flowing: Vec<_> = children
                 .iter()
                 .copied()
@@ -554,28 +617,36 @@ impl Tree<'_> {
                 .collect();
             if n.kind == Kind::Layer {
                 for child in flowing {
-                    let d = self.desired[&nodes[child].id];
-                    let m = nodes[child].style.margin;
+                    let cs = nodes[child].style;
+                    let align = cs.align_self.unwrap_or(s.align);
+                    let w = self.child_width(child, s, content.width, nodes);
+                    let h = cs
+                        .height
+                        .resolve(content.height)
+                        .unwrap_or(if align == Align::Stretch {
+                            (content.height - cs.margin.vertical()).max(0.)
+                        } else {
+                            self.desired[&nodes[child].id].height
+                        })
+                        .clamp(cs.min_height, cs.max_height);
+                    let x = match align {
+                        Align::Center => {
+                            (content.width - w + cs.margin.left - cs.margin.right) / 2.
+                        }
+                        Align::End => content.width - w - cs.margin.right,
+                        _ => cs.margin.left,
+                    };
+                    let y = match align {
+                        Align::Center => {
+                            (content.height - h + cs.margin.top - cs.margin.bottom) / 2.
+                        }
+                        Align::End => content.height - h - cs.margin.bottom,
+                        _ => cs.margin.top,
+                    };
+                    self.reflow(child, w, Some(h), nodes)?;
                     self.arrange(
                         child,
-                        Rect::new(
-                            content.x + m.left,
-                            content.y + m.top,
-                            nodes[child].style.width.resolve(content.width).unwrap_or(
-                                if s.align == Align::Stretch {
-                                    (content.width - m.horizontal()).max(0.)
-                                } else {
-                                    d.width
-                                },
-                            ),
-                            nodes[child].style.height.resolve(content.height).unwrap_or(
-                                if s.align == Align::Stretch {
-                                    (content.height - m.vertical()).max(0.)
-                                } else {
-                                    d.height
-                                },
-                            ),
-                        ),
+                        Rect::new(content.x + x, content.y + y, w, h),
                         nodes[i].clip,
                         Size::new(content.width, content.height),
                         nodes,
@@ -583,73 +654,14 @@ impl Tree<'_> {
                 }
             } else {
                 let horiz = horizontal(n.kind);
-                let main_limit = if horiz { content.width } else { content.height };
                 let cross_limit = if horiz { content.height } else { content.width };
                 let gap = if n.kind == Kind::Fragment { 0. } else { s.gap };
-                let mut lines: Vec<Vec<usize>> = vec![Vec::new()];
-                let mut used = 0.;
-                for child in flowing {
-                    let d = self.desired[&nodes[child].id];
-                    let m = nodes[child].style.margin.main(horizontal(n.kind));
-                    let main = if horiz { d.width } else { d.height };
-                    if horiz && s.wrap && used > 0. && used + gap + main + m > main_limit {
-                        lines.push(Vec::new());
-                        used = 0.;
-                    }
-                    if used > 0. {
-                        used += gap;
-                    }
-                    used += main + m;
-                    lines.last_mut().unwrap().push(child);
-                }
+                let lines = self.lines(i, Size::new(content.width, content.height), nodes);
                 let mut line_offset = 0.;
-                for line in lines {
-                    if line.is_empty() {
-                        continue;
-                    }
-                    let natural: Vec<f64> = line
-                        .iter()
-                        .map(|c| {
-                            let d = self.desired[&nodes[*c].id];
-                            let style = nodes[*c].style;
-                            if horiz {
-                                style
-                                    .basis
-                                    .resolve(main_limit)
-                                    .or_else(|| style.width.resolve(main_limit))
-                                    .unwrap_or(d.width)
-                            } else {
-                                style
-                                    .basis
-                                    .resolve(main_limit)
-                                    .or_else(|| style.height.resolve(main_limit))
-                                    .unwrap_or(d.height)
-                            }
-                        })
-                        .collect();
-                    let margins: f64 = line
-                        .iter()
-                        .map(|c| nodes[*c].style.margin.main(horiz))
-                        .sum();
-                    let available =
-                        (main_limit - margins - gap * line.len().saturating_sub(1) as f64).max(0.);
-                    let mut sizes = flex_sizes(
-                        &line,
-                        &natural,
-                        available,
-                        horiz,
-                        !matches!(n.kind, Kind::Block | Kind::Fragment | Kind::Scroll),
-                        nodes,
-                    );
-                    if n.kind == Kind::Fragment
-                        && line.len() == 1
-                        && nodes[line[0]].style.height == Length::Auto
-                    {
-                        sizes[0] = available.clamp(
-                            nodes[line[0]].style.min_height,
-                            nodes[line[0]].style.max_height,
-                        );
-                    }
+                for plan in lines {
+                    let line = plan.items;
+                    let sizes = plan.sizes;
+                    let available = plan.free + sizes.iter().sum::<f64>();
                     let allocated: f64 = sizes.iter().sum();
                     let remaining = (available - allocated).max(0.);
                     let mut cursor = match s.justify {
@@ -667,23 +679,11 @@ impl Tree<'_> {
                             0.
                         };
                     let line_cross = if horiz && s.wrap {
-                        line.iter()
-                            .map(|c| {
-                                self.desired[&nodes[*c].id].height
-                                    + nodes[*c].style.margin.vertical()
-                            })
-                            .fold(0., f64::max)
+                        self.line_metrics(&line, s.align, nodes).0
                     } else {
                         cross_limit
                     };
-                    let baseline = line
-                        .iter()
-                        .map(|c| {
-                            self.layouts[&nodes[*c].id].baseline
-                                + nodes[*c].style.padding.top
-                                + nodes[*c].style.margin.top
-                        })
-                        .fold(0., f64::max);
+                    let mut baseline_children = Vec::new();
                     for (j, child) in line.iter().enumerate() {
                         let cs = nodes[*child].style;
                         let desired = self.desired[&nodes[*child].id];
@@ -701,11 +701,13 @@ impl Tree<'_> {
                             if horiz { cs.max_height } else { cs.max_width },
                         );
                         let offset = match align {
-                            Align::Center => (line_cross - cross) / 2.,
-                            Align::End => line_cross - cross - cs.margin.after(!horiz),
-                            Align::Baseline if horiz => {
-                                baseline - self.layouts[&nodes[*child].id].baseline - cs.padding.top
+                            Align::Center => {
+                                (line_cross - cross + cs.margin.before(!horiz)
+                                    - cs.margin.after(!horiz))
+                                    / 2.
                             }
+                            Align::End => line_cross - cross - cs.margin.after(!horiz),
+                            Align::Baseline if horiz => cs.margin.top,
                             _ => cs.margin.before(!horiz),
                         };
                         let r = if horiz {
@@ -723,6 +725,7 @@ impl Tree<'_> {
                                 sizes[j],
                             )
                         };
+                        self.reflow(*child, r.width, Some(r.height), nodes)?;
                         self.arrange(
                             *child,
                             r,
@@ -730,7 +733,19 @@ impl Tree<'_> {
                             Size::new(content.width, content.height),
                             nodes,
                         )?;
+                        if horiz && align == Align::Baseline {
+                            baseline_children.push(*child);
+                        }
                         cursor += sizes[j] + cs.margin.main(horiz) + spacing;
+                    }
+                    let ascent = baseline_children
+                        .iter()
+                        .map(|c| nodes[*c].bounds.y - content.y - line_offset + nodes[*c].baseline)
+                        .fold(0., f64::max);
+                    for child in baseline_children {
+                        let current =
+                            nodes[child].bounds.y - content.y - line_offset + nodes[child].baseline;
+                        self.translate(child, ascent - current, nodes[i].clip, nodes);
                     }
                     line_offset += line_cross + gap;
                 }
@@ -752,6 +767,7 @@ impl Tree<'_> {
                 } else {
                     cs.width.resolve(content.width).unwrap_or(d.width)
                 };
+                let w = w.clamp(cs.min_width, cs.max_width);
                 let h = if cs.height == Length::Auto
                     && let (Some(t), Some(b)) = (t, b)
                 {
@@ -759,6 +775,8 @@ impl Tree<'_> {
                 } else {
                     cs.height.resolve(content.height).unwrap_or(d.height)
                 };
+                let h = h.clamp(cs.min_height, cs.max_height);
+                self.reflow(child, w, Some(h), nodes)?;
                 self.arrange(
                     child,
                     Rect::new(
@@ -817,6 +835,33 @@ impl Tree<'_> {
             );
             self.layouts.insert(n.id, layout);
         }
+        nodes[i].baseline = if header(n.kind) && !n.text.is_empty() {
+            s.padding.top + self.layouts[&n.id].baseline
+        } else if container(n.kind) {
+            self.children
+                .get(&Some(n.id))
+                .into_iter()
+                .flatten()
+                .find(|c| nodes[**c].style.position != Position::Absolute)
+                .map_or(bounds.height, |c| {
+                    nodes[*c].bounds.y - bounds.y + nodes[*c].baseline
+                })
+        } else if matches!(
+            n.kind,
+            Kind::Label
+                | Kind::RichText
+                | Kind::TextField
+                | Kind::Button
+                | Kind::Toggle
+                | Kind::Segment
+                | Kind::CheckBox
+                | Kind::Radio
+                | Kind::Switch
+        ) {
+            nodes[i].text_bounds.y - bounds.y + self.layouts[&n.id].baseline
+        } else {
+            bounds.height
+        };
         Ok(())
     }
 }

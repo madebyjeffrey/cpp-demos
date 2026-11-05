@@ -47,8 +47,8 @@ defines the intended evidence. Existing Rust contracts are in the
 ## M1 — Inventory, layout and scrolling
 
 - [x] **M1.1 Inventory closure:** map every current SCARS control, model, modifier and option family to an implemented Rust equivalent or a remaining checklist item. Document intentional interface changes; no unexplained omissions.
-- [ ] **M1.2 Style coverage:** finish per-edge insets, flex basis/self-alignment/spacing, relative positioning, text alignment/overflow/line limits, label styles, accent/density and separator orientation where the inventory requires them.
-- [ ] **M1.3 Layout correctness:** exercise wrapping/reflow, grow/shrink redistribution at min/max limits, percentages, baselines, clipping and layered hit order under constrained sizes.
+- [x] **M1.2 Style coverage:** finish per-edge insets, flex basis/self-alignment/spacing, relative positioning, text alignment/overflow/line limits, label styles, accent/density and separator orientation where the inventory requires them.
+- [x] **M1.3 Layout correctness:** exercise wrapping/reflow, grow/shrink redistribution at min/max limits, percentages, baselines, clipping and layered hit order under constrained sizes.
 - [ ] **M1.4 Two-axis scrolling:** horizontal/vertical/both axes, visible draggable scrollbars, wheel/trackpad transport and programmatic offset/query interfaces with clamping.
 - [ ] **M1.5 Scroll/input lifetime:** nested wheel propagation, two-axis focus/caret reveal, keyboard scrolling, drag autoscroll and capture cancellation on blur, hide, removal and unmount.
 
@@ -68,9 +68,16 @@ Completion record (in progress):
   Example: `cargo run --example m1_layout` (also `--light` / `--render file.png`).
   Evidence: four portable style/geometry tests plus a real SkParagraph limits,
   alignment and cache test; existing workspace tests and strict Clippy pass.
-- M1 remains open: rich inline text/box behavior, complete wrapping/reflow and
-  baseline cases, two-axis scrolling/scrollbars and input lifetime closure still
-  require implementation and evidence. The other M1 checkboxes remain unchecked.
+- M1.2/M1.3 closure: shared width-dependent reflow propagates wrapped heights to
+  ancestors and following siblings; baseline alignment includes inline controls,
+  nested padding and control text centering. `rich_text` shapes styled `Span`s and
+  inline `View`s in one SkParagraph; clipped/ellipsized children keep identity but
+  become inert. Five portable reflow/order tests and four raster rich-text tests
+  cover resizing, baselines, clipping, subtree stacking, painting and interaction.
+  Workspace tests and strict Clippy pass; dark/light `m1_layout` previews inspected.
+  Checkpoint commits: `53a4202` (styles), next commit (reflow/rich text).
+- M1 remains open for two-axis scrolling/scrollbars and input lifetime closure
+  (M1.4–M1.5). Native visual/interactive audits remain in M5/M8.
 
 
 ## M2 — Editing and specialized fields

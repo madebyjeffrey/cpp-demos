@@ -131,7 +131,7 @@ impl Host {
             let m = self.0.mounted.borrow();
             m.nodes
                 .iter()
-                .find(|n| n.id == id && n.enabled && !n.hidden && !n.read_only)
+                .find(|n| n.id == id && n.enabled && !n.hidden && !n.layout_hidden && !n.read_only)
                 .and_then(|_| m.descriptions.get(&id))
                 .and_then(|d| {
                     if let Data::Text(b) = &d.data {
@@ -167,7 +167,7 @@ impl Host {
         let Some(node) = m
             .nodes
             .iter()
-            .find(|n| n.id == id && n.enabled && !n.hidden)
+            .find(|n| n.id == id && n.enabled && !n.hidden && !n.layout_hidden)
         else {
             return Ok(None);
         };

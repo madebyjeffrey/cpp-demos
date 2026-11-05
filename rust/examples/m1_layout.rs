@@ -15,7 +15,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         button("Receives remaining space",basis:100,grow:3,align_self:Align::End,on_click:||{});
                     }
                 }
-                row(gap:20,grow:1){
+                panel(padding:16,shrink:0){
+                rich_text(vec!["Styled ".into(),Span::new("text").bold(true).font_size(22.).into(),
+                    " and an ".into(),View::button("inline control",enabled.action(|v|v.update(|v|*v = !*v))).key("inline-toggle").into(),
+                    " share the same paragraph. Resize to see the sentence reflow around the control.".into(),
+                ]);
+            }
+            row(gap:20,grow:1){
                     panel(width:percent(50.),padding:[16.,20.,20.,16.],gap:14){
                         label("Typography",label_style:LabelStyle::Section);
                         label("This line is intentionally much longer than the panel and ends with an ellipsis.",text_overflow:TextOverflow::Ellipsis,max_lines:1);
@@ -35,7 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         row(justify:Justify::SpaceAround){button("A",on_click:||{});button("B",on_click:||{});}
                     }
                 }
-                label("The completion checklist remains open for rich inline text, full reflow and two-axis scrolling.",label_style:LabelStyle::Micro,wrap:true,shrink:0);
+                label("Styled paragraphs and reflow are implemented. Two-axis scrolling is next on the checklist.",label_style:LabelStyle::Micro,wrap:true,shrink:0);
             }
         }
     })

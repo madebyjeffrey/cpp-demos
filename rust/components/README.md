@@ -273,5 +273,13 @@ how small a compact control can be. Separators accept `orientation`.
 
 Custom `Measure` implementations can use `TextStyle::default()` for added text
 options. `Style.padding`/`margin` are now `Insets`; ordinary `.padding(24)` builder
-and macro code remains concise. Rich inline spans and complete reflow are still
-pending; the new properties alone do not close those checklist requirements.
+and macro code remains concise. Width-dependent reflow propagates wrapping to
+ancestors and following siblings; baseline alignment uses the shaped text baseline.
+
+`rich_text(vec!["Read ".into(), Span::new("this").bold(true).into(),
+View::button("Open", action).into()])` shapes spans and real inline controls together.
+Spans inherit text styles and can override font size, color, weight, line height and
+spacing. Inline views keep normal state, events and keys; ellipsis hides omitted
+controls from input. Custom measurement providers implementing rich text must
+provide `Measure::paragraph` and its `TextLayout.placeholders`; the default returns
+an unsupported error. `TextLayout.baseline` is relative to the paragraph origin.

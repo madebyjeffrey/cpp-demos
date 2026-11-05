@@ -22,6 +22,7 @@ impl fmt::Display for NodeId {
 pub struct Node {
     pub id: NodeId,
     pub parent: Option<NodeId>,
+    pub(crate) slot: usize,
     pub depth: usize,
     pub kind: Kind,
     pub key: Option<String>,
@@ -30,12 +31,16 @@ pub struct Node {
     pub bounds: Rect,
     pub clip: Rect,
     pub text_bounds: Rect,
+    pub baseline: f64,
+    pub spans: Option<Vec<crate::ParagraphSpan>>,
+    pub(crate) rich: Option<Vec<crate::rich_text::Run>>,
     pub text_style: TextStyle,
     pub accent: u32,
     pub density: crate::Density,
     pub style: Style,
     pub enabled: bool,
     pub hidden: bool,
+    pub(crate) layout_hidden: bool,
     pub read_only: bool,
     pub secure: bool,
     pub multiline: bool,
@@ -174,6 +179,7 @@ impl Host {
                     m.descriptions[&n.id].autofocus
                         && n.enabled
                         && !n.hidden
+                        && !n.layout_hidden
                         && !old.descriptions.contains_key(&n.id)
                 })
                 .map(|n| n.id)
@@ -204,10 +210,9 @@ impl Host {
             }
             let mut i = self.0.interaction.borrow_mut();
             if i.focus.is_some_and(|id| {
-                !mounted
-                    .nodes
-                    .iter()
-                    .any(|n| n.id == id && n.enabled && !n.hidden && focusable(n.kind))
+                !mounted.nodes.iter().any(|n| {
+                    n.id == id && n.enabled && !n.hidden && !n.layout_hidden && focusable(n.kind)
+                })
             }) {
                 i.focus = None;
             }
@@ -215,7 +220,7 @@ impl Host {
                 !mounted
                     .nodes
                     .iter()
-                    .any(|n| n.id == id && n.enabled && !n.hidden)
+                    .any(|n| n.id == id && n.enabled && !n.hidden && !n.layout_hidden)
             }) {
                 i.pressed = None;
             }
@@ -229,6 +234,7 @@ impl Host {
         let editors = self.0.editors.borrow();
         let mut nodes = self.0.mounted.borrow().nodes.clone();
         for n in &mut nodes {
+            n.hidden |= n.layout_hidden;
             n.focused = i.focus == Some(n.id) && i.active;
             n.pressed = i.pressed == Some(n.id);
             n.hovered = i.hovered == Some(n.id);
@@ -244,7 +250,9 @@ impl Host {
             let m = self.0.mounted.borrow();
             m.nodes
                 .iter()
-                .find(|n| n.id == id && n.enabled && !n.hidden && self.in_scope(n.id))
+                .find(|n| {
+                    n.id == id && n.enabled && !n.hidden && !n.layout_hidden && self.in_scope(n.id)
+                })
                 .and_then(|n| {
                     m.descriptions
                         .get(&id)
@@ -294,6 +302,7 @@ impl Host {
                     n.id == id
                         && n.enabled
                         && !n.hidden
+                        && !n.layout_hidden
                         && !n.read_only
                         && self.in_scope(n.id)
                         && n.kind == Kind::Slider
@@ -316,7 +325,11 @@ impl Host {
     pub fn needs_animation(&self) -> bool {
         self.0.interaction.borrow().active
             && self.0.mounted.borrow().nodes.iter().any(|n| {
-                n.kind == Kind::Progress && n.value == Value::None && !n.hidden && n.enabled
+                n.kind == Kind::Progress
+                    && n.value == Value::None
+                    && !n.hidden
+                    && !n.layout_hidden
+                    && n.enabled
             })
     }
 }
@@ -383,6 +396,7 @@ fn mount(
     next.nodes.push(Node {
         id,
         parent,
+        slot: index,
         depth: path.len() - 1,
         kind: d.kind,
         key: d.key.clone(),
@@ -391,6 +405,9 @@ fn mount(
         bounds: Rect::default(),
         clip: Rect::default(),
         text_bounds: Rect::default(),
+        baseline: 0.,
+        spans: None,
+        rich: d.rich.clone(),
         text_style: TextStyle {
             size: 15.,
             color: 0xff000000,
@@ -403,6 +420,7 @@ fn mount(
         style: d.style,
         enabled: enabled && d.enabled,
         hidden: hidden || d.hidden,
+        layout_hidden: false,
         read_only: d.read_only,
         secure: d.secure,
         multiline: d.multiline,
@@ -442,6 +460,13 @@ fn mount(
 }
 pub(crate) fn validate(d: &Description) -> Result<(), Error> {
     let s = d.style;
+    if let Some(runs) = &d.rich {
+        for run in runs {
+            if let crate::rich_text::Run::Text(span) = run {
+                span.style.validate()?;
+            }
+        }
+    }
     if [
         s.padding.top,
         s.padding.right,

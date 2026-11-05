@@ -39,12 +39,29 @@ impl TextStyle {
 pub struct TextLayout {
     pub size: Size,
     pub baseline: f64,
+    pub placeholders: Vec<Rect>,
     pub hit_test: Rc<dyn Fn(Point) -> usize>,
     pub range_rects: Rc<dyn Fn(Range<usize>) -> Vec<Rect>>,
+}
+/// Fully resolved runs passed to the shaping provider; no native or view handles.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ParagraphSpan {
+    Text { text: String, style: TextStyle },
+    Box { size: Size, baseline: f64 },
 }
 /// Pure measurement seam; implementations must not mutate state or reenter a host.
 pub trait Measure {
     fn text(&self, text: &str, style: TextStyle, width: f64) -> TextLayout;
+    fn paragraph(
+        &self,
+        _spans: &[ParagraphSpan],
+        _style: TextStyle,
+        _width: f64,
+    ) -> Result<TextLayout, Error> {
+        Err(Error(
+            "This measurement provider does not support rich paragraphs".into(),
+        ))
+    }
     fn image(&self, image: &Bitmap) -> Result<Size, Error>;
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -135,6 +152,7 @@ pub(crate) fn field_layout(
     let rects = layout.range_rects.clone();
     let indices = boundaries.clone();
     TextLayout {
+        placeholders: Vec::new(),
         size: layout.size,
         baseline: layout.baseline,
         hit_test: Rc::new(move |p| indices[(hit(p) / 3).min(indices.len() - 1)]),
