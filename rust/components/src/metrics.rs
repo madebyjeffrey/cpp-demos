@@ -101,6 +101,17 @@ pub trait Measure {
             "This measurement provider does not support rich paragraphs".into(),
         ))
     }
+    /// Shape sensitive text without retaining the plaintext in a renderer cache.
+    fn sensitive_text(
+        &self,
+        _text: &str,
+        _style: TextStyle,
+        _width: f64,
+    ) -> Result<TextLayout, Error> {
+        Err(Error(
+            "This measurement provider cannot shape revealed passwords".into(),
+        ))
+    }
     fn image(&self, image: &Bitmap) -> Result<Size, Error>;
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -178,12 +189,17 @@ pub(crate) fn field_layout(
     measure: &dyn Measure,
     text: &str,
     secure: bool,
+    revealed: bool,
     style: TextStyle,
     width: f64,
-) -> TextLayout {
+) -> Result<TextLayout, Error> {
     if !secure {
-        return measure.text(text, style, width);
+        return Ok(measure.text(text, style, width));
     }
+    if revealed {
+        return measure.sensitive_text(text, style, width);
+    }
+
     let boundaries = crate::text::grapheme_boundaries(text);
     let mask = "•".repeat(boundaries.len().saturating_sub(1));
     let layout = measure.text(&mask, style, width);
@@ -202,7 +218,7 @@ pub(crate) fn field_layout(
             line
         })
         .collect();
-    TextLayout {
+    Ok(TextLayout {
         lines,
         placeholders: Vec::new(),
         size: layout.size,
@@ -219,5 +235,5 @@ pub(crate) fn field_layout(
                 * 3;
             rects(start..end)
         }),
-    }
+    })
 }

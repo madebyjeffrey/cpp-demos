@@ -32,7 +32,7 @@ overall goal complete while an in-scope item remains open.
 | --- | --- | --- |
 | State and descriptions | Reactive bindings, keys, macro conditions/repetition, host identity and inventory mapping | Ergonomic coverage of remaining component behaviors |
 | Layout and basic controls | Inventory, constrained layout, rich text, style coverage and two-axis scrolling verified | Final cross-component visual/semantic audit in M5/M8 |
-| Editing | Shared text buffer, visual/logical navigation, selection gestures, composition and bounded/coalesced history | Integrated search, password and numeric/stepper policies |
+| Editing | Shared text buffer, visual/logical navigation, selection gestures, composition and bounded/coalesced history | Numeric/stepper policy; final interactive IME audit |
 | Presentation | Popups, focus scopes, simple menus, tabs, slider-controlled split, basic alerts | Complete interactions, retained page state and presentation transactions |
 | Collections | Fixed-height virtualization, keyed selection, basic trees/tables, cell conflict checks | Lazy tree lifecycle, cell/column interactions, richer selection and semantics |
 | Values and tooling | Typed drafts, sRGB/hex, calendar, ISO/zoned editing, picking/width overrides | Complete value-control policies and inspector/Lab coverage |
@@ -95,8 +95,8 @@ Completion record:
 - [x] **M2.1 Shared text model:** provide a reusable Rust text-buffer interface for selection, committed text, composition, history and external replacement without requiring a native window. Retain existing grapheme/UTF-16 guarantees.
 - [x] **M2.2 Navigation:** visual up/down and line/page movement through wrapped text, preferred horizontal caret position, word/line deletion and selection extension; distinguish line boundaries from document boundaries.
 - [x] **M2.3 Selection and history:** word/line selection gestures, drag selection outside the viewport, appropriate typing coalescing and history limits; composition, readonly and grapheme-counted maximum-length cases.
-- [ ] **M2.4 Search field:** integrated clear/cancel, query/submit callbacks and configurable debounce. Cancel pending work on replacement, removal and deactivation without an idle animation loop.
-- [ ] **M2.5 Password policy:** explicit reveal, undo, readonly and length options; verify masking, clipboard/accessibility restrictions, composition and balanced native secure-input ownership through every transition.
+- [x] **M2.4 Search field:** integrated clear/cancel, query/submit callbacks and configurable debounce. Cancel pending work on replacement, removal and deactivation without an idle animation loop.
+- [x] **M2.5 Password policy:** explicit reveal, undo, readonly and length options; verify masking, clipboard/accessibility restrictions, composition and balanced native secure-input ownership through every transition.
 - [ ] **M2.6 Numeric/stepper policy:** standalone stepper, configurable precision/validation states, blur/submit/cancel policy and press-and-hold repeat deadlines; preserve exact integer arithmetic and invalid/incomplete drafts.
 
 Evidence: extend the editor example; Unicode/visual navigation and IME/history tests;
@@ -127,8 +127,27 @@ Completion record (in progress):
   replacement as one undo step, line/document commands and candidate rectangle/
   index coordinate conversion. Dark/light `m2_editor` previews inspected and its
   native smoke run passes. Actual interactive VoiceOver/IME sessions remain M5.5.
-- M2 remains open for integrated search, password reveal/secure-input policies and
-  numeric/stepper policies (M2.4–M2.6).
+- M2.4: search fields provide real clear buttons, Escape/cancel, query/submit
+  hooks and scoped one-shot debounce. Only committed accepted edits are queried;
+  external replacement, readonly/disable/hide/removal, blur/deactivation and
+  unmount cancel pending work. Submit flushes its own query first and rechecks
+  lifetime after callbacks. `State::handler` captures event payload callbacks
+  without application-side reference-counting boilerplate.
+- M2.5: passwords default to masked/no undo; reveal and undo are explicit options.
+  Readonly and grapheme limits share the text buffer. Reveal remasks on Escape,
+  focus loss/deactivation/hide/removal, remains sensitive for clipboard and AX,
+  and shapes/paints without retaining plaintext in the paragraph cache. Native
+  search/password subroles and accessible child buttons are implemented.
+- Evidence: six portable field/callback tests; real renderer cache/painting test;
+  native protocol tests for revealed-password AX/copy/cut/composition and scoped
+  search unmount; secure-ownership success/failure/nesting unit test. Actual
+  `SCARS_WINDOW_SECURE_INPUT_TESTS=1 cargo test --test secure_input` **passed**
+  Carbon transitions through reveal, readonly/disable, focus/deactivation/hide,
+  unmount/replacement and close on a foreground desktop. Workspace tests, strict
+  Clippy and portable compilation pass. `m2_fields` dark/light previews inspected
+  and native smoke run passes. These protocol/ownership checks do not replace the
+  actual VoiceOver/IME audit in M5.5 or final Metal pixel runs in M8.1.
+- M2 remains open for numeric/standalone-stepper policies (M2.6).
 
 
 ## M3 — Navigation and presentation

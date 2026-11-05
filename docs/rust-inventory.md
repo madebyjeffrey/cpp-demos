@@ -48,8 +48,8 @@ wrapping a row of independent labels alone does not close that behavior.
 | `ForEach`, `If` | Rust `for`/`if` inside `view!`, stable keyed descriptions; no duplicate wrapper classes required | M7.3 |
 | `ScrollView`, `ScrollAxes`, `ScrollViewOptions` | Both-axis scrolling, overlay bars, clamped queries/actions, nested wheel transport, keyboard/caret reveal and capture lifetime implemented | M1.4–M1.5 |
 | `TextField`, `TextFieldOptions`, `TextEditor` | Single/multiline controls share TextBuffer; readonly/length/history policy, visual navigation and word/line selection implemented | M2.1–M2.3 |
-| `SearchField`, `SearchFieldOptions` | Currently a plain field alias with generic deadline primitives; integrated search semantics/options missing | M2.4 |
-| `PasswordField`, `PasswordFieldOptions` | Masking/native secure input/clipboard restrictions exist; reveal, undo and length policies partial | M2.5 |
+| `SearchField`, `SearchFieldOptions` | Integrated clear/cancel, committed query/submit hooks, scoped one-shot debounce and lifetime cancellation implemented | M2.4 |
+| `PasswordField`, `PasswordFieldOptions` | Explicit reveal/undo, readonly/grapheme limits, uncached sensitive painting and clipboard/AX restrictions implemented; actual native ownership transitions tested | M2.5 |
 | `NumericField`, `Stepper`, `NumericOptions`, `NumericStatus`, `NumericValidation` | Exact `Numeric<T>`/`Draft<T>` and +/- composition exist; standalone repeat stepper and complete precision/commit/validation policies pending | M2.6, M6.1–M6.2, M6.6 |
 | `MenuButton`, `MenuItem`, `MenuItemKind`, `Action` | Flat `Popup::menu`/`MenuAction` composition; menu kinds, hierarchy, metadata and navigation partial | M3.2 |
 | `SelectionDropdown` | Existing dropdown/button+overlay composition; richer menu navigation and semantics pending | M3.2, M5.3 |

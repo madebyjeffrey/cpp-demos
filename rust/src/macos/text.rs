@@ -14,23 +14,37 @@ pub(super) fn sync_secure_input(s: &Rc<SurfaceState>, force_off: bool) {
         && s.native.isVisible()
         && s.app.upgrade().is_some_and(|a| a.native.isActive())
         && snapshot(s).is_some_and(|state| state.active && state.editable && state.secure);
-    if desired == s.secure_input.get() {
-        return;
-    }
     // SAFETY: Main-thread process-level secure input nesting is tracked per surface.
-    let status = unsafe {
-        if desired {
+    if transition(&s.secure_input, desired, |enable| unsafe {
+        if enable {
             EnableSecureEventInput()
         } else {
             DisableSecureEventInput()
         }
-    };
-    if status == 0 {
-        s.secure_input.set(desired);
-    } else if let Some(app) = s.app.upgrade() {
+    })
+    .is_err()
+        && let Some(app) = s.app.upgrade()
+    {
         report(&app, error("Cannot change macOS secure input state"));
     }
 }
+fn transition(
+    owned: &Cell<bool>,
+    desired: bool,
+    change: impl FnOnce(bool) -> i32,
+) -> std::result::Result<(), i32> {
+    if desired == owned.get() {
+        return Ok(());
+    }
+    let status = change(desired);
+    if status == 0 {
+        owned.set(desired);
+        Ok(())
+    } else {
+        Err(status)
+    }
+}
+
 pub(super) fn deactivate_input(s: &Rc<SurfaceState>) {
     sync_secure_input(s, true);
     let client = s.text_input.borrow().clone();
@@ -91,6 +105,38 @@ pub(super) fn substring(text: &str, r: NSRange) -> Option<(String, NSRange)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn secure_ownership_balances_successes_retries_failures_and_multiple_owners() {
+        let first = Cell::new(false);
+        let second = Cell::new(false);
+        let nesting = Cell::new(3);
+        let change = |enabled| {
+            nesting.set(nesting.get() + if enabled { 1 } else { -1 });
+            0
+        };
+        for _ in 0..3 {
+            transition(&first, true, change).unwrap();
+        }
+        transition(&second, true, change).unwrap();
+        assert_eq!(nesting.get(), 5);
+        for _ in 0..3 {
+            transition(&first, false, change).unwrap();
+        }
+        assert_eq!(nesting.get(), 4);
+        transition(&second, false, change).unwrap();
+        assert_eq!(nesting.get(), 3);
+        assert!(transition(&first, true, |_| -1).is_err());
+        assert!(!first.get());
+        transition(&first, false, |_| {
+            panic!("failed enable must not be disabled")
+        })
+        .unwrap();
+        transition(&first, true, change).unwrap();
+        assert!(transition(&first, false, |_| -1).is_err());
+        assert!(first.get());
+        transition(&first, false, change).unwrap();
+        assert_eq!(nesting.get(), 3);
+    }
     #[test]
     fn ime_ranges_preserve_surrogate_pairs_and_bound_extreme_ranges() {
         let (s, actual) = substring("A😀B", NSRange::new(2, 1)).unwrap();

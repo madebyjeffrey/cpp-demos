@@ -97,7 +97,7 @@ impl Host {
             marked: e.marked.clone(),
             editable: !node.read_only,
             active: i.active,
-            bounds: node.bounds.inset(10.),
+            bounds: node.edit_bounds(),
             secure: node.secure,
             multiline: node.multiline,
             can_undo: e.can_undo(),
@@ -188,10 +188,14 @@ impl Host {
                 }
             })
         };
+        let previous = self.0.editors.borrow().get(&id).map(|e| e.source.clone());
         let text = self.0.editors.borrow().get(&id).map(|e| e.text.clone());
         if let (Some(binding), Some(text)) = (binding, text) {
             binding.set(text);
             let accepted = binding.get();
+            if previous.as_ref() != Some(&accepted) {
+                self.search_changed(id, accepted.clone(), false);
+            }
             if let Some(e) = self.0.editors.borrow_mut().get_mut(&id) {
                 e.source = accepted.clone();
                 if e.text != accepted {
@@ -217,6 +221,16 @@ impl Host {
             return self.insert_text("\n", None);
         }
         if command == TextCommand::Escape {
+            let remasked = if let Some(state) = self.0.fields.borrow_mut().get_mut(&input.id) {
+                let revealed = state.revealed;
+                state.revealed = false;
+                revealed
+            } else {
+                false
+            };
+            if remasked {
+                self.redraw();
+            }
             if self.unmark_text(false)? {
                 return Ok(true);
             }
@@ -227,21 +241,47 @@ impl Host {
                 .descriptions
                 .get(&input.id)
                 .and_then(|d| d.cancel.clone());
+            let search = self
+                .0
+                .mounted
+                .borrow()
+                .nodes
+                .iter()
+                .any(|n| n.id == input.id && n.field_kind == crate::TextFieldKind::Search);
+            if search {
+                self.clear_search(input.id)?;
+            }
             if let Some(action) = action {
                 action();
                 return Ok(true);
             }
-            return Ok(false);
+            return Ok(search || remasked);
         }
         if command == TextCommand::Enter {
             self.unmark_text(true)?;
-            let action = self
+            let source = self
                 .0
-                .mounted
+                .editors
                 .borrow()
-                .descriptions
                 .get(&input.id)
-                .and_then(|d| d.action.clone());
+                .map(|e| e.source.clone());
+            self.flush_search(input.id);
+            self.refresh()?;
+            let action = {
+                let m = self.0.mounted.borrow();
+                m.nodes
+                    .iter()
+                    .find(|n| {
+                        n.id == input.id
+                            && n.enabled
+                            && !n.hidden
+                            && !n.layout_hidden
+                            && self.0.interaction.borrow().active
+                            && matches!(&n.value,crate::Value::Text(v) if Some(v)==source.as_ref())
+                    })
+                    .and_then(|_| m.descriptions.get(&input.id))
+                    .and_then(|d| d.action.clone())
+            };
             if let Some(action) = action {
                 action();
             }

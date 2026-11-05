@@ -299,6 +299,7 @@ cargo test --workspace --locked
 cargo check -p scars-ui --lib --target x86_64-unknown-linux-gnu --locked
 SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --locked --test desktop
 SCARS_WINDOW_FULLSCREEN_TESTS=1 cargo test --locked --test fullscreen
+SCARS_WINDOW_SECURE_INPUT_TESTS=1 cargo test --locked --test secure_input
 cargo run --locked --example windows -- --smoke
 cargo run --locked --example stage1 -- --smoke
 ```

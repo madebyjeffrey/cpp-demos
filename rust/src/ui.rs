@@ -112,6 +112,15 @@ impl Renderer {
         ts
     }
     fn shaped_runs(&self, spans: &[ParagraphSpan], style: TextStyle, width: f64) -> Shaped {
+        self.shape_runs(spans, style, width, true)
+    }
+    fn shape_runs(
+        &self,
+        spans: &[ParagraphSpan],
+        style: TextStyle,
+        width: f64,
+        cache: bool,
+    ) -> Shaped {
         let mut key = Self::key("", style, width);
         key.runs = spans
             .iter()
@@ -126,7 +135,7 @@ impl Renderer {
                 ),
             })
             .collect();
-        if let Some(shaped) = self.text.borrow().get(&key) {
+        if cache && let Some(shaped) = self.text.borrow().get(&key) {
             return Shaped {
                 paragraph: shaped.paragraph.clone(),
                 layout: shaped.layout.clone(),
@@ -307,16 +316,18 @@ impl Renderer {
                 vec![Rect::new(0., 0., 1., font * 1.2)]
             }),
         };
-        if self.text.borrow().len() >= 512 {
-            self.text.borrow_mut().clear();
+        if cache {
+            if self.text.borrow().len() >= 512 {
+                self.text.borrow_mut().clear();
+            }
+            self.text.borrow_mut().insert(
+                key,
+                Shaped {
+                    paragraph: paragraph.clone(),
+                    layout: layout.clone(),
+                },
+            );
         }
-        self.text.borrow_mut().insert(
-            key,
-            Shaped {
-                paragraph: paragraph.clone(),
-                layout: layout.clone(),
-            },
-        );
         Shaped { paragraph, layout }
     }
     fn image(&self, bitmap: &Bitmap) -> Result<skia::Image, Error> {
@@ -545,7 +556,7 @@ impl Renderer {
                     .borrow()
                     .paint(canvas, (n.text_bounds.x as f32, n.text_bounds.y as f32));
             }
-            let masked = if n.secure {
+            let masked = if n.secure && !n.revealed {
                 if let Value::Text(v) = &n.value {
                     "•".repeat(text::grapheme_boundaries(v).len().saturating_sub(1))
                 } else {
@@ -554,7 +565,7 @@ impl Renderer {
             } else {
                 String::new()
             };
-            let text = if n.secure && !masked.is_empty() {
+            let text = if n.secure && !n.revealed && !masked.is_empty() {
                 masked.as_str()
             } else if n.kind == Kind::TextField {
                 if let Value::Text(value) = &n.value {
@@ -579,7 +590,7 @@ impl Renderer {
                 style.color = fg;
                 if n.kind == Kind::TextField {
                     canvas.save();
-                    canvas.clip_rect(skrect(b.inset(6.)), None, true);
+                    canvas.clip_rect(skrect(n.edit_bounds()), None, true);
                     if let Some(input) = &input
                         && input.id == n.id
                     {
@@ -588,18 +599,22 @@ impl Renderer {
                         }
                     }
                 }
-                self.shaped(
-                    text,
+                self.shape_runs(
+                    &[ParagraphSpan::Text {
+                        text: text.into(),
+                        style,
+                    }],
                     style,
                     if style.constrained() {
                         if n.kind == Kind::TextField {
-                            b.width - 20.
+                            n.edit_bounds().width
                         } else {
                             n.text_bounds.width
                         }
                     } else {
                         f64::INFINITY
                     },
+                    !n.secure || !n.revealed,
                 )
                 .paragraph
                 .borrow()
@@ -613,7 +628,7 @@ impl Renderer {
                 && input.active
             {
                 canvas.save();
-                canvas.clip_rect(skrect(b.inset(6.)), None, true);
+                canvas.clip_rect(skrect(n.edit_bounds()), None, true);
                 if input.selection.range().is_empty() {
                     for r in
                         host.text_rectangles(n.id, input.selection.caret..input.selection.caret)
@@ -688,6 +703,25 @@ impl Renderer {
     }
 }
 impl Measure for Renderer {
+    fn sensitive_text(
+        &self,
+        text: &str,
+        style: TextStyle,
+        width: f64,
+    ) -> Result<TextLayout, Error> {
+        Ok(self
+            .shape_runs(
+                &[ParagraphSpan::Text {
+                    text: text.into(),
+                    style,
+                }],
+                style,
+                width,
+                false,
+            )
+            .layout)
+    }
+
     fn text(&self, text: &str, style: TextStyle, width: f64) -> TextLayout {
         self.shaped(text, style, width).layout
     }
@@ -764,4 +798,64 @@ fn draw_scrollbars(canvas: &skia::Canvas, clip: Rect, info: ScrollInfo, color: u
         round(canvas, bar.thumb, 4., color, false);
     }
     canvas.restore();
+}
+#[cfg(test)]
+mod field_tests {
+    use super::*;
+    #[test]
+    fn revealed_password_is_painted_without_entering_paragraph_cache() {
+        let secret = "unique-password-49385";
+        let value = State::new(secret.to_owned());
+        let host = Host::new(
+            move || view! {password_field("Secret",bind:value,allow_reveal:true,undo_enabled:true);},
+        );
+        let renderer = Renderer::default();
+        host.layout(Size::new(300., 50.), &renderer).unwrap();
+        let id = host
+            .snapshot()
+            .unwrap()
+            .iter()
+            .find(|n| n.kind == Kind::TextField)
+            .unwrap()
+            .id;
+        host.focus(id).unwrap();
+        host.set_password_revealed(id, true).unwrap();
+        host.layout(Size::new(300., 50.), &renderer).unwrap();
+        let mut surface = skia::surfaces::raster_n32_premul((300, 50)).unwrap();
+        renderer.paint(&host, surface.canvas(), 0.).unwrap();
+        assert!(
+            host.snapshot()
+                .unwrap()
+                .iter()
+                .find(|n| n.id == id)
+                .unwrap()
+                .revealed
+        );
+        for key in renderer.text.borrow().keys() {
+            assert!(!key.text.contains(secret));
+            for span in &key.runs {
+                if let SpanKey::Text(text) = span {
+                    assert!(!text.text.contains(secret));
+                }
+            }
+        }
+        let action = host
+            .snapshot()
+            .unwrap()
+            .into_iter()
+            .find(|n| n.label == "Hide password")
+            .unwrap();
+        assert!(action.bounds.width > 0.);
+        host.activate(action.id).unwrap();
+        host.layout(Size::new(300., 50.), &renderer).unwrap();
+        assert!(
+            !host
+                .snapshot()
+                .unwrap()
+                .iter()
+                .find(|n| n.id == id)
+                .unwrap()
+                .revealed
+        );
+    }
 }

@@ -373,6 +373,10 @@ fn expand(item: Item, root: &Tokens) -> Result<Tokens> {
                     {
                         quote!(#expr)
                     }
+                    "on_query" | "debounce" | "clear_button" if kind == "search_field" => {
+                        quote!(#expr)
+                    }
+                    "allow_reveal" if kind == "password_field" => quote!(#expr),
                     "on_submit" | "on_cancel"
                         if matches!(
                             kind.as_str(),

@@ -43,6 +43,9 @@ pub struct Node {
     pub(crate) layout_hidden: bool,
     pub read_only: bool,
     pub secure: bool,
+    pub revealed: bool,
+    pub field_kind: crate::TextFieldKind,
+    pub field_action_width: f64,
     pub multiline: bool,
     pub anchor: Option<String>,
     pub scroll: Option<crate::ScrollInfo>,
@@ -55,6 +58,16 @@ pub struct Node {
     pub hovered: bool,
     pub range: Option<(f64, f64, f64)>,
     pub image: Option<(Bitmap, ContentMode)>,
+}
+impl Node {
+    pub fn edit_bounds(&self) -> Rect {
+        self.bounds.inset(crate::Insets {
+            top: 6.,
+            bottom: 6.,
+            left: 10.,
+            right: 10. + self.field_action_width,
+        })
+    }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Error(pub String);
@@ -90,6 +103,7 @@ pub(crate) struct Inner {
     pub inspector: RefCell<crate::Inspector>,
     pub scroll: RefCell<HashMap<NodeId, crate::Point>>,
     pub deadlines: RefCell<Vec<crate::deadlines::Deadline>>,
+    pub fields: RefCell<HashMap<NodeId, crate::fields::FieldState>>,
     pub editors: RefCell<HashMap<NodeId, crate::editing::Editor>>,
 }
 /// Reactive descriptions, layout and input in logical points. The host is !Send/!Sync.
@@ -109,6 +123,7 @@ impl Host {
             interaction: RefCell::new(Default::default()),
             editors: RefCell::new(HashMap::new()),
             deadlines: RefCell::new(Vec::new()),
+            fields: RefCell::new(HashMap::new()),
             scroll: RefCell::new(HashMap::new()),
             inspector: RefCell::new(crate::Inspector::new()),
             autofocus: Cell::new(None),
@@ -238,6 +253,7 @@ impl Host {
         }
         drop(old);
         self.reconcile_capture();
+        self.reconcile_fields();
         Ok(true)
     }
     pub fn snapshot(&self) -> Result<Vec<Node>, Error> {
@@ -247,6 +263,19 @@ impl Host {
         let mut nodes = self.0.mounted.borrow().nodes.clone();
         for n in &mut nodes {
             n.hidden |= n.layout_hidden;
+            n.revealed = self
+                .0
+                .fields
+                .borrow()
+                .get(&n.id)
+                .is_some_and(|s| s.revealed);
+            if n.key.as_deref() == Some("$field-action")
+                && n.parent
+                    .is_some_and(|p| self.0.fields.borrow().get(&p).is_some_and(|s| s.revealed))
+            {
+                n.text = "Hide".into();
+                n.label = "Hide password".into();
+            }
             n.focused = i.focus == Some(n.id) && i.active;
             n.pressed = i.pressed == Some(n.id);
             n.hovered = i.hovered == Some(n.id);
@@ -274,6 +303,9 @@ impl Host {
         let Some((d, value)) = target else {
             return Ok(false);
         };
+        if let Some(action) = d.field_action {
+            return self.field_action(id, action);
+        }
         match (&d.data, value) {
             (Data::Bool(b), Value::Bool(v)) => b.set(
                 if matches!(d.kind, Kind::Radio | Kind::Segment | Kind::CollectionRow) {
@@ -398,6 +430,7 @@ fn mount(
     } else {
         None
     };
+    let field_children = crate::fields::children(d, &value);
     let image = if let Data::Image(b, m) = &d.data {
         Some((b.clone(), *m))
     } else {
@@ -435,6 +468,12 @@ fn mount(
         layout_hidden: false,
         read_only: d.read_only,
         secure: d.secure,
+        revealed: false,
+        field_kind: d.field.kind,
+        field_action_width: field_children
+            .last()
+            .filter(|v| v.0.field_action.is_some())
+            .map_or(0., |v| v.0.style.width.resolve(100.).unwrap_or(0.) + 6.),
         multiline: d.multiline,
         anchor: d.anchor.clone(),
         scroll: None,
@@ -453,7 +492,7 @@ fn mount(
         image,
     });
     let mut keys = HashSet::new();
-    for (index, child) in d.children.iter().enumerate() {
+    for (index, child) in field_children.iter().enumerate() {
         if let Some(key) = &child.0.key
             && !keys.insert(key)
         {
@@ -473,6 +512,13 @@ fn mount(
     Ok(())
 }
 pub(crate) fn validate(d: &Description) -> Result<(), Error> {
+    if d.field.kind == crate::TextFieldKind::Search
+        && std::time::Instant::now()
+            .checked_add(d.field.delay)
+            .is_none()
+    {
+        return Err(Error("Search debounce is too large".into()));
+    }
     let s = d.style;
     if let Some(runs) = &d.rich {
         for run in runs {

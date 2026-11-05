@@ -197,6 +197,14 @@ define_class!(
                 .and_then(|n| n.collection)
                 .map_or(0, |m| m.len() as isize)
         }
+        #[unsafe(method_id(accessibilitySubrole))]
+        fn subrole(&self)->Option<Retained<NSString>>{
+            self.node().and_then(|n|unsafe{match n.field_kind{
+                ui::TextFieldKind::Password=>Some(NSAccessibilitySecureTextFieldSubrole.retain()),
+                ui::TextFieldKind::Search=>Some(NSAccessibilitySearchFieldSubrole.retain()),
+                _=>None,
+            }})
+        }
         #[unsafe(method(isAccessibilityEnabled))]
         fn enabled(&self) -> bool {
             self.node().is_some_and(|n| n.enabled)

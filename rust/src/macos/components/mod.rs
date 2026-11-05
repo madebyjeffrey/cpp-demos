@@ -57,7 +57,17 @@ impl Mounted {
             .text_input()
             .ok()
             .flatten()
-            .map(|i| format!("{}:{:?}", i.text, i.selection))
+            .map(|i| {
+                if i.secure {
+                    format!(
+                        "secure:{}:{:?}",
+                        ui::text::grapheme_boundaries(&i.text).len(),
+                        i.selection
+                    )
+                } else {
+                    format!("{}:{:?}", i.text, i.selection)
+                }
+            })
             .unwrap_or_default();
         self.cache.borrow_mut().retain(|id, _| {
             self.host
@@ -98,6 +108,7 @@ impl Mounted {
         self.alive.set(false);
         let _ = self.host.unmark_text(false);
         self.host.blur();
+        self.host.set_active(false);
         self.cache.borrow_mut().clear();
     }
 }

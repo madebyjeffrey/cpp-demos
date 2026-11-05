@@ -107,6 +107,8 @@ pub(crate) struct Description {
     pub secure: bool,
     pub multiline: bool,
     pub text_options: crate::TextOptions,
+    pub field: crate::fields::FieldOptions,
+    pub field_action: Option<crate::fields::FieldAction>,
     pub anchor: Option<String>,
     pub collection: Option<crate::ListModel>,
     pub tooltip: String,
@@ -135,6 +137,8 @@ impl View {
             secure: false,
             multiline: false,
             text_options: crate::TextOptions::default(),
+            field: Default::default(),
+            field_action: None,
             anchor: None,
             collection: None,
             tooltip: String::new(),
@@ -240,6 +244,8 @@ impl View {
     pub fn password_field(placeholder: impl Into<String>, value: Binding<String>) -> Self {
         let mut v = Self::text_field(placeholder, value);
         Rc::make_mut(&mut v.0).secure = true;
+        Rc::make_mut(&mut v.0).field.kind = crate::TextFieldKind::Password;
+        Rc::make_mut(&mut v.0).text_options.undo = false;
         v
     }
     pub fn text_editor(placeholder: impl Into<String>, value: Binding<String>) -> Self {
@@ -248,7 +254,9 @@ impl View {
         v
     }
     pub fn search_field(placeholder: impl Into<String>, value: Binding<String>) -> Self {
-        Self::text_field(placeholder, value)
+        let mut v = Self::text_field(placeholder, value);
+        Rc::make_mut(&mut v.0).field.kind = crate::TextFieldKind::Search;
+        v
     }
     pub fn slider(value: Binding<f64>, min: f64, max: f64, step: f64) -> Self {
         Self::bound(Kind::Slider, "", Data::Number(value, min, max, step))

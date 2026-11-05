@@ -150,8 +150,8 @@ ICU4X localized integer display remains available independently.
 `Host::debounce(key, delay, action)` replaces pending work under the same key.
 Mounted windows schedule the earliest deadline as a one-shot redraw; detached
 portable hosts use `run_due` (or `run_due_at` in deterministic tests). Cancel with
-`cancel_deadline`. Tasks and callbacks run on the owning thread. Search is an
-ordinary bound field; applications decide filtering and debounce policy.
+`cancel_deadline`. Tasks and callbacks run on the owning thread. Search fields
+provide their own scoped query/debounce policy, described below.
 
 ## Stage 4 — scrolling and presentation
 
@@ -328,3 +328,42 @@ Custom `Measure` providers supply `TextLayout.lines` for visual navigation (an e
 list retains logical-only behavior). `TextLine` uses UTF-8 ranges and paragraph-local
 geometry. `caret_rect(index, affinity)` distinguishes both sides of a soft wrap;
 newline bytes belong to `end_including_newline`, not the visible line range.
+
+
+## Completion M2 — search and passwords
+
+`cargo run --example m2_fields` demonstrates both (`--light`, `--render file.png`,
+`--smoke`). Ordinary macro/builder usage stays compact:
+
+```rust,ignore
+search_field("Find…", bind: query, debounce: Duration::from_millis(250),
+    on_query: results.handler(|state, query: String| state.set(query)));
+password_field("Password", bind: password, allow_reveal: true, max_length: 24);
+```
+
+`State::handler` is the payload-taking counterpart to `State::action`. Search's
+`on_query` receives accepted committed edits, including composition commits. Zero
+debounce dispatches on the next one-shot task turn (`run_due` on detached hosts).
+External model replacement cancels pending work and does not generate a query.
+`clear_button: false` hides the default clear action. Clear/Escape notify an empty
+query immediately on the next task turn; `on_cancel` handles Escape. Enter flushes
+only that field's pending query before `on_submit`. Removal/replacement, hiding,
+disabling, readonly, blur/deactivation and native unmount cancel pending queries;
+callbacks run without host borrows and may remove the field safely.
+
+Passwords default to no reveal and no undo; opt in with `allow_reveal` and
+`undo_enabled`. Readonly/max-length policies are shared with ordinary fields.
+Reveal has a real accessible button and `Host::set_password_revealed` supports
+explicit application commands. Escape and focus loss/deactivation hide it again.
+Revealed text remains sensitive: copy/cut, native substring and AX value queries
+stay blocked. Secure-input ownership continues while an editable password owns
+focus, including during reveal. Shaping/painting revealed text bypasses the
+renderer paragraph cache. Custom `Measure` providers must implement
+`sensitive_text` without retaining plaintext to support reveal; the default
+returns an explicit unsupported error.
+
+Run `SCARS_WINDOW_SECURE_INPUT_TESTS=1 cargo test --test secure_input` on a
+foreground desktop to exercise actual Carbon ownership transitions. The normal
+unit test covers successful ownership, failed enables/disables and nested owners;
+the native harness verifies readonly/disable/focus/hide/deactivation/unmount/
+replacement/close without silently skipping unavailable activation.

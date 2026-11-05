@@ -165,6 +165,11 @@ impl<T: 'static> State<T> {
         let write = self.clone();
         Binding::new(move || read.get(), move |value| write.set(value))
     }
+    /// Capture a state handle in a callback that receives an event value.
+    pub fn handler<A: 'static>(&self, action: impl Fn(&Self, A) + 'static) -> impl Fn(A) + 'static {
+        let state = self.clone();
+        move |value| action(&state, value)
+    }
     /// Capture an owned state handle in an event action.
     pub fn action(&self, action: impl Fn(&Self) + 'static) -> impl Fn() + 'static {
         let state = self.clone();

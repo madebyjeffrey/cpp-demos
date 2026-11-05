@@ -32,6 +32,8 @@ impl Host {
         self.0.deadlines.borrow_mut().retain(|d| d.key != key);
     }
     pub fn next_deadline(&self) -> Option<Duration> {
+        let _ = self.refresh();
+        self.reconcile_fields();
         self.0
             .deadlines
             .borrow()
@@ -39,6 +41,7 @@ impl Host {
             .map(|d| d.at.saturating_duration_since(Instant::now()))
             .chain(self.tooltip_delay())
             .chain(self.drag_delay())
+            .chain(self.field_delay())
             .min()
     }
     pub fn run_due(&self) {
@@ -46,6 +49,7 @@ impl Host {
     }
     pub fn run_due_at(&self, now: Instant) {
         self.run_drag_due(now);
+        self.run_search_due(now);
         let tasks = {
             let mut deadlines = self.0.deadlines.borrow_mut();
             let mut tasks = Vec::new();

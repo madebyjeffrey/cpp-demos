@@ -173,9 +173,17 @@ fn main() {
     );
     let secret = State::new("do not expose".to_owned());
     let secure_host = window
-        .set_view(move || view! {password_field("Secret",bind:secret);})
+        .set_view(
+            move || view! {password_field("Secret",bind:secret,allow_reveal:true,max_length:40);},
+        )
         .unwrap();
-    let id = secure_host.snapshot().unwrap().last().unwrap().id;
+    let id = secure_host
+        .snapshot()
+        .unwrap()
+        .into_iter()
+        .find(|n| n.kind == ui::Kind::TextField)
+        .unwrap()
+        .id;
     secure_host.focus(id).unwrap();
     secure_host.set_active(true);
     unsafe {
@@ -186,7 +194,46 @@ fn main() {
         let value: Option<Retained<NSString>> =
             msg_send![&*element,accessibilityStringForRange:NSRange::new(0,3)];
         assert!(value.is_none());
+        let role: Retained<NSString> = msg_send![&*element, accessibilitySubrole];
+        assert_eq!(role.to_string(), "AXSecureTextField");
+        assert!(secure_host.set_password_revealed(id, true).unwrap());
+        let value: Option<Retained<AnyObject>> = msg_send![&*element, accessibilityValue];
+        assert!(value.is_none());
+        secure_host
+            .text_command(ui::TextCommand::SelectAll, false)
+            .unwrap();
+        let board = app_kit::NSPasteboard::generalPasteboard();
+        let before = board.changeCount();
+        let _: () = msg_send![native,doCommandBySelector:objc2::sel!(copy:)];
+        let _: () = msg_send![native,doCommandBySelector:objc2::sel!(cut:)];
+        assert_eq!(
+            board.changeCount(),
+            before,
+            "Password copy/cut must not change the clipboard"
+        );
+        assert_eq!(
+            secure_host.text_input().unwrap().unwrap().text,
+            "do not expose"
+        );
+        let marked = NSString::from_str("日");
+        let _: () = msg_send![native,setMarkedText:&*marked,selectedRange:NSRange::new(1,0),replacementRange:NSRange::new(isize::MAX as usize,0)];
+        let _: () = msg_send![native, unmarkText];
+        assert!(!secure_host.text_input().unwrap().unwrap().can_undo);
     }
+    let query = State::new(String::new());
+    let called = State::new(0);
+    let search_host=window.set_view({let called=called.clone();move||{
+        let called=called.clone();view!{search_field("Search",bind:query,debounce:std::time::Duration::from_secs(10),on_query:move|_|called.update(|n|*n+=1));}
+    }}).unwrap();
+    let id = search_host.snapshot().unwrap().last().unwrap().id;
+    search_host.focus(id).unwrap();
+    search_host.set_active(true);
+    search_host.insert_text("pending", None).unwrap();
+    assert!(search_host.next_deadline().is_some());
+    window.clear_view();
+    assert!(search_host.next_deadline().is_none());
+    search_host.run_due_at(std::time::Instant::now() + std::time::Duration::from_secs(20));
+    assert_eq!(called.get(), 0);
     let list = ui::ListModel::new(
         (0..100_000)
             .map(|i| ui::ListItem::new(i.to_string(), format!("Row {i}")))

@@ -224,6 +224,7 @@ impl Host {
     pub fn set_active(&self, active: bool) {
         if !active {
             let _ = self.unmark_text(true);
+            self.cancel_field_work();
         }
         let mut i = self.0.interaction.borrow_mut();
         i.active = active;
@@ -249,6 +250,12 @@ impl Host {
         }) {
             return Ok(false);
         }
+        if let Some(previous) = self.focused().and_then(|id| self.field_owner(id))
+            && Some(previous) != self.field_owner(id)
+            && let Some(state) = self.0.fields.borrow_mut().get_mut(&previous)
+        {
+            state.revealed = false;
+        }
         self.0.interaction.borrow_mut().focus = Some(id);
         if let Some(editor) = self.0.editors.borrow_mut().get_mut(&id) {
             editor.reveal = true;
@@ -259,6 +266,7 @@ impl Host {
     }
     pub fn blur(&self) {
         let _ = self.unmark_text(true);
+        self.cancel_field_work();
         let mut i = self.0.interaction.borrow_mut();
         i.focus = None;
         i.pressed = None;
@@ -386,7 +394,16 @@ impl Host {
         match event.kind {
             PointerKind::Down if event.button == 0 => {
                 if let Some(id) = hit {
-                    self.focus(id)?;
+                    let field_parent = {
+                        let m = self.0.mounted.borrow();
+                        m.descriptions
+                            .get(&id)
+                            .filter(|d| d.field_action.is_some())
+                            .and_then(|_| {
+                                m.nodes.iter().find(|n| n.id == id).and_then(|n| n.parent)
+                            })
+                    };
+                    self.focus(field_parent.unwrap_or(id))?;
                     self.0.interaction.borrow_mut().pressed = Some(id);
                     let kind = self
                         .0

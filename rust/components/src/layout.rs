@@ -51,8 +51,22 @@ impl Host {
                 description.style = *style;
                 crate::host::validate(&description)?;
             }
+            node.revealed = self
+                .0
+                .fields
+                .borrow()
+                .get(&node.id)
+                .is_some_and(|s| s.revealed);
             node.layout_hidden = false;
             node.text = descriptions[&node.id].text.clone();
+            if descriptions[&node.id].field_action.is_some()
+                && node
+                    .parent
+                    .is_some_and(|p| self.0.fields.borrow().get(&p).is_some_and(|s| s.revealed))
+            {
+                node.text = "Hide".into();
+                node.label = "Hide password".into();
+            }
             node.style = overrides
                 .get(&node.id)
                 .copied()
@@ -102,15 +116,16 @@ impl Host {
                     measure,
                     &editor.text,
                     node.secure,
+                    node.revealed,
                     node.text_style,
                     if node.multiline {
-                        (node.bounds.width - 20.).max(1.)
+                        node.edit_bounds().width.max(1.)
                     } else {
                         f64::INFINITY
                     },
-                );
+                )?;
                 let caret = layout.caret_rect(editor.selection.caret, editor.affinity());
-                let available = (node.bounds.width - 20.).max(1.);
+                let available = node.edit_bounds().width.max(1.);
                 if node.multiline {
                     editor.scroll = 0.;
                     let height = (node.bounds.height - 20.).max(1.);
@@ -184,6 +199,7 @@ impl Host {
             model.set_viewport(offset, height);
         }
         self.reconcile_capture();
+        self.reconcile_fields();
         if let Some((id, rect)) = reveal_caret {
             self.reveal_rect(id, rect);
         }
@@ -373,6 +389,11 @@ impl Tree<'_> {
                 f64::INFINITY
             },
         );
+        if n.kind == Kind::TextField {
+            for child in self.children.get(&Some(n.id)).cloned().unwrap_or_default() {
+                self.measure_node(child, Size::new(inner, 24.), text, nodes)?;
+            }
+        }
         let mut size = if n.kind == Kind::RichText {
             let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
             for child in &children {
@@ -904,6 +925,24 @@ impl Tree<'_> {
                 layout.size.height,
             );
             self.layouts.insert(n.id, layout);
+        }
+        if n.kind == Kind::TextField {
+            for child in self.children.get(&Some(n.id)).cloned().unwrap_or_default() {
+                let size = self.desired[&nodes[child].id];
+                self.reflow(child, size.width, Some(size.height), nodes)?;
+                self.arrange(
+                    child,
+                    Rect::new(
+                        bounds.x + (bounds.width - size.width - 5.).max(0.),
+                        bounds.y + (bounds.height - size.height) / 2.,
+                        size.width,
+                        size.height,
+                    ),
+                    nodes[i].clip,
+                    Size::new(bounds.width, bounds.height),
+                    nodes,
+                )?;
+            }
         }
         nodes[i].baseline = if header(n.kind) && !n.text.is_empty() {
             s.padding.top + self.layouts[&n.id].baseline

@@ -106,6 +106,7 @@ cargo check -p scars-ui --lib --target x86_64-unknown-linux-gnu --locked
 SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --locked --test components
 SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --locked --test desktop
 SCARS_WINDOW_FULLSCREEN_TESTS=1 cargo test --locked --test fullscreen
+SCARS_WINDOW_SECURE_INPUT_TESTS=1 cargo test --locked --test secure_input
 ```
 
 Native tests require an awake desktop with WindowServer/Metal access; ordinary

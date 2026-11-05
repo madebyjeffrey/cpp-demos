@@ -62,3 +62,8 @@ unsafe_op_in_unsafe_fn = "deny"
 name = "components"
 path = "tests/components.rs"
 harness = false
+
+[[test]]
+name = "secure_input"
+path = "tests/secure_input.rs"
+harness = false
