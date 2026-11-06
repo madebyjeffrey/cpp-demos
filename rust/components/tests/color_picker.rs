@@ -197,7 +197,7 @@ fn invalid_component_text_blocks_other_representations_and_remains_correctable()
     host.focus(hex.id).unwrap();
     host.set_text(hex.id, "#abc").unwrap();
     layout(&host);
-    assert_eq!(p.validation().status, ValidationStatus::Invalid);
+    assert_eq!(p.validation().status, ValidationStatus::Incomplete);
     assert!(field(&host, "Red value").read_only);
     host.set_text(hex.id, "#FF0000").unwrap();
     key(&host, Key::Enter);

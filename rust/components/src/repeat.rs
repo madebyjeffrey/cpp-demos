@@ -30,11 +30,20 @@ impl View {
 impl Host {
     pub(crate) fn blur_action(&self, id: Option<NodeId>) {
         let callback = id.and_then(|id| {
+            let owner = self.value_owner(id);
+            if let Some(owner) = owner
+                && self.0.interaction.borrow().active
+                && self
+                    .focused()
+                    .is_some_and(|next| Self::within(&self.0.mounted.borrow().nodes, next, owner))
+            {
+                return None;
+            }
             self.0
                 .mounted
                 .borrow()
                 .descriptions
-                .get(&id)
+                .get(&owner.unwrap_or(id))
                 .and_then(|d| d.blur.clone())
         });
         if let Some(callback) = callback {

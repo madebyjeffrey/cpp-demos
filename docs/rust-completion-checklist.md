@@ -32,10 +32,10 @@ overall goal complete while an in-scope item remains open.
 | --- | --- | --- |
 | State and descriptions | Reactive bindings, keys, macro conditions/repetition, host identity and inventory mapping | Ergonomic coverage of remaining component behaviors |
 | Layout and basic controls | Inventory, constrained layout, rich text, style coverage and two-axis scrolling verified | Final cross-component visual/semantic audit in M5/M8 |
-| Editing | Shared buffer, visual navigation/gestures, search/password/numeric policies and held steppers | Localization/value-control expansion in M6; final interactive IME audit in M5 |
+| Editing | Shared buffer, visual navigation/gestures, localized typed drafts, search/password policies and held steppers | Final interactive VoiceOver/IME audit in M5 |
 | Presentation | Retained splits/tabs/wizards, hierarchical menus, configured portals, transactional alerts and native sheets | Final interactive and visible desktop audits in M5/M8 |
 | Collections | Virtual lists, lazy trees, combo boxes and keyed tables with retained validated edits | Combined native semantics and interactive audits |
-| Values and tooling | Typed drafts, sRGB/hex, calendar, ISO/zoned editing, picking/width overrides | Complete value-control policies and inspector/Lab coverage |
+| Values and tooling | Shared typed draft lifecycle, RGB/HSV/hex, calendars, localized civil/zoned editing, picking/width overrides | Inspector/Lab expansion in M7 and final visual/interaction evidence in M8 |
 | Verification | Core/CPU tests and native input/accessibility protocol tests | Interactive audits, final visible GPU/full-screen runs and repeatable checks |
 
 The main reference is the [current C++ public inventory](../scars/src/scars.cppm),
@@ -612,7 +612,7 @@ user's report; the earlier utterance is not evidence against the rebuilt version
 - [x] **M6.3 Date control:** bounds, disabled dates, custom validation, readonly/blur/submit policy, calendar keyboard navigation and synchronization after external value changes. The narrow calendar grid overflow was corrected in M6.2.
 - [x] **M6.4 Time and datetime controls:** dedicated hour/minute/second interactions, 12/24-hour policy, step sizes, optional seconds, local/instant bounds and combined validation; verify DST gaps/overlaps and named-zone changes without corrupting drafts.
 - [x] **M6.5 Color control:** HSV as well as RGB, optional alpha, readonly and explicit transactional/live-preview behavior; cancel restores the source color, including through a color-well popup.
-- [ ] **M6.6 Shared draft lifecycle:** consistent apply/blur/cancel, dirty/incomplete/invalid/out-of-range reporting, external-change handling and callbacks across all typed value controls.
+- [x] **M6.6 Shared draft lifecycle:** consistent apply/blur/cancel, dirty/incomplete/invalid/out-of-range reporting, external-change handling and callbacks across all typed value controls.
 
 Evidence: extend the value lab; round-trip, calendar-boundary, exact-value,
 validation/transaction and timezone tests. Main implementation:
@@ -776,7 +776,7 @@ M6.5 completion record (`0a7f750`):
   Foreground/interactive evidence remains M5.5/M8; native protocol/raster evidence
   does not close those gates.
 
-M6.6 acceptance checkpoint (milestone remains open):
+M6.6 acceptance checkpoint (`8bc8844`; milestone was still open):
 
 - Shared drafts retain rejected text with feedback and explicit retry, read back
   application normalization, preserve exact pristine values without equal writes,
@@ -795,9 +795,41 @@ M6.6 acceptance checkpoint (milestone remains open):
   inventory mapping and hidden native date/time/datetime/zoned/color/focus checks
   pass. Full workspace tests pass; their skipped native harnesses are not counted
   as desktop evidence.
-- Still open: consistent appendable-prefix classification and the shared
-  blur/composition/lifecycle interaction matrix. Actual VoiceOver/IME checks remain
-  M5.5; this checkpoint does not check off M6.6.
+- At this checkpoint, appendable-prefix classification and the shared
+  blur/composition/lifecycle matrix remained open. They are closed below; actual
+  VoiceOver/IME evidence remains M5.5.
+
+M6.6 completion record:
+
+- Appendable date/clock prefixes respect Gregorian validity, localized order and
+  digits, ISO BCE years, optional seconds/fractions and AM/PM placement. Number
+  grouping and ICU sign prefixes, hex and color numeric fields distinguish
+  incomplete/invalid/out-of-range states. Mixed digit sets and impossible suffixes
+  stay invalid. `Draft::incomplete_when` supports pure application codecs; legacy
+  ISO helpers use the same rules. All-prefix sweeps cover representative formatted
+  values across every supported locale and all six controls.
+- Blur applies on leaving the whole editor, explicit blur or deactivation according
+  to policy. Internal controls do not apply before Revert. Host/AX Apply, steppers,
+  calendars, sliders and mode changes wait for that editor's preedit; independent
+  editors remain usable. Enter/Escape retain their two-step composition behavior,
+  while Revert/Cancel buttons discard preedit and revert together. Datetime Cancel
+  preserves newer callback calendar navigation.
+- Unavailable preedit cancels on hide/disable/collapse/readonly/unmount. Ordinary
+  model-owned drafts survive hide/unmount; color retires owned previews under its
+  existing policy. Binding revisions reach native-independent editors, so equal-
+  display replacements (including A→B→A and hidden color alpha changes) cancel
+  stale preedit. Own edits retain undo/redo. Custom providers must supply revisions
+  for equal-looking replacements; pure queries do not emit editing callbacks.
+- Fourteen additional focused prefix/interaction tests pass, alongside the earlier
+  shared acceptance tests. Full workspace tests, strict Clippy, portable Linux
+  compilation, formatting and inventory mapping pass. Hidden AppKit date/time/
+  datetime/zoned/color/focus checks pass; time tests explicitly verify AX prefix
+  descriptions, preedit action guards and revisioned replacement. Skipped harnesses
+  in the ordinary workspace run do not count as native passes.
+- `m6_drafts` is the runnable six-control example, with application acceptance and
+  blur toggles plus `--prefix --tab=number|date|time|datetime|zone|color`. Dark/light
+  zoned and color prefix previews were inspected. Actual speech/candidate placement
+  and visible GPU evidence remain open in M5.5/M8. M7 inspector work is next.
 
 ## M7 — Developer tools and application ergonomics
 

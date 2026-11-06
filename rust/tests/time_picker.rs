@@ -78,8 +78,19 @@ fn main() {
         assert_eq!(text.to_string(), "18:00");
         let prefix = NSString::from_str("12:30:0");
         let _: () = msg_send![&*field,setAccessibilityValue:&*prefix];
+        let description: Retained<NSString> = msg_send![&*field, accessibilityValueDescription];
+        assert_eq!(description.to_string(), "Incomplete value");
         let marked = NSString::from_str("3");
         let _: () = msg_send![native,setMarkedText:&*marked,selectedRange:NSRange::new(1,0),replacementRange:NSRange::new(7,0)];
+        let changed: bool = msg_send![&*step, accessibilityPerformIncrement];
+        assert!(
+            !changed,
+            "an AX step must not publish stale text during preedit"
+        );
+        let apply = find(native, "Apply", "AXButton");
+        let changed: bool = msg_send![&*apply, accessibilityPerformPress];
+        assert!(!changed, "an AX Apply must wait for preedit confirmation");
+        assert!(host.text_input().unwrap().unwrap().marked.is_some());
         let _: () = msg_send![native,doCommandBySelector:objc2::sel!(insertNewline:)];
         assert_eq!(
             value.get(),
@@ -88,6 +99,17 @@ fn main() {
         );
         let _: () = msg_send![native,doCommandBySelector:objc2::sel!(insertNewline:)];
         assert_eq!(value.get(), time("12:30:03"));
+        let saved = value.get();
+        let _: () = msg_send![native,setMarkedText:&*marked,selectedRange:NSRange::new(1,0),replacementRange:NSRange::new(7,1)];
+        value.set(time("12:30:04"));
+        value.set(saved);
+        host.snapshot().unwrap();
+        let marked: bool = msg_send![native, hasMarkedText];
+        assert!(
+            !marked,
+            "revisioned equal-display replacement cancels preedit"
+        );
+        assert_eq!(value.get(), saved);
         let minute = host
             .snapshot()
             .unwrap()

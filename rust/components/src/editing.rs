@@ -18,6 +18,7 @@ pub struct TextInput {
 pub(crate) struct Editor {
     pub buffer: TextBuffer,
     pub source: String,
+    pub source_revision: Option<u64>,
     pub scroll: f64,
     pub scroll_y: f64,
     pub reveal: bool,
@@ -34,17 +35,33 @@ impl DerefMut for Editor {
     }
 }
 impl Editor {
-    pub fn sync(&mut self, value: &str) {
+    pub fn sync(&mut self, value: &str, revision: Option<u64>) {
         if self.source != value {
             self.buffer.set_text(value);
             self.source = value.into();
             self.scroll = 0.;
             self.scroll_y = 0.;
             self.reveal = true;
+        } else if self.source_revision != revision && self.marked.is_some() {
+            self.unmark(false);
+            self.reveal = true;
         }
+        self.source_revision = revision;
     }
 }
 impl Host {
+    pub(crate) fn retire_composition(&self) -> bool {
+        let mounted = self.0.mounted.borrow();
+        let mut changed = false;
+        for (id, editor) in self.0.editors.borrow_mut().iter_mut() {
+            if mounted.nodes.iter().find(|n| n.id == *id).is_none_or(|n| {
+                !n.enabled || n.read_only || n.hidden || n.layout_hidden || !self.in_scope(*id)
+            }) {
+                changed |= editor.unmark(false);
+            }
+        }
+        changed
+    }
     pub fn set_text(&self, id: NodeId, text: &str) -> Result<bool, Error> {
         self.refresh()?;
         if !self
@@ -193,11 +210,13 @@ impl Host {
         if let (Some(binding), Some(text)) = (binding, text) {
             binding.set(text);
             let accepted = binding.get();
+            let revision = crate::state::read_only(|| binding.revision());
             if previous.as_ref() != Some(&accepted) {
                 self.search_changed(id, accepted.clone(), false);
             }
             if let Some(e) = self.0.editors.borrow_mut().get_mut(&id) {
                 e.source = accepted.clone();
+                e.source_revision = revision;
                 if e.text != accepted {
                     e.buffer.set_text(accepted);
                 }

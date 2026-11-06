@@ -109,19 +109,34 @@ pub(crate) fn localized_value_field<T: Clone + PartialEq + 'static>(
             })
             .enabled(!read_only),
             View::button(locale.action(ActionLabel::Revert), move || cancel.cancel())
+                .value_cancel()
                 .enabled(!read_only),
         ]),
     ];
     if let Some(error) = draft.error() {
         children.push(View::label(error).wrap(true).foreground(0xffff8787));
     }
-    View::column(children)
+    View::column(children).value_editor()
 }
 pub fn time_draft(value: Binding<Time>) -> Draft<Time> {
-    Draft::new(value, parse_time, |v| v.to_string())
+    let clock = crate::time::Clock {
+        seconds: true,
+        ..Default::default()
+    };
+    Draft::new(value, parse_time, |v| v.to_string()).incomplete_when(move |s| clock.incomplete(s))
 }
 pub fn datetime_draft(value: Binding<DateTime>) -> Draft<DateTime> {
-    Draft::new(value, parse_datetime, |v| v.to_string())
+    let clock = crate::time::Clock {
+        seconds: true,
+        ..Default::default()
+    };
+    Draft::new(value, parse_datetime, |v| v.to_string()).incomplete_when(move |s| {
+        if let Some((date, time)) = s.split_once('T') {
+            parse_date(date).is_ok() && clock.incomplete(time)
+        } else {
+            parse_date(s).is_ok() || EditLocale::ASCII.date_prefix(s)
+        }
+    })
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Resolution {

@@ -87,6 +87,20 @@ impl<T: Clone + PartialEq + 'static> Draft<T> {
         self.notify = Some(Rc::new(callback));
         self
     }
+    /// Recognize unfinished custom syntax after parsing fails. Like the codec,
+    /// this predicate is pure; a successfully parsed value always stays valid.
+    pub fn incomplete_when(mut self, predicate: impl Fn(&str) -> bool + 'static) -> Self {
+        let classify = self.classify.clone();
+        self.classify = Rc::new(move |text| {
+            let status = classify(text);
+            if status == ValidationStatus::Invalid && predicate(text) {
+                ValidationStatus::Incomplete
+            } else {
+                status
+            }
+        });
+        self
+    }
     pub(crate) fn classifiers(
         mut self,
         classify: impl Fn(&str) -> ValidationStatus + 'static,
@@ -143,13 +157,14 @@ impl<T: Clone + PartialEq + 'static> Draft<T> {
         crate::state::read_only(|| Self::same_source(source, &self.fresh()))
     }
     pub fn binding(&self) -> Binding<String> {
-        let (read, write) = (self.clone(), self.clone());
+        let (read, write, revision) = (self.clone(), self.clone(), self.clone());
         Binding::new(
             move || read.current().text,
             move |text| {
                 write.stage_text(text);
             },
         )
+        .with_revision(move || revision.revision())
     }
     pub(crate) fn stage_text(&self, text: String) -> bool {
         if self.read_only {
@@ -436,7 +451,13 @@ fn numeric_draft<T: Number>(
     let mut draft = Draft::new(
         value,
         move |text| {
-            let ascii = parse_locale.number_input(text)?;
+            let ascii = parse_locale.number_input(text).map_err(|error| {
+                if parse_locale.number_prefix(text) {
+                    parse_locale.incomplete_error().into()
+                } else {
+                    error
+                }
+            })?;
             match status::<T>(&ascii, min, max) {
                 ValidationStatus::Valid => ascii
                     .parse::<T>()
@@ -451,11 +472,16 @@ fn numeric_draft<T: Number>(
         move |v| format_locale.number(&v.format(digits)),
     );
     draft.classify = Rc::new(move |text| {
-        status_locale
-            .number_input(text)
-            .map_or(ValidationStatus::Invalid, |ascii| {
-                status::<T>(&ascii, min, max)
-            })
+        status_locale.number_input(text).map_or_else(
+            |_| {
+                if status_locale.number_prefix(text) {
+                    ValidationStatus::Incomplete
+                } else {
+                    ValidationStatus::Invalid
+                }
+            },
+            |ascii| status::<T>(&ascii, min, max),
+        )
     });
     draft.model_status = Some(Rc::new(move |v| {
         let status = if !v.valid() {
@@ -648,6 +674,9 @@ pub(crate) struct StepperData {
 impl crate::Host {
     pub fn step_control(&self, id: crate::NodeId, increase: bool) -> Result<bool, crate::Error> {
         self.refresh()?;
+        if self.value_composing(id) {
+            return Ok(false);
+        }
         let change = {
             let m = self.0.mounted.borrow();
             m.nodes
@@ -703,11 +732,12 @@ impl View {
         .width(72)
         .validation(validation)
         .shrink(0.);
-        let (read, change) = (number.clone(), number.clone());
+        let (read, change, blur) = (number.clone(), number.clone(), number.clone());
         let d = Rc::make_mut(&mut view.0);
         d.kind = crate::Kind::Stepper;
         d.accessible = label;
         d.read_only = number.read_only;
+        d.value_editor = true;
         d.stepper = Some(StepperData {
             read: Rc::new(move || StepperInfo {
                 value: read
@@ -722,7 +752,7 @@ impl View {
             }),
             change: Rc::new(move |increase| change.step(increase)),
         });
-        view
+        view.on_blur(move || blur.blur())
     }
     pub fn numeric_field<T: Number>(label: impl Into<String>, number: &Numeric<T>) -> Self {
         let label = label.into();
@@ -739,8 +769,7 @@ impl View {
                     .read_only(number.read_only)
                     .grow(1.)
                     .on_submit(move || commit.submit())
-                    .on_cancel(move || cancel.cancel())
-                    .on_blur(move || blur.blur()),
+                    .on_cancel(move || cancel.cancel()),
                 Self::stepper(&label, number),
             ]),
         ];
@@ -748,6 +777,8 @@ impl View {
             children.push(Self::label(error).foreground(0xffff8787).wrap(true));
         }
         Self::column(children)
+            .value_editor()
+            .on_blur(move || blur.blur())
     }
 }
 pub fn numeric_field<T: Number>(label: impl Into<String>, number: &Numeric<T>) -> View {

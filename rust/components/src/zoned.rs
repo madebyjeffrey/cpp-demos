@@ -493,7 +493,13 @@ impl ZonedPicker {
         if let Some(error) = self.error.get() {
             children.push(View::label(error).wrap(true).foreground(0xffff8787));
         }
-        children.push(self.local.view().key("$zoned-civil"));
-        View::column(children).accessible_label("Zoned datetime")
+        let local = self.local.view().key("$zoned-civil");
+        let blur = local.0.blur.clone();
+        children.push(local);
+        let mut root = View::column(children)
+            .accessible_label("Zoned datetime")
+            .value_editor();
+        Rc::make_mut(&mut root.0).blur = blur;
+        root
     }
 }

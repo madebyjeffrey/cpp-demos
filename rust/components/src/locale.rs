@@ -197,6 +197,23 @@ impl EditLocale {
             None => "Use a finite ASCII number without grouping",
         }
     }
+    pub(crate) fn number_prefix(&self, text: &str) -> bool {
+        if self.0.as_ref().is_some_and(|l| {
+            [&l.minus.0, &l.plus.0]
+                .iter()
+                .any(|prefix| text.len() < prefix.len() && prefix.starts_with(text))
+        }) {
+            return true;
+        }
+        // Only an unfinished final group can be repaired by appending digits.
+        // Try both digit sets accepted by the Arabic profile without mixing them.
+        ["0", "٠"].iter().any(|zero| {
+            (1..=3).any(|n| {
+                self.number_input(&format!("{text}{}", zero.repeat(n)))
+                    .is_ok()
+            })
+        })
+    }
     pub(crate) fn incomplete_error(&self) -> &'static str {
         match self.profile() {
             Some(Profile::De) => "Eine vollständige Zahl eingeben",
@@ -324,6 +341,55 @@ impl EditLocale {
         }
         let (month, day) = if p == Profile::Us { (a, b) } else { (b, a) };
         Date::new(year, month, day).map_err(|_| error())
+    }
+    pub(crate) fn date_prefix(&self, text: &str) -> bool {
+        let (fields, year_index, month_index, day_index, negative) = if let Some(p) = self.profile()
+        {
+            let Ok(text) = p.ascii_digits(text) else {
+                return false;
+            };
+            let Some(fields) = crate::prefix::fields(
+                &text,
+                p.date_separator(),
+                &[(2, 1, 31), (2, 1, 31), (4, 1, 9999)],
+            ) else {
+                return false;
+            };
+            let (month, day) = if p == Profile::Us { (0, 1) } else { (1, 0) };
+            (fields, 2, month, day, false)
+        } else {
+            let (text, negative) = text.strip_prefix('-').map_or((text, false), |s| (s, true));
+            let Some(fields) = crate::prefix::fields(
+                text,
+                '-',
+                &[
+                    (if negative { 6 } else { 4 }, u16::from(negative), 9999),
+                    (2, 1, 12),
+                    (2, 1, 31),
+                ],
+            ) else {
+                return false;
+            };
+            (fields, 0, 1, 2, negative)
+        };
+        // A Gregorian leap year occurs within every eight consecutive years,
+        // including century boundaries. More years cannot change feasibility.
+        fields[year_index].clone().take(9).any(|year| {
+            fields[month_index].clone().any(|month| {
+                fields[day_index].clone().any(|day| {
+                    Date::new(
+                        if negative {
+                            -(year as i16)
+                        } else {
+                            year as i16
+                        },
+                        month as i8,
+                        day as i8,
+                    )
+                    .is_ok()
+                })
+            })
+        })
     }
     fn date_invalid(&self) -> &'static str {
         match self.profile() {

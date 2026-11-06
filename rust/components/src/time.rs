@@ -123,6 +123,75 @@ impl Clock {
             .map_err(|e| e.to_string())
         }
     }
+    fn hour(&self, text: &str) -> Option<i8> {
+        let twelve = self.cycle == HourCycle::H12;
+        if text.is_empty()
+            || text.len() > 2
+            || !twelve && text.len() != 2
+            || !text.bytes().all(|b| b.is_ascii_digit())
+        {
+            return None;
+        }
+        let hour = text.parse().ok()?;
+        (if twelve { 1..=12 } else { 0..=23 })
+            .contains(&hour)
+            .then_some(hour)
+    }
+    fn complete_body(&self, text: &str) -> bool {
+        let Some((hour, rest)) = text.split_once(':') else {
+            return false;
+        };
+        let Some(hour) = self.hour(hour) else {
+            return false;
+        };
+        (self.seconds || !rest.contains(':'))
+            && crate::values::parse_time(&format!("{hour:02}:{rest}")).is_ok()
+    }
+    fn body_prefix(&self, text: &str) -> bool {
+        let Some((hour, rest)) = text.split_once(':') else {
+            return (if self.cycle == HourCycle::H12 {
+                1..=12
+            } else {
+                0..=23
+            })
+            .any(|hour| {
+                format!("{hour:02}").starts_with(text)
+                    || self.cycle == HourCycle::H12 && hour.to_string().starts_with(text)
+            });
+        };
+        if self.hour(hour).is_none() {
+            return false;
+        }
+        if let Some((clock, fraction)) = text.split_once('.') {
+            return self.seconds
+                && rest.split('.').next().is_some_and(|s| s.contains(':'))
+                && self.complete_body(clock)
+                && fraction.len() <= 9
+                && fraction.bytes().all(|b| b.is_ascii_digit());
+        }
+        let fields: &[_] = if self.seconds {
+            &[(2, 0, 59), (2, 0, 59)]
+        } else {
+            &[(2, 0, 59)]
+        };
+        crate::prefix::fields(rest, ':', fields).is_some()
+    }
+    pub fn incomplete(&self, text: &str) -> bool {
+        let Ok(text) = self.locale.clock_input(text) else {
+            return false;
+        };
+        if self.cycle == HourCycle::H12
+            && let Some((clock, period)) = text.split_once(' ')
+        {
+            return self.complete_body(clock)
+                && self.locale.periods().iter().any(|label| {
+                    label
+                        .to_ascii_lowercase()
+                        .starts_with(&period.to_ascii_lowercase())
+                });
+        }
+        self.body_prefix(&text)
+    }
     pub(crate) fn step_seconds(&self, time: Time, part: TimePart, increase: bool) -> Option<i64> {
         if part == TimePart::Second && !self.seconds
             || part == TimePart::Period && self.cycle != HourCycle::H12
@@ -215,7 +284,13 @@ impl Rules {
         }
     }
     fn parse(&self, text: &str, base: Time) -> Result<Time, String> {
-        let time = self.clock.parse(text, base)?;
+        let time = self.clock.parse(text, base).map_err(|error| {
+            if self.clock.incomplete(text) {
+                self.clock.hint()
+            } else {
+                error
+            }
+        })?;
         let v = self.check(time);
         if v.status == ValidationStatus::Valid {
             Ok(time)
@@ -271,15 +346,10 @@ impl TimePicker {
             move |v| format.format(*v),
         )
         .classifiers(
-            move |s| {
-                if s.is_empty() {
-                    ValidationStatus::Incomplete
-                } else {
-                    match status.clock.parse(s, source_status.get()) {
-                        Ok(t) => status.check(t).status,
-                        Err(_) => ValidationStatus::Invalid,
-                    }
-                }
+            move |s| match status.clock.parse(s, source_status.get()) {
+                Ok(t) => status.check(t).status,
+                Err(_) if status.clock.incomplete(s) => ValidationStatus::Incomplete,
+                Err(_) => ValidationStatus::Invalid,
             },
             move |v| model.check(*v),
         );
@@ -419,12 +489,7 @@ impl TimePicker {
                 .accessible_label(self.rules.clock.hint())
                 .validation(self.validation())
                 .on_submit(move || submit.submit())
-                .on_cancel(move || cancel.cancel())
-                .on_blur(move || {
-                    if blur.commit_on_blur {
-                        blur.commit();
-                    }
-                }),
+                .on_cancel(move || cancel.cancel()),
             self.parts(),
             View::row(vec![
                 View::button(
@@ -436,13 +501,21 @@ impl TimePicker {
                     self.rules.clock.locale.action(ActionLabel::Revert),
                     move || revert.cancel(),
                 )
+                .value_cancel()
                 .enabled(!self.read_only),
             ]),
         ];
         if let Some(error) = self.draft.error() {
             children.push(View::label(error).wrap(true).foreground(0xffff8787));
         }
-        View::panel(children).accessible_label(self.rules.clock.locale.clock_label())
+        View::panel(children)
+            .accessible_label(self.rules.clock.locale.clock_label())
+            .value_editor()
+            .on_blur(move || {
+                if blur.commit_on_blur {
+                    blur.commit();
+                }
+            })
     }
 }
 

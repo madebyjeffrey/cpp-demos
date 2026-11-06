@@ -21,8 +21,8 @@ rejects gaps; repeated times require an explicit policy. Invalid edits preserve 
 and committed value. Apply/Enter validates; Revert restores the model. Numeric
 incomplete/invalid/out-of-range classification and readonly/blur policy already
 exist. Date editors now provide bounds, disabled/custom validation, readonly/blur/
-submit/cancel policy and a noncommitting keyboard cursor. Unifying those policies
-for every typed value remains M6.6.
+submit/cancel policy and a noncommitting keyboard cursor. The shared lifecycle
+for all six typed controls is specified below.
 
 Integer parse/format/step never passes through floating point. Decimal precision is
 an explicit display option; an untouched rounded display cannot overwrite the exact
@@ -234,14 +234,33 @@ session. Retain one picker per independent editor session; multiple pickers can
 share a source. `info()` provides source/original/draft, HSV, model and validation.
 `m6_color` demonstrates inline transactional/live editors and a well.
 
-## Shared acceptance rules (M6.6 in progress)
+## Shared draft lifecycle
 
 Each typed editor has `binding()`, `validation()`, `commit()` and `cancel()`. A
 rejected setter leaves editable text plus an error; retry is explicit. Successful
 normalization comes from the application readback. Equal pristine Apply preserves
 exact hidden precision without another setter call. Newer edits or source changes
-made by setters/validation callbacks supersede the original action. Codec queries
-are pure; notifications may mutate state and suppress recursive delivery.
+made by setters/validation callbacks supersede the original action. Revisions also
+cancel preedit after an equal-looking external replacement, including hidden color
+alpha changes. Own edits retain undo/redo. Codec queries are pure; notifications
+may mutate state and suppress recursive delivery.
 
-`m6_drafts` demonstrates acceptance/retry across all six editors. Prefix status and
-shared blur/composition/lifecycle coverage remain open in M6.6.
+`Incomplete` recognizes appendable date/clock components, localized sign and final group
+prefixes and short hex input. Impossible dates/times, misplaced separators, excess
+precision and mixed digit sets are invalid. Complete values use bounds and custom
+rules. Generic codecs may declare a pure `Draft::incomplete_when` predicate; ISO
+helpers share the built-in prefix rules.
+
+Numeric/date/time/datetime/zoned blur applies when focus leaves the whole editor,
+on deactivation or explicit blur. `commit_on_blur(false)` retains text. Internal
+focus changes do not commit before Revert. Color and generic `value_field` remain
+explicit, with color live preview opt-in. Enter confirms preedit before submitting;
+Escape cancels preedit before reverting. Revert/Cancel buttons do both immediately.
+Host/AX changes in that editor wait for composition to finish; independent editors
+remain usable. Programmatic model methods are independent of host input state.
+
+Unavailable preedit cancels on hide, disable, collapse, readonly or unmount.
+Ordinary model-owned drafts survive hide/unmount; color retires preview ownership
+as described above. Pure queries/source readback do not emit editing callbacks.
+`m6_drafts` demonstrates these policies across all six editors; use `--prefix` and
+`--tab=number|date|time|datetime|zone|color` for reproducible unfinished input.

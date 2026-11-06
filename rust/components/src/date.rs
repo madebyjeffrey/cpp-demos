@@ -52,7 +52,13 @@ impl Rules {
         }
     }
     fn parse(&self, text: &str) -> Result<Date, String> {
-        let date = self.locale.date_input(text)?;
+        let date = self.locale.date_input(text).map_err(|error| {
+            if self.locale.date_prefix(text) {
+                self.locale.date_hint().into()
+            } else {
+                error
+            }
+        })?;
         let validation = self.check(date);
         if validation.status == ValidationStatus::Valid {
             Ok(date)
@@ -61,11 +67,9 @@ impl Rules {
         }
     }
     fn status(&self, text: &str) -> ValidationStatus {
-        if text.is_empty() {
-            return ValidationStatus::Incomplete;
-        }
         match self.locale.date_input(text) {
             Ok(date) => self.check(date).status,
+            Err(_) if self.locale.date_prefix(text) => ValidationStatus::Incomplete,
             Err(_) => ValidationStatus::Invalid,
         }
     }
@@ -498,12 +502,7 @@ impl DatePicker {
                 .accessible_label(self.rules.locale.date_hint())
                 .validation(self.validation())
                 .on_submit(move || submit.submit())
-                .on_cancel(move || cancel.cancel())
-                .on_blur(move || {
-                    if blur.commit_on_blur {
-                        blur.commit();
-                    }
-                }),
+                .on_cancel(move || cancel.cancel()),
             View::row(vec![
                 View::button(self.rules.locale.action(ActionLabel::Apply), move || {
                     apply.submit()
@@ -512,6 +511,7 @@ impl DatePicker {
                 View::button(self.rules.locale.action(ActionLabel::Revert), move || {
                     revert.cancel()
                 })
+                .value_cancel()
                 .enabled(!self.read_only),
             ]),
         ];
@@ -521,9 +521,15 @@ impl DatePicker {
         if show_field {
             children.push(View::column(fields).key("$date-fields"));
         }
-        let mut root = View::panel(children).accessible_label(self.rules.locale.date_hint());
+        let mut root = View::panel(children)
+            .accessible_label(self.rules.locale.date_hint())
+            .value_editor();
         Rc::make_mut(&mut root.0).calendar = Some(self.clone());
-        root
+        root.on_blur(move || {
+            if blur.commit_on_blur {
+                blur.commit();
+            }
+        })
     }
 }
 impl Host {

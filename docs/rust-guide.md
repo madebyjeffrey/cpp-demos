@@ -184,8 +184,10 @@ an anchored well; use one picker per independent editing session.
 `cargo run --example m6_drafts` demonstrates application acceptance and retry
 across all six typed editors. They share `binding()`, `validation()`, `commit()`
 and `cancel()`: rejected updates retain text and feedback, accepted normalization
-is read back, and newer callback edits supersede the original action. Shared
-prefix/blur/composition coverage is still in progress under M6.6.
+is read back, and newer callback edits supersede the original action. Blur applies
+when leaving the whole editor; internal Revert does not apply early. Host actions
+wait for preedit confirmation. `--prefix --tab=zone` demonstrates unfinished input;
+the example also has a blur-policy toggle.
 
 See [component contracts](../rust/components/README.md) for layouts, controls,
 selection, popup placement, virtual models, deadlines, native semantics and
@@ -218,9 +220,9 @@ the viewport. Trees accept application-loaded lazy children. Table accessibility
 exposes logical rows/columns/cells, indexed queries, selection and validated editing. Layout supports
 rich inline paragraphs, constrained reflow and both-axis scrolling with draggable
 bars. Split views have draggable, keyboard-adjustable dividers with collapse and
-retained pane state. Color controls currently expose sRGB channels. These interfaces do not claim full C++ behavior or pixel parity.
+retained pane state. Color controls provide RGB/HSV/hex editing over encoded sRGB. These interfaces do not claim full C++ behavior or pixel parity.
 The [completion checklist](rust-completion-checklist.md) tracks remaining work,
-including complete value-control policies and an actual VoiceOver/IME audit.
+including inspector/Lab expansion and an actual VoiceOver/IME audit.
 Checked `EditLocale` profiles now share explicit number/date editing grammars;
 ASCII/ISO remains the default. See the [format contract](rust-editable-formats.md). Native notification
 targets, bounded snapshots and lifecycle contracts have dedicated AppKit tests.

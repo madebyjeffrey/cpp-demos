@@ -362,7 +362,12 @@ impl Host {
                     options.multiline = n.multiline;
                     options.read_only = n.read_only;
                     editor.set_options(options);
-                    editor.sync(value);
+                    let revision = if let Data::Text(binding) = &mounted.descriptions[&n.id].data {
+                        crate::state::read_only(|| binding.revision())
+                    } else {
+                        None
+                    };
+                    editor.sync(value, revision);
                 }
             }
             let mut i = self.0.interaction.borrow_mut();
@@ -388,6 +393,7 @@ impl Host {
         }
         self.retire_table_edits(&old);
         self.retire_colors(&old);
+        self.retire_composition();
         self.restore_collection_focus(prior_focus, &old);
         self.restore_calendar_focus(prior_focus, &old);
         drop(old);
@@ -450,6 +456,11 @@ impl Host {
         let Some((d, value)) = target else {
             return Ok(false);
         };
+        if d.value_cancel {
+            self.cancel_value_composition(id);
+        } else if self.value_composing(id) {
+            return Ok(false);
+        }
         if let Some(day) = d.calendar_day {
             return self.activate_calendar_day(id, day.date);
         }
@@ -565,7 +576,7 @@ impl Host {
     }
     pub fn set_number(&self, id: NodeId, value: f64) -> Result<bool, Error> {
         self.refresh()?;
-        if !value.is_finite() {
+        if !value.is_finite() || self.value_composing(id) {
             return Ok(false);
         }
         if self.0.mounted.borrow().nodes.iter().any(|n| {

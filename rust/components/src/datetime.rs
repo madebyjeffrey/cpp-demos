@@ -88,12 +88,29 @@ impl Rules {
         }
     }
     fn parse(&self, text: &str, base: DateTime) -> Result<DateTime, String> {
-        let value = self.raw(text, base)?;
+        let value = self.raw(text, base).map_err(|error| {
+            if self.incomplete(text) {
+                self.hint()
+            } else {
+                error
+            }
+        })?;
         let status = self.check(value);
         if status.status == ValidationStatus::Valid {
             Ok(value)
         } else {
             Err(status.message.unwrap())
+        }
+    }
+    fn incomplete(&self, text: &str) -> bool {
+        let locale = &self.clock.locale;
+        if locale.check_digits(text).is_err() {
+            return false;
+        }
+        if let Some((date, clock)) = text.split_once('T') {
+            locale.date_input(date).is_ok() && self.clock.incomplete(clock)
+        } else {
+            locale.date_input(text).is_ok() || locale.date_prefix(text)
         }
     }
 }
@@ -126,15 +143,10 @@ impl Editor {
             move |v| format.format(*v),
         )
         .classifiers(
-            move |s| {
-                if s.is_empty() {
-                    ValidationStatus::Incomplete
-                } else {
-                    match status.raw(s, source_status.get()) {
-                        Ok(v) => status.check(v).status,
-                        Err(_) => ValidationStatus::Invalid,
-                    }
-                }
+            move |s| match status.raw(s, source_status.get()) {
+                Ok(v) => status.check(v).status,
+                Err(_) if status.incomplete(s) => ValidationStatus::Incomplete,
+                Err(_) => ValidationStatus::Invalid,
             },
             move |v| model.check(*v),
         );
@@ -351,8 +363,8 @@ impl DateTimePicker {
         self.editor.commit()
     }
     pub fn cancel(&self) {
-        self.editor.cancel();
-        self.calendar.cancel()
+        self.calendar.cancel();
+        self.editor.cancel()
     }
     pub fn can_step(&self, part: TimePart, increase: bool) -> bool {
         self.editor.next(part, increase).is_some()
@@ -385,12 +397,7 @@ impl DateTimePicker {
                 .validation(self.validation())
                 .read_only(self.editor.read_only)
                 .on_submit(move || submit.submit())
-                .on_cancel(move || cancel.cancel())
-                .on_blur(move || {
-                    if blur.blur {
-                        blur.commit();
-                    }
-                }),
+                .on_cancel(move || cancel.cancel()),
             self.editor.parts(),
             self.calendar
                 .clone()
@@ -403,12 +410,20 @@ impl DateTimePicker {
                 View::button(locale.action(ActionLabel::Apply), move || apply.submit())
                     .enabled(!self.editor.read_only),
                 View::button(locale.action(ActionLabel::Revert), move || revert.cancel())
+                    .value_cancel()
                     .enabled(!self.editor.read_only),
             ]),
         ];
         if let Some(e) = self.editor.draft.error() {
             children.push(View::label(e).wrap(true).foreground(0xffff8787));
         }
-        View::panel(children).accessible_label(locale.datetime_label())
+        View::panel(children)
+            .accessible_label(locale.datetime_label())
+            .value_editor()
+            .on_blur(move || {
+                if blur.blur {
+                    blur.commit();
+                }
+            })
     }
 }

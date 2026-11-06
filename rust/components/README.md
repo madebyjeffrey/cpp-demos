@@ -1625,14 +1625,16 @@ VoiceOver/IME candidate and visible GPU evidence remain M5.5/M8.
 Use `--well` to start with the color popover open. It sizes to its content up to
 the configured maximum height and scrolls when the viewport is constrained.
 
-### Shared draft acceptance (M6.6 in progress)
+### Shared draft lifecycle
 
 All six typed editors expose `binding()`, `validation()`, `commit()` and `cancel()`.
 `binding()` is the editable text; the application binding remains the committed
 value (except explicit color live preview). A rejected setter retains text and an
 error; Apply can retry. Accepted normalization is read back. Pristine Apply skips
 an equal setter and preserves hidden precision. External model/revision or formatter
-context changes replace stale text. Custom bindings should supply revisions when
+context changes replace stale text. Binding revisions also cancel stale preedit
+when a model changes away and back, or hidden precision changes behind identical
+text. Own edits retain undo/redo. Custom bindings should supply revisions when
 equal-looking replacements need to invalidate edits.
 
 Parsers, formatters and validation queries must be pure. Validation callbacks run
@@ -1643,7 +1645,30 @@ supports Escape and exposes readonly to the host; its Apply/Revert buttons are
 inactive when readonly. Numeric steppers announce the valid staged value they
 will adjust.
 
-`cargo run --example m6_drafts` demonstrates all six editors and application
-acceptance/retry without native plumbing. The remaining M6.6 work is consistent
-prefix classification and the shared blur/composition/lifecycle interaction matrix;
-this acceptance checkpoint does not close that milestone.
+`Incomplete` recognizes appendable date/clock components, localized sign and final group
+prefixes and short hex values. Impossible calendar/clock components, misplaced
+separators and mixed digit sets are invalid. Complete values then use their bounds
+and application rules. Custom codecs can opt in with `Draft::incomplete_when`;
+its pure predicate runs after parsing fails. ISO draft helpers use the same rules.
+
+For numeric/date/time/datetime/zoned controls, `commit_on_blur(true)` applies when
+focus leaves the whole editor, on deactivation or explicit host blur, without
+submitting. Internal focus changes do not apply early, so Revert remains useful.
+`commit_on_blur(false)` retains the draft. Color remains transactional until
+Apply/Enter, or publishes through explicit live preview. Generic `value_field`
+uses explicit Apply/Enter. Escape first cancels preedit, then reverts the draft;
+Enter first confirms preedit, then submits. Revert/Cancel buttons discard preedit
+and revert in one action. Apply, steppers, calendar choices, sliders and mode
+changes cannot publish stale text through host/AX actions while that editor owns
+preedit. Independent editors remain usable. Direct model methods do not depend on
+a host or input-method state.
+
+Hide, disable, collapse, readonly and unmount cancel unavailable preedit. Ordinary
+model-owned drafts remain reusable after hide/unmount; color previews retire their
+rollback ownership according to the color lifecycle above. Validation callbacks
+report editing actions; pure queries/external readback do not emit callbacks.
+
+`cargo run --example m6_drafts` demonstrates all six editors, acceptance/retry and
+blur policy without native plumbing. `--prefix --tab=zone` starts with unfinished
+input (tabs: `number`, `date`, `time`, `datetime`, `zone`, `color`). All normal render
+and theme flags remain available.

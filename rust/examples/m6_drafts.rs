@@ -21,6 +21,7 @@ fn sample(body: View, value: impl std::fmt::Display, validation: Validation) -> 
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let allow = State::new(true);
+    let blur = State::new(false);
     let n = State::new(3i64);
     let d = State::new("2026-11-06".parse::<Date>()?);
     let t = State::new("12:30".parse::<Time>()?);
@@ -33,14 +34,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let datetime = DateTimePicker::new(gated(&dt, &allow)).commit_on_blur(false);
     let zoned = ZonedPicker::new(gated(&z, &allow), "America/Edmonton")?.commit_on_blur(false);
     let color = ColorPicker::new(gated(&c, &allow));
-    let tabs = Tabs::new("number");
+    let args: Vec<_> = std::env::args().collect();
+    if args.iter().any(|a| a == "--prefix") {
+        number.binding().set("-".into());
+        date.binding().set("2026-11-".into());
+        time.binding().set("12:".into());
+        datetime.binding().set("2026-11-06T".into());
+        zoned.binding().set("2026-11-06T".into());
+        color.binding().set("#4488".into());
+    }
+    let tabs = Tabs::new(
+        args.iter()
+            .find_map(|a| a.strip_prefix("--tab="))
+            .unwrap_or("number"),
+    );
     common::run("SCARS · Shared drafts", (760, 940), move || {
         let body = tabs.view(vec![
             Tab::new(
                 "number",
                 "Number",
                 sample(
-                    numeric_field("Count (0–10)", &number),
+                    numeric_field("Count (0–10)", &number.clone().commit_on_blur(blur.get())),
                     n.get(),
                     number.validation(),
                 ),
@@ -48,22 +62,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Tab::new(
                 "date",
                 "Date",
-                sample(date.view(), d.get(), date.validation()),
+                sample(
+                    date.clone().commit_on_blur(blur.get()).view(),
+                    d.get(),
+                    date.validation(),
+                ),
             ),
             Tab::new(
                 "time",
                 "Time",
-                sample(time.view(), t.get(), time.validation()),
+                sample(
+                    time.clone().commit_on_blur(blur.get()).view(),
+                    t.get(),
+                    time.validation(),
+                ),
             ),
             Tab::new(
                 "datetime",
                 "Datetime",
-                sample(datetime.view(), dt.get(), datetime.validation()),
+                sample(
+                    datetime.clone().commit_on_blur(blur.get()).view(),
+                    dt.get(),
+                    datetime.validation(),
+                ),
             ),
             Tab::new(
                 "zone",
                 "Zoned",
-                sample(zoned.view(), z.get(), zoned.validation()),
+                sample(
+                    zoned.clone().commit_on_blur(blur.get()).view(),
+                    z.get(),
+                    zoned.validation(),
+                ),
             ),
             Tab::new(
                 "color",
@@ -73,8 +103,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ]);
         view! { scroll { column(padding:24,gap:16) {
             label("Shared draft lifecycle",label_style:LabelStyle::Heading);
-            label("Edits wait for Enter or Apply. Escape cancels. Turn acceptance off, change a value, then apply: the text stays with an error. Turn acceptance on and retry.",wrap:true);
+            label("Edits wait for Enter or Apply. Escape cancels. Turn acceptance off, change a value, then apply: the text stays with an error. Turn acceptance on and retry. Try an unfinished date, time or hex value; it stays editable.",wrap:true);
             checkbox("Application accepts updates",bind:allow);
+            checkbox("Commit when leaving the editor (color stays transactional)",bind:blur);
             embed(body);
         } } }
     })

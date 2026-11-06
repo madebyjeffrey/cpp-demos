@@ -3,6 +3,9 @@ use crate::{CheckState, Error, Host, Kind, NodeId, view::Data};
 impl Host {
     pub fn set_check_state(&self, id: NodeId, value: CheckState) -> Result<bool, Error> {
         self.refresh()?;
+        if self.value_composing(id) {
+            return Ok(false);
+        }
         let data = {
             let m = self.0.mounted.borrow();
             m.nodes
@@ -29,6 +32,9 @@ impl Host {
     /// Assign a boolean control's value without synthesizing a click or toggling twice.
     pub fn set_selected(&self, id: NodeId, value: bool) -> Result<bool, Error> {
         self.refresh()?;
+        if self.value_composing(id) {
+            return Ok(false);
+        }
         let data = {
             let m = self.0.mounted.borrow();
             m.nodes

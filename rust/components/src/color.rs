@@ -194,7 +194,7 @@ fn parse_channel(channel: ColorChannel, text: &str) -> Result<f64, Validation> {
             true,
         ))
     };
-    if text.is_empty() || matches!(text, "+" | "-" | "." | "+." | "-.") {
+    if <f64 as crate::draft::Number>::incomplete(text) {
         return fail(
             ValidationStatus::Incomplete,
             "Enter a complete value".into(),
@@ -203,10 +203,10 @@ fn parse_channel(channel: ColorChannel, text: &str) -> Result<f64, Validation> {
     let Ok(value) = text.parse::<f64>() else {
         return fail(ValidationStatus::Invalid, "Use an ASCII number".into());
     };
-    if value.is_nan() {
+    if !value.is_finite() {
         return fail(ValidationStatus::Invalid, "Use a finite value".into());
     }
-    if !value.is_finite() || value < 0. || value > channel.max() {
+    if value < 0. || value > channel.max() {
         return fail(
             ValidationStatus::OutOfRange,
             format!("Enter 0–{}", channel.max()),
@@ -285,7 +285,12 @@ impl Edit {
                 };
                 if let Some(message) = message {
                     return validation(
-                        if self.hex.is_empty() || self.hex == "#" {
+                        if self.hex.is_empty()
+                            || self.hex.strip_prefix('#').is_some_and(|s| {
+                                s.len() < if self.cfg.alpha { 8 } else { 6 }
+                                    && s.bytes().all(|b| b.is_ascii_hexdigit())
+                            })
+                        {
                             ValidationStatus::Incomplete
                         } else {
                             ValidationStatus::Invalid
@@ -513,7 +518,7 @@ impl ColorPicker {
         self.edit().component(channel)
     }
     pub fn binding(&self) -> Binding<String> {
-        let (read, write) = (self.clone(), self.clone());
+        let (read, write, revision) = (self.clone(), self.clone(), self.clone());
         Binding::new(
             move || read.edit().hex,
             move |text| {
@@ -532,9 +537,16 @@ impl ColorPicker {
                 });
             },
         )
+        .with_revision(move || revision.revision())
+    }
+    fn revision(&self) -> u64 {
+        self.inner
+            .edit
+            .version()
+            .wrapping_add(self.inner.source.revision().unwrap_or(0))
     }
     fn field_binding(&self, index: usize) -> Binding<String> {
-        let (read, write) = (self.clone(), self.clone());
+        let (read, write, revision) = (self.clone(), self.clone(), self.clone());
         Binding::new(
             move || read.edit().fields[index].clone(),
             move |text| {
@@ -553,6 +565,7 @@ impl ColorPicker {
                 });
             },
         )
+        .with_revision(move || revision.revision())
     }
     fn stage(&self, mut e: Edit, collect: bool) -> bool {
         e.active = true;
@@ -817,14 +830,17 @@ impl ColorPicker {
         let mut apply_button =
             View::button("Apply", move || apply.submit()).enabled(!self.cfg.readonly && valid);
         Rc::make_mut(&mut apply_button.0).color_action = Some(ColorAction::Apply);
-        let mut cancel_button =
-            View::button("Cancel", move || revert.cancel()).enabled(!self.cfg.readonly);
+        let mut cancel_button = View::button("Cancel", move || revert.cancel())
+            .value_cancel()
+            .enabled(!self.cfg.readonly);
         Rc::make_mut(&mut cancel_button.0).color_action = Some(ColorAction::Cancel);
         children.push(View::row(vec![apply_button, cancel_button]));
         if let Some(error) = e.status().message {
             children.push(View::label(error).wrap(true).foreground(0xffff8787));
         }
-        let mut root = View::column(children).accessible_label("Color editor");
+        let mut root = View::column(children)
+            .accessible_label("Color editor")
+            .value_editor();
         Rc::make_mut(&mut root.0).color_picker = Some(self.clone());
         root
     }

@@ -252,6 +252,7 @@ impl Host {
         self.reconcile_capture();
         self.reconcile_fields();
         self.reconcile_colors();
+        let composition_changed = self.retire_composition();
         if let Some((id, rect)) = reveal_caret {
             self.reveal_rect(id, rect);
         }
@@ -309,7 +310,9 @@ impl Host {
                 .cloned();
             inspector.selected.set(node.map(crate::Inspection::from));
         }
-        Ok(previous_offsets != *self.0.scroll.borrow() || generation != self.generation())
+        Ok(composition_changed
+            || previous_offsets != *self.0.scroll.borrow()
+            || generation != self.generation())
     }
     /// Scene order includes z-order while preserving each sibling subtree as a unit.
     pub fn scene(&self) -> Result<Vec<Node>, Error> {
