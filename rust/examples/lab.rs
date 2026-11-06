@@ -1,29 +1,65 @@
-//! Small component catalog; use --light or resize the native window for palette/layout checks.
+//! Full catalog. Try --page values --light --size 480x740, or --list.
+#[path = "lab/view.rs"]
+mod catalog;
 mod common;
-use scars_window::ui::*;
+#[path = "lab/model.rs"]
+mod model;
+use model::Lab;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let checked = State::new(CheckState::Indeterminate);
-    let enabled = State::new(true);
-    let text = State::new("Portable Rust controls".to_owned());
-    let level = State::new(0.5);
-    let selected = State::new("a".to_owned());
-    common::run("SCARS · Component lab", (820, 720), move || {
-        view! {
-            column(padding:28,gap:20){
-                label("Component lab",font_size:30,bold:true,shrink:0);
-                switch("Enable controls",bind:enabled,shrink:0);
-                scroll(grow:1){
-                    panel(padding:20,gap:14,enabled:enabled.get()){
-                        text_field("Text",bind:text);tri_checkbox("Three-state checkbox",bind:checked);
-                        segmented(bind:selected,options:vec![OptionItem::new("a","Alpha"),OptionItem::new("b","Beta"),OptionItem::new("c","Gamma")]);
-                        slider(bind:level,min:0,max:1,step:0.01);progress(bind:level);
-                        row{button("Primary",on_click:||{});button("Disabled",enabled:false,on_click:||{});}
-                        inline(gap:8){label("Wrapping inline layout:");for word in ["reactive","portable","declarative","native IME"]{button(word,on_click:||{});}}
-                        text_editor("Notes",bind:text,height:150);
-                    }
-                }
-                label("Use the titlebar theme button, or launch with --light. Resize to check constraints.",wrap:true,shrink:0);
-            }
+    let args: Vec<_> = std::env::args().collect();
+    let lab = Lab::new()?;
+    if args.iter().any(|a| a == "--list") {
+        for (id, page) in catalog::SAMPLES {
+            println!("{page}: {id}");
         }
-    })
+        return Ok(());
+    }
+    if let Some(i) = args.iter().position(|a| a == "--page") {
+        let page = args.get(i + 1).ok_or("--page needs a catalog page")?;
+        if !catalog::PAGES.iter().any(|(id, _)| id == page) {
+            return Err("Unknown catalog page; use --list".into());
+        }
+        lab.pages.select(page);
+    }
+    if let Some(i) = args.iter().position(|a| a == "--state") {
+        match args.get(i + 1).map(String::as_str) {
+            Some("disabled") => lab.enabled.set(false),
+            Some("readonly") => lab.set_readonly(true),
+            Some("error") => {
+                lab.text.set(String::new());
+                lab.number.binding().set("invalid".into());
+                lab.date.binding().set("30.02.2026".into());
+            }
+            Some("default") => {}
+            _ => return Err("--state needs default, disabled, readonly or error".into()),
+        }
+    }
+    let presentation = if let Some(i) = args.iter().position(|a| a == "--show") {
+        let kind = args
+            .get(i + 1)
+            .ok_or("--show needs a presentation")?
+            .clone();
+        lab.pages.select(match kind.as_str() {
+            "menu" | "dropdown" | "popover" | "alert" => "flow",
+            "combo" => "data",
+            "color" => "values",
+            _ => return Err("--show needs menu, dropdown, popover, alert, combo or color".into()),
+        });
+        Some(kind)
+    } else {
+        None
+    };
+    let preview = lab.clone();
+    common::run_prepared(
+        "SCARS · Component lab",
+        (1120, 900),
+        Some(lab.inspector.clone()),
+        move || catalog::view(&lab),
+        move |host| {
+            if let Some(kind) = presentation {
+                preview.present(&kind, host)?;
+            }
+            Ok(())
+        },
+    )
 }

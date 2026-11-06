@@ -155,3 +155,63 @@ fn percentage_heights_resolve_against_allocated_parent_bounds() {
         Rect::new(0., 0., 100., 50.)
     );
 }
+
+#[test]
+fn slider_page_step_is_independent_of_arrows_and_obeys_bounds_and_readonly() {
+    let value = State::new(0.3);
+    let readonly = State::new(false);
+    let host = Host::new({
+        let (value, readonly) = (value.clone(), readonly.clone());
+        move || view! { slider(bind:value,min:0,max:1,step:0.05,page_step:0.3,read_only:readonly.get()); }
+    });
+    host.layout(Size::new(300., 80.), &Metrics).unwrap();
+    let id = node(&host, Kind::Slider).id;
+    host.focus(id).unwrap();
+    key(&host, Key::PageUp);
+    assert!((value.get() - 0.6).abs() < 1e-10);
+    key(&host, Key::Right);
+    assert!((value.get() - 0.65).abs() < 1e-10);
+    key(&host, Key::PageDown);
+    assert!((value.get() - 0.35).abs() < 1e-10);
+    key(&host, Key::PageDown);
+    key(&host, Key::PageDown);
+    assert_eq!(value.get(), 0.);
+    readonly.set(true);
+    key(&host, Key::PageUp);
+    assert_eq!(value.get(), 0.);
+    for invalid in [0., -1., f64::NAN, f64::INFINITY] {
+        let host = Host::new(move || {
+            View::slider(State::new(0.).binding(), 0., 1., 0.1).page_step(invalid)
+        });
+        assert!(host.snapshot().is_err());
+    }
+}
+
+#[test]
+fn labeled_components_supply_names_and_preserve_explicit_names() {
+    fn custom(value: &State<String>) -> View {
+        view! { labeled("Account", View::text_field("",value.binding()),key:"account"); }
+    }
+    let value = State::new("Ada".to_owned());
+    let host = Host::new(move || {
+        view! { column {
+            custom(&value);
+            labeled("Visible caption",View::text_field("",value.binding()).accessible_label("Explicit name"));
+        } }
+    });
+    host.layout(Size::new(300., 200.), &Metrics).unwrap();
+    let fields: Vec<_> = host
+        .snapshot()
+        .unwrap()
+        .into_iter()
+        .filter(|n| n.kind == Kind::TextField)
+        .collect();
+    assert_eq!(fields[0].label, "Account");
+    assert_eq!(fields[1].label, "Explicit name");
+    assert!(
+        host.snapshot()
+            .unwrap()
+            .iter()
+            .any(|n| n.text == "Visible caption")
+    );
+}

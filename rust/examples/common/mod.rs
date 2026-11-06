@@ -14,7 +14,30 @@ pub fn run_inspected(
     inspector: Option<Inspector>,
     builder: impl Fn() -> View + 'static,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    run_prepared(title, size, inspector, builder, |_| Ok(()))
+}
+/// Optional CLI preview actions run after geometry exists, before the first paint.
+pub fn run_prepared(
+    title: &str,
+    size: (i32, i32),
+    inspector: Option<Inspector>,
+    builder: impl Fn() -> View + 'static,
+    prepare: impl FnOnce(&Host) -> Result<(), Error>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().collect();
+    let size = if let Some(i) = args.iter().position(|v| v == "--size") {
+        let (width, height) = args
+            .get(i + 1)
+            .and_then(|v| v.split_once('x'))
+            .ok_or("--size needs WIDTHxHEIGHT")?;
+        let size = (width.parse::<i32>()?, height.parse::<i32>()?);
+        if size.0 <= 0 || size.1 <= 0 {
+            return Err("--size must be positive".into());
+        }
+        size
+    } else {
+        size
+    };
     if let Some(i) = args.iter().position(|v| v == "--render") {
         let path = args.get(i + 1).ok_or("--render needs a PNG path")?;
         let host = Host::new(builder);
@@ -34,6 +57,11 @@ pub fn run_inspected(
             host.set_theme(Theme::light());
         }
         let renderer = Renderer::default();
+        host.layout(Size::new(size.0 as f64, size.1 as f64), &renderer)?;
+        if reveal(&args, &host)? {
+            host.layout(Size::new(size.0 as f64, size.1 as f64), &renderer)?;
+        }
+        prepare(&host)?;
         host.layout(Size::new(size.0 as f64, size.1 as f64), &renderer)?;
         if let Some(i) = args.iter().position(|v| v == "--select-key") {
             let key = args.get(i + 1).ok_or("--select-key needs a mounted key")?;
@@ -93,10 +121,33 @@ pub fn run_inspected(
         if let Some(inspector) = inspector {
             window.view_host().unwrap().set_inspector(inspector);
         }
+        let host = window.view_host().unwrap();
+        let bounds = window.content_size();
+        let renderer = Renderer::default();
+        let viewport = Size::new(bounds.width, bounds.height);
+        host.layout(viewport, &renderer)?;
+        reveal(&args, &host)?;
+        prepare(&host)?;
+        host.layout(viewport, &renderer)?;
         if args.iter().any(|v| v == "--smoke") {
             app.quit_after(std::time::Duration::from_secs(1));
         }
         app.run()?;
     }
     Ok(())
+}
+fn reveal(args: &[String], host: &Host) -> Result<bool, Error> {
+    let Some(i) = args.iter().position(|v| v == "--reveal-key") else {
+        return Ok(false);
+    };
+    let key = args
+        .get(i + 1)
+        .ok_or_else(|| Error("--reveal-key needs a mounted key".into()))?;
+    let target = host
+        .snapshot()?
+        .into_iter()
+        .find(|n| n.key.as_ref() == Some(key))
+        .ok_or_else(|| Error("No node matches --reveal-key".into()))?;
+    host.reveal_rect(target.id, target.bounds);
+    Ok(true)
 }

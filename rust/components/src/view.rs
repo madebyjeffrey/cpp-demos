@@ -106,6 +106,7 @@ pub(crate) struct Description {
     pub cancel: Option<Rc<dyn Fn()>>,
     pub blur: Option<Rc<dyn Fn()>>,
     pub repeat: Option<crate::Repeat>,
+    pub page_step: Option<f64>,
     pub data: Data,
     pub style: Style,
     pub enabled: bool,
@@ -181,6 +182,7 @@ impl View {
             cancel: None,
             blur: None,
             repeat: None,
+            page_step: None,
             data: Data::None,
             style: Style::default(),
             enabled: true,
@@ -368,6 +370,23 @@ impl View {
     }
     pub fn slider(value: Binding<f64>, min: f64, max: f64, step: f64) -> Self {
         Self::bound(Kind::Slider, "", Data::Number(value, min, max, step))
+    }
+    /// Set the Page Up/Down delta independently of the arrow-key step.
+    pub fn page_step(mut self, value: f64) -> Self {
+        Rc::make_mut(&mut self.0).page_step = Some(value);
+        self
+    }
+    /// Add a visible annotation and supply the name unless explicitly set.
+    pub fn labeled(mut self, annotation: impl Into<String>) -> Self {
+        let annotation = annotation.into();
+        if self.0.accessible.is_empty() {
+            Rc::make_mut(&mut self.0).accessible = annotation.clone();
+        }
+        Self::column(vec![
+            Self::label(annotation).label_style(crate::LabelStyle::Micro),
+            self,
+        ])
+        .gap(5.)
     }
     pub fn progress(value: Binding<f64>) -> Self {
         Self::bound(Kind::Progress, "", Data::Number(value, 0., 1., 0.))
@@ -573,4 +592,9 @@ impl View {
         Rc::make_mut(&mut self.0).style.font_size = Some(v);
         self
     }
+}
+
+/// Annotate a component and supply its accessible name when not explicitly set.
+pub fn labeled(annotation: impl Into<String>, content: View) -> View {
+    content.labeled(annotation)
 }

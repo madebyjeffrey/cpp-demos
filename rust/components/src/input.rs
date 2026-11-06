@@ -881,8 +881,8 @@ impl Host {
                 Key::End => max,
                 Key::Left | Key::Down => value - step * scale,
                 Key::Right | Key::Up => value + step * scale,
-                Key::PageDown => value - step * 10.,
-                Key::PageUp => value + step * 10.,
+                Key::PageDown => value - node.page_step.unwrap_or(step * 10.),
+                Key::PageUp => value + node.page_step.unwrap_or(step * 10.),
                 _ => return Ok(false),
             };
             return self.set_number(id, value);

@@ -150,6 +150,9 @@ impl Inspection {
         }
         if let Some((min, max, step)) = n.range {
             details.push(format!("Range: {min}–{max}, step {step}"));
+            if let Some(page) = n.page_step {
+                details.push(format!("Page step: {page}"));
+            }
         }
         if let Some(s) = &n.split {
             details.push(format!(

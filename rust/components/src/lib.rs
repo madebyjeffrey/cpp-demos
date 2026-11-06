@@ -91,7 +91,7 @@ pub use text_buffer::{Selection, TextBuffer, TextCommand, TextOptions};
 pub use time::{HourCycle, TimePart, TimePicker};
 pub use tooltip::{TooltipOptions, TooltipPresentation};
 pub use values::*;
-pub use view::{CheckState, Kind, OptionItem, Value, View};
+pub use view::{CheckState, Kind, OptionItem, Value, View, labeled};
 pub use wizard::{
     Wizard, WizardChange, WizardInfo, WizardIssue, WizardOptions, WizardStep, WizardStepInfo,
     wizard, wizard_navigation, wizard_view,

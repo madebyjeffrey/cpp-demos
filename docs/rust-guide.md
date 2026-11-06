@@ -34,11 +34,15 @@ All stages have runnable examples:
 | M2 | `m2_editor`, `m2_fields`, `m2_numbers` | Completed editing, scoped field policies and repeating steppers |
 | 4 | `stage4` | Scroll, popup/menu, focus restoration, tabs and split views |
 | 5 | `stage5` | 100,000 virtual rows, trees, sorting and conflict-checked edits |
-| 6 | `stage6`, `lab` | Color/date/time values, inspector and control catalog |
-| M7.1 | `m7_inspector` | Live mounted hierarchy, diagnostics and virtual collection windows |
+| 6 | `stage6` | Color/date/time values and inspection |
+| M7.3 | `lab` | Full catalog, retained pages and stateful custom components |
+| M7.1–M7.2 | `m7_inspector` | Mounted hierarchy, partial property overrides and layout diagnostics |
 
 Examples 2–6, Lab and Todo accept `--light`, `--smoke`, and `--render file.png`.
-Render mode uses CPU Skia and accepts `--inspect` to print layout bounds.
+Render mode uses CPU Skia and accepts `--inspect` to print layout bounds. Shared
+examples also accept `--size WIDTHxHEIGHT` and raster `--reveal-key KEY`.
+See the [Lab guide](rust-lab.md) for all 28 samples, page/state/presentation flags,
+reproducible previews and concise custom component functions.
 Inspected raster examples also accept `--select-key KEY` to select a source node.
 
 ## A small application

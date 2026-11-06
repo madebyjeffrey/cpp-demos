@@ -29,6 +29,7 @@ pub struct Node {
     pub key: Option<String>,
     pub text: String,
     pub value: Value,
+    pub page_step: Option<f64>,
     /// Preferred size from the final layout measurement, before allocation.
     pub measured: Size,
     pub flex_lines: Vec<crate::InspectionFlexLine>,
@@ -737,6 +738,7 @@ fn mount(
         key: d.key.clone(),
         text: d.text.clone(),
         value,
+        page_step: d.page_step,
         bounds: Rect::default(),
         clip: Rect::default(),
         text_bounds: Rect::default(),
@@ -864,6 +866,13 @@ fn mount(
     Ok(())
 }
 pub(crate) fn validate(d: &Description) -> Result<(), Error> {
+    if d.page_step.is_some_and(|v| !v.is_finite() || v <= 0.)
+        || d.page_step.is_some() && d.kind != Kind::Slider
+    {
+        return Err(Error(
+            "Page step requires a slider and a finite positive value".into(),
+        ));
+    }
     if let Some(wizard) = &d.wizard {
         wizard.validate()?;
     }

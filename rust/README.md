@@ -15,6 +15,8 @@ target to 26.0. The application also checks the OS version at runtime.
 Start with the [Rust quick guide](../docs/rust-guide.md) for reactive components and
 `cargo run --locked --example todo`. Each stage has its own example and focused
 tests; [component contracts](components/README.md) describe the current coverage.
+The [full Lab](../docs/rust-lab.md) covers all control families in retained pages;
+use `cargo run --example lab --locked --offline -- --page values --size 440x740`.
 
 ## Source layout
 

@@ -1772,3 +1772,22 @@ background remain reactive. Raster previews also accept `--inspector-page layout
 or `style`, and `--select-key preview --override-preview` applies a sample patch.
 
 The example also accepts `--box` or `--flex` to select a diagnostic highlight.
+
+
+## M7.3 — Full Lab and custom components
+
+The [Lab guide](../../docs/rust-lab.md) maps all 28 samples and gives reproducible
+page/theme/size/state/presentation commands. Seven retained pages cover the public
+control families, layout/images, typed values, virtual collections and inspection.
+Cards wrap at constrained widths; models/resources are created outside builders.
+The two custom Counter instances are ordinary Rust models and functions called
+inside `view!`, with reactive actions and conditional content. Applications need
+no new component trait, reference-counting or native ownership code.
+
+`labeled(annotation, control)` and `View::labeled` add a visible micro label and
+supply an accessible name only when none was explicitly set. Slider `.page_step`
+and the macro's `page_step:` configure Page Up/Down independently; absent settings
+retain ten arrow steps. Values snap/clamp normally; invalid page steps return a
+mount error. Focused control tests cover those contracts. The application catalog
+test paints every sample in both themes at narrow/wide sizes, with additional
+state/identity/scope/data checks; see the guide for optional PNG artifacts.

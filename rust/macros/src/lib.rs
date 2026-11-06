@@ -387,6 +387,7 @@ fn expand(item: Item, root: &Tokens) -> Result<Tokens> {
             for (property, expr) in properties {
                 let p = property.to_string();
                 let expr = match p.as_str() {
+                    "page_step" if kind == "slider" => quote!((#expr)as f64),
                     "gap" | "grow" | "shrink" | "min_width" | "max_width" | "min_height"
                     | "max_height" | "font_size" | "radius" | "line_height" | "letter_spacing" => {
                         quote!((#expr)as f64)

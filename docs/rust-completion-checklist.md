@@ -30,12 +30,12 @@ overall goal complete while an in-scope item remains open.
 
 | Area | Implemented foundation | Remaining closure |
 | --- | --- | --- |
-| State and descriptions | Reactive bindings, keys, macro conditions/repetition, host identity and inventory mapping | Ergonomic coverage of remaining component behaviors |
+| State and descriptions | Reactive bindings, keys, macro conditions/repetition, host identity and inventory mapping | Final inventory/API sign-off in M8.6 |
 | Layout and basic controls | Inventory, constrained layout, rich text, style coverage and two-axis scrolling verified | Final cross-component visual/semantic audit in M5/M8 |
 | Editing | Shared buffer, visual navigation/gestures, localized typed drafts, search/password policies and held steppers | Final interactive VoiceOver/IME audit in M5 |
 | Presentation | Retained splits/tabs/wizards, hierarchical menus, configured portals, transactional alerts and native sheets | Final interactive and visible desktop audits in M5/M8 |
 | Collections | Virtual lists, lazy trees, combo boxes and keyed tables with retained validated edits | Combined native semantics and interactive audits |
-| Values and tooling | Shared typed draft lifecycle, RGB/HSV/hex, calendars, localized civil/zoned editing, mounted inspector/property overrides and box/flex feedback | Full Lab in M7.3; final visual/interaction evidence in M8 |
+| Values and tooling | Shared typed draft lifecycle, RGB/HSV/hex, calendars, localized civil/zoned editing, mounted inspector/property overrides and box/flex feedback | Final visual/interaction evidence in M8 |
 | Verification | Core/CPU tests and native input/accessibility protocol tests | Interactive audits, final visible GPU/full-screen runs and repeatable checks |
 
 The main reference is the [current C++ public inventory](../scars/src/scars.cppm),
@@ -839,7 +839,7 @@ M6.6 completion record (`f15de33`):
 
 - [x] **M7.1 Inspector:** a navigable mounted hierarchy with layout, focus, selection, validation, overlay and collection-window details, synchronized with picking and removal.
 - [x] **M7.2 Overrides:** useful layout/style controls beyond width, clear indication of overridden values, reset and accurate measurement/clip feedback; preserve coherent IDs and restore original behavior after reset.
-- [ ] **M7.3 Lab and ergonomics:** cover the full inventory in both themes and constrained sizes; demonstrate stateful custom components with concise macros/builders and no routine application-side reference-counting or native plumbing.
+- [x] **M7.3 Lab and ergonomics:** cover the full inventory in both themes and constrained sizes; demonstrate stateful custom components with concise macros/builders and no routine application-side reference-counting or native plumbing.
 
 Evidence: inspector/Lab examples and model/geometry tests, plus a small external
 application compile check using a renamed `scars-window` dependency.
@@ -871,10 +871,10 @@ M7.1 completion record (`43b59c1`):
   `checks/renamed-consumer` is a locked standalone compile fixture using the `kit`
   dependency name, `view!` and inspector interfaces; its compile check passes.
 - Rich override editing/reset is completed in M7.2 below; full Lab and application
-  ergonomics remain M7.3. Hidden protocol and CPU raster checks do not close M5.5/M8's actual
+  ergonomics are completed in M7.3 below. Hidden protocol and CPU raster checks do not close M5.5/M8's actual
   speech, composing-input candidate placement or visible Metal requirements.
 
-M7.2 completion record:
+M7.2 completion record (`54606ad`):
 
 - Layout/Style pages edit individual dimensions, constraints, insets, flex,
   positioning, typography and appearance. Retained drafts preserve invalid input;
@@ -901,7 +901,41 @@ M7.2 completion record:
   outline selection/retirement and tab/focus protocol regressions. Full workspace
   tests, strict Clippy, portable Linux compilation, renamed-consumer compilation,
   formatting and inventory checks pass. Native harness skips in the ordinary
-  workspace run are not counted as passes. M7.3 and actual M5.5/M8 audits remain.
+  workspace run are not counted as passes. Actual M5.5/M8 audits remain.
+
+M7.3 completion record:
+
+- `lab` now contains seven retained pages and 28 named samples covering the full
+  control inventory: basic/choice/progress controls, typography/rich inline text,
+  grouping/flex/positioning, all image modes, two-axis scroll, fields and typed
+  values, menu/presentation/split/tab/wizard controls, virtual collections and
+  inspection. The [Lab guide](rust-lab.md) maps samples and reproducible commands;
+  native sheet integration remains demonstrated by `m3_alerts --sheet` using the
+  same portable alert transaction.
+- Two reusable Counter models/functions demonstrate independent reactive state,
+  keyed macro composition and conditional content. Models, callbacks and resources
+  are created outside view builders. Application code contains no `Rc`, weak
+  ownership or native adapter plumbing. A renamed-dependency fixture compiles
+  custom function components and the new annotation/slider interfaces.
+- `labeled`/`View::labeled` provide visible annotation plus fallback accessible
+  names while preserving explicit names. Slider `page_step` independently controls
+  page keys with finite-positive validation and normal snap/clamp/readonly policy.
+  Focused core tests cover these remaining inventory gaps.
+- Cards wrap and pages scroll at narrow widths. The shared example runner accepts
+  `--size` and `--reveal-key`; Lab accepts page/state/presentation flags. Startup
+  presentations reveal/focus actual openers after layout, fixing premature closure
+  of offscreen combo/color popups. All six documented presentation commands were
+  checked for actual modal scene output and their raster previews were reviewed.
+- Four application tests use real Skia to select/reveal/paint every sample in both
+  themes at 440×740 and 1120×900, including bottom views of tall cards. Tests also
+  cover custom/editor identity, readonly policy, modal/menu scope, real collection
+  edits and startup presentations; realization stays bounded. The emitted gallery
+  and focused previews were inspected; a stretched field, clipped positioned label
+  and transparent sample popover were corrected.
+- Workspace tests, final catalog tests, strict all-target Clippy, portable Linux
+  core compilation, renamed-consumer compilation, formatting and inventory checks
+  pass. Native harness skips are not counted as passes. Actual VoiceOver/IME,
+  backing-scale and visible Metal release evidence remain M5.5/M8.
 
 ## M8 — Release evidence and documentation
 

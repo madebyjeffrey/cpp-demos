@@ -18,7 +18,7 @@ The older UI engine and C++ `detail` namespace are excluded.
 | `Color` | Existing ARGB u32 styling and typed sRGB `Color` value | M6.5 |
 | `Point`, `Size`, `Rect`, `Length`, `Constraints`, `Insets` | Geometry/points/percent/Auto and per-edge insets implemented; constraints represented by min/max style and viewport, not a duplicate public constraint object | M1.2–M1.3 |
 | `Align`, `Justify`, `Position`, `Orientation`, `Density`, `TextWrap`, `TextOverflow`, `LabelStyle` | Typed style enums and required variants implemented; regression coverage in styles/reflow tests | M1.2 |
-| `Theme` | Light/dark palette, inherited density/accent and label roles implemented; full Lab coverage remains | M1.2, M7.3 |
+| `Theme` | Light/dark palette, inherited density/accent and label roles implemented; full Lab has dark/light and constrained-size coverage | M1.2, M7.3 |
 | `State`, `Binding` | Existing tracked owned Rust handles; thread confinement enforced by types | M8.4 |
 | `View` | Existing immutable descriptions, typed constructors and `view!`; description internals stay private, inspection uses snapshots | M1.2, M7.3 |
 | `TextInlineBox`, `TextSpan`, `TextLayoutOptions`, `TextPlacement`, `GlyphPosition`, `TextLine`, `TextLayout`, `TextLayoutEngine` | `Measure`/`TextLayout`, styled `Span`, inline `View` boxes, UTF-8 visual `TextLine` geometry/caret affinity and cached SkParagraph implemented. Renderer types stay out of the portable core | M1.2, M2.2 |
@@ -40,12 +40,12 @@ wrapping a row of independent labels alone does not close that behavior.
 | --- | --- | --- |
 | `Label`, `Text`, `Button`, `CommandButton` | Existing label/button constructors and macro aliases | M1.2 text options, M5.3, M7.3 |
 | `ToggleButton`, `CheckBox`, `CheckState`, `Switch`, `RadioGroup`, `SegmentedControl`, `Option` | Existing bound controls, `CheckState`, `OptionItem` | M1.5, M5.3, M7.3 |
-| `Slider`, `SliderOptions` | Stepped bounded slider with pointer/key/capture lifetime; configurable page-step remains for full Lab/inventory closure | M7.3, M8.6 |
+| `Slider`, `SliderOptions` | Stepped bounded slider with pointer/key/capture lifetime and independent validated `page_step`; full Lab and focused keyboard tests cover it | M7.3, M8.6 |
 | `ProgressBar` | Existing determinate/indeterminate progress | M5.3, M8.4 |
-| `Bitmap`, `Image`, `ContentMode` | Existing validated encoded/RGBA data and fit/fill/stretch/center rendering; resource lifetime and preview coverage retained | M7.3, M8.2–M8.4 |
+| `Bitmap`, `Image`, `ContentMode` | Validated encoded/RGBA data and fit/fill/stretch/center rendering; all four modes appear in the Lab; final resource/visual evidence remains | M7.3, M8.2–M8.4 |
 | `FlexRow`, `FlexColumn`, `Block`, `Inline`, `Layer` | Row/column/block/inline/layer and shaped rich inline text implemented with width-dependent reflow and baselines | M1.2–M1.3 |
 | `Section`, `GroupBox`, `Panel`, `Spacer`, `Separator` | Grouping/spacer and both separator orientations implemented | M1.2 |
-| `ForEach`, `If` | Rust `for`/`if` inside `view!`, stable keyed descriptions; no duplicate wrapper classes required | M7.3 |
+| `ForEach`, `If` | Rust `for`/`if` inside `view!`, stable keyed descriptions and plain custom component functions are demonstrated in the Lab and renamed consumer; no duplicate wrapper classes required | M7.3 |
 | `ScrollView`, `ScrollAxes`, `ScrollViewOptions` | Both-axis scrolling, overlay bars, clamped queries/actions, nested wheel transport, keyboard/caret reveal and capture lifetime implemented | M1.4–M1.5 |
 | `TextField`, `TextFieldOptions`, `TextEditor` | Single/multiline controls share TextBuffer; readonly/length/history policy, visual navigation and word/line selection implemented | M2.1–M2.3 |
 | `SearchField`, `SearchFieldOptions` | Integrated clear/cancel, committed query/submit hooks, scoped one-shot debounce and lifetime cancellation implemented | M2.4 |
@@ -88,11 +88,11 @@ Every public C++ `View` modifier is listed, including those with existing Rust n
 | `foreground`, `background`, `accent`, `corner_radius` | Foreground/background/`radius` and inherited accent implemented | M1.2 |
 | `font_size`, `bold`, `label_style`, `text_wrap`, `text_overflow`, `max_lines`, `text_align`, `uppercase`, `density` | Typed text/density roles, line limits, ellipsis, alignment and spacing implemented and raster tested | M1.2 |
 | `position`, `left`, `top`, `right`, `bottom`, `z_index` | Flow/relative/absolute/anchors/z-order implemented with constrained layout and subtree hit-order coverage | M1.2–M1.3 |
-| `content_mode` | Existing image constructor mode (`content_mode:` in macro); no need for a second stateful modifier | M7.3 |
+| `content_mode` | Image constructor mode (`content_mode:` in macro), demonstrated for all four modes in the Lab; no second stateful modifier required | M7.3 |
 | `expanded` | Checked expansion/loading/failure metadata and callbacks, keyboard/pointer interaction and logical native disclosure links/actions are integrated; combined interactive auditing remains | M4.3–M4.4, M5.1/M5.3 |
 | `tooltip`, `popover`, `context_menu` | Configurable `tooltip`/`Popup` and attached `View::context_menu`: nearest-owner pointer/keyboard invocation, hierarchy, scope and lifetime policies; legacy `on_context` supported | M3.2–M3.3 |
 | `description` | Private immutable Rust description, public owned host snapshots; deliberate information hiding | M7.1 |
-| `labeled` free annotation helper | Explicit accessible labels exist; annotation/name association remains part of Lab/semantics coverage | M5.3, M7.3 |
+| `labeled` free annotation helper | `labeled`/`View::labeled` add a visible annotation and fallback accessible name while preserving explicit names; core tests and full Lab cover the association | M5.3, M7.3 |
 
 ## Inspection and host operations
 
