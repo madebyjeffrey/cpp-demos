@@ -262,9 +262,11 @@ into instants implicitly. Color editing is sRGB; wide-gamut profiles are not exp
 
 Create `Inspector` outside the builder, include `inspector.view()` if desired, and
 attach it using `window.view_host().unwrap().set_inspector(inspector)`. Picking
-outlines a real mounted node and reports its key, kind and bounds. Width overrides
-are keyed by mounted identity and can be reset; invalid style values return layout
-errors. Escape exits picking. `Host::pick` also works without the inspector panel.
+outlines a real mounted node without activating or blurring it. The virtual mounted
+hierarchy synchronizes browsing, picking and removal, with live geometry, focus,
+selection, validation, scope and collection-window details. Width overrides remain
+keyed by mounted identity and can be reset; invalid style values return layout
+errors. Escape in the source host exits picking. `Host::pick` also works without the inspector panel.
 Use `autofocus: true` on a control to focus it when the host has no valid focus;
 a newly mounted autofocus control also takes focus, with later controls taking
 precedence (useful for inline editing). `on_cancel` runs on Escape after any IME
@@ -1672,3 +1674,50 @@ report editing actions; pure queries/external readback do not emit callbacks.
 blur policy without native plumbing. `--prefix --tab=zone` starts with unfinished
 input (tabs: `number`, `date`, `time`, `datetime`, `zone`, `color`). All normal render
 and theme flags remain available.
+
+
+## M7.1 — Mounted inspector
+
+`Inspector::view()` supplies a keyboard-navigable virtual outline and diagnostics.
+Create it outside the builder and attach it with `Host::set_inspector`. The panel's
+own controls are excluded from source snapshots and picking. Browse with arrows
+and disclosure, or use `Inspector::select(id)` to reveal an application node.
+Hierarchy selection/clear updates immediately from captured records, independent
+of source rendering; geometry refreshes on source layout. Selection follows
+picking and removal; label changes retain
+outline row lifetimes/disclosure and do not reset manual scrolling. Picking
+preserves application focus, text selection and preedit, and does not invoke the
+target's action. Picking cancels prior pointer capture and consumes the release.
+The panel remains operable while picking; Escape in the source host exits the mode.
+
+`nodes()` returns the last laid-out hierarchy as owned `Inspection` values.
+Records contain parent/depth, key/kind, bounds/clip/text geometry, interaction and
+scope state, text selection/marked state, validation and scroll information.
+Overlay records expose anchor, options and active presentation; collection records
+report logical/visible counts, viewport plus overscan, realized/pinned rows,
+selection/cursor and table column counts. Snapshots retain no application models,
+providers, builders or callbacks. Text/value previews are capped at 256 Unicode
+scalar values; password values remain masked even when revealed in the source.
+
+A view may live in another host: attach the inspector only to the **source** host.
+That is useful when inspecting modal/popup state, since a panel inside the source
+uses its normal input scope. Reattaching to another source transfers ownership;
+an old source cannot overwrite or retire the new selection. Source teardown clears
+the browser/selection, while previously returned snapshot values remain usable.
+`Host::inspection()` returns only that host's current selection. Highlights honor
+effective clipping and do not paint hidden targets. Direct `Inspection::from(Node)`
+is a structural conversion; use host snapshots for live scope/editing context.
+
+`cargo run --example m7_inspector` demonstrates ordinary forms, hidden controls,
+popovers and 10,000 virtual items. Raster mode accepts `--select-key KEY`, for
+example `--render /tmp/inspector.png --select-key items --light`. Seven focused core
+tests cover synchronization, ownership/retirement, quiescence, scope and bounded
+collection snapshots. A CPU raster test checks actual clipping/hidden highlights;
+a hidden AppKit harness checks outline selection and retired row actions.
+
+The standalone `checks/renamed-consumer` fixture compiles `scars-window` as `kit`,
+including inspector interfaces and `view!`. From this workspace, run
+`CARGO_TARGET_DIR=target cargo check --manifest-path checks/renamed-consumer/Cargo.toml --locked --offline`.
+Its native-engine optimization profile matches this workspace; source-build policy
+still applies. Richer override controls and the full Lab remain M7.2/M7.3. Actual
+VoiceOver/IME and visible GPU evidence remain M5.5/M8.

@@ -1,0 +1,13 @@
+[package]
+name = "scars-consumer-check"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+kit = { package = "scars-window", path = "../.." }
+
+# Match the workspace's optimized source-built native engine.
+[profile.dev.package.skia-bindings]
+opt-level = 3

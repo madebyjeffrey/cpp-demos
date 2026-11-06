@@ -381,6 +381,22 @@ impl TreeModel {
     pub fn set_tree(&self, nodes: &[TreeNode]) -> Result<(), Error> {
         self.set_nodes(nodes.to_vec())
     }
+    /// Live mounted snapshots have stable, non-reused keys and no lazy loaders.
+    /// Preserve their outline row lifetimes and disclosure during inspector refresh.
+    pub(crate) fn reconcile_mounted(&self, nodes: Vec<TreeNode>) -> Result<(), Error> {
+        crate::state::check_write();
+        let old = self.0.data.get();
+        let mut data = Snapshot::default();
+        data.roots = register(nodes, None, 0, &mut data.records)?;
+        for (key, record) in &mut data.records {
+            if let Some(previous) = old.records.get(key) {
+                record.token = previous.token;
+                record.expanded = previous.expanded && record.can_expand();
+            }
+        }
+        drop(old);
+        self.publish(data)
+    }
     fn publish(&self, mut data: Snapshot) -> Result<(), Error> {
         let visible = flatten(&data);
         if !(visible.len() as f64 * self.0.list.row_height()).is_finite() {

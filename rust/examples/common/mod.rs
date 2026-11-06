@@ -26,6 +26,18 @@ pub fn run_inspected(
         }
         let renderer = Renderer::default();
         host.layout(Size::new(size.0 as f64, size.1 as f64), &renderer)?;
+        if let Some(i) = args.iter().position(|v| v == "--select-key") {
+            let key = args.get(i + 1).ok_or("--select-key needs a mounted key")?;
+            let inspector = host.inspector();
+            let id = inspector
+                .nodes()
+                .iter()
+                .find(|n| n.key.as_deref() == Some(key))
+                .map(|n| n.id)
+                .ok_or("No inspector node matches --select-key")?;
+            inspector.select(id);
+            host.layout(Size::new(size.0 as f64, size.1 as f64), &renderer)?;
+        }
         if args.iter().any(|v| v == "--inspect") {
             for node in host.scene()? {
                 println!("{:?} {} {:?}", node.kind, node.text, node.bounds);

@@ -298,18 +298,7 @@ impl Host {
         if let Some(back) = tab {
             self.focus_next(back)?;
         }
-        let inspector = self.inspector();
-        if let Some(selected) = inspector.selected.get() {
-            let node = self
-                .0
-                .mounted
-                .borrow()
-                .nodes
-                .iter()
-                .find(|n| n.id == selected.id)
-                .cloned();
-            inspector.selected.set(node.map(crate::Inspection::from));
-        }
+        self.capture_inspector()?;
         Ok(composition_changed
             || previous_offsets != *self.0.scroll.borrow()
             || generation != self.generation())

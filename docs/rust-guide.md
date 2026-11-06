@@ -35,9 +35,11 @@ All stages have runnable examples:
 | 4 | `stage4` | Scroll, popup/menu, focus restoration, tabs and split views |
 | 5 | `stage5` | 100,000 virtual rows, trees, sorting and conflict-checked edits |
 | 6 | `stage6`, `lab` | Color/date/time values, inspector and control catalog |
+| M7.1 | `m7_inspector` | Live mounted hierarchy, diagnostics and virtual collection windows |
 
 Examples 2–6, Lab and Todo accept `--light`, `--smoke`, and `--render file.png`.
 Render mode uses CPU Skia and accepts `--inspect` to print layout bounds.
+Inspected raster examples also accept `--select-key KEY` to select a source node.
 
 ## A small application
 
@@ -189,6 +191,13 @@ when leaving the whole editor; internal Revert does not apply early. Host action
 wait for preedit confirmation. `--prefix --tab=zone` demonstrates unfinished input;
 the example also has a blur-policy toggle.
 
+`cargo run --example m7_inspector` supplies a virtual mounted hierarchy with
+keyboard browsing and picking. It reports live geometry, focus/selection,
+validation, overlay scope and collection windows. Picking preserves input state;
+source removal/teardown clears selection. `Inspector::nodes()` returns owned,
+model-free snapshots; `select(id)` reveals a node. Richer overrides and the full
+Lab remain in M7.2/M7.3.
+
 See [component contracts](../rust/components/README.md) for layouts, controls,
 selection, popup placement, virtual models, deadlines, native semantics and
 inspection. [Window contracts](../rust/README.md) cover ownership and rendering.
@@ -222,7 +231,7 @@ rich inline paragraphs, constrained reflow and both-axis scrolling with draggabl
 bars. Split views have draggable, keyboard-adjustable dividers with collapse and
 retained pane state. Color controls provide RGB/HSV/hex editing over encoded sRGB. These interfaces do not claim full C++ behavior or pixel parity.
 The [completion checklist](rust-completion-checklist.md) tracks remaining work,
-including inspector/Lab expansion and an actual VoiceOver/IME audit.
+including richer inspector overrides, Lab expansion and an actual VoiceOver/IME audit.
 Checked `EditLocale` profiles now share explicit number/date editing grammars;
 ASCII/ISO remains the default. See the [format contract](rust-editable-formats.md). Native notification
 targets, bounded snapshots and lifecycle contracts have dedicated AppKit tests.

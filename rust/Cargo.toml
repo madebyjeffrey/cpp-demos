@@ -132,3 +132,8 @@ harness = false
 name = "color_picker"
 path = "tests/color_picker.rs"
 harness = false
+
+[[test]]
+name = "inspector"
+path = "tests/inspector.rs"
+harness = false

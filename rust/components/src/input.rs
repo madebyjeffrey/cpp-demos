@@ -432,8 +432,20 @@ impl Host {
     pub fn pointer_click(&self, event: Pointer, clicks: u32) -> Result<bool, Error> {
         self.refresh()?;
         let inspector = self.inspector();
-        if inspector.picking.get() && event.kind == PointerKind::Down && event.button == 0 {
-            self.blur();
+        if inspector.picking_for(self.0.inspection_id)
+            && event.kind == PointerKind::Down
+            && event.button == 0
+            && !self.inspector_hit(event.position)?
+        {
+            let mut interaction = self.0.interaction.borrow_mut();
+            interaction.pressed = None;
+            interaction.repeat = None;
+            interaction.scroll_drag = None;
+            interaction.table_drag = None;
+            interaction.split_drag = None;
+            interaction.drag_tick = None;
+            interaction.swallow_up = true;
+            drop(interaction);
             inspector.selected.set(self.pick(event.position)?);
             self.redraw();
             return Ok(true);
@@ -678,7 +690,7 @@ impl Host {
         }
         self.refresh()?;
         let inspector = self.inspector();
-        if event.key == Key::Escape && inspector.picking.get() {
+        if event.key == Key::Escape && inspector.picking_for(self.0.inspection_id) {
             inspector.picking.set(false);
             self.redraw();
             return Ok(true);

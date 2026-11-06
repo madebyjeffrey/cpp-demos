@@ -35,7 +35,7 @@ overall goal complete while an in-scope item remains open.
 | Editing | Shared buffer, visual navigation/gestures, localized typed drafts, search/password policies and held steppers | Final interactive VoiceOver/IME audit in M5 |
 | Presentation | Retained splits/tabs/wizards, hierarchical menus, configured portals, transactional alerts and native sheets | Final interactive and visible desktop audits in M5/M8 |
 | Collections | Virtual lists, lazy trees, combo boxes and keyed tables with retained validated edits | Combined native semantics and interactive audits |
-| Values and tooling | Shared typed draft lifecycle, RGB/HSV/hex, calendars, localized civil/zoned editing, picking/width overrides | Inspector/Lab expansion in M7 and final visual/interaction evidence in M8 |
+| Values and tooling | Shared typed draft lifecycle, RGB/HSV/hex, calendars, localized civil/zoned editing, picking/width overrides | Richer inspector overrides and full Lab in M7.2/M7.3; final visual/interaction evidence in M8 |
 | Verification | Core/CPU tests and native input/accessibility protocol tests | Interactive audits, final visible GPU/full-screen runs and repeatable checks |
 
 The main reference is the [current C++ public inventory](../scars/src/scars.cppm),
@@ -799,7 +799,7 @@ M6.6 acceptance checkpoint (`8bc8844`; milestone was still open):
   blur/composition/lifecycle matrix remained open. They are closed below; actual
   VoiceOver/IME evidence remains M5.5.
 
-M6.6 completion record:
+M6.6 completion record (`f15de33`):
 
 - Appendable date/clock prefixes respect Gregorian validity, localized order and
   digits, ISO BCE years, optional seconds/fractions and AM/PM placement. Number
@@ -833,14 +833,42 @@ M6.6 completion record:
 
 ## M7 — Developer tools and application ergonomics
 
-- [ ] **M7.1 Inspector:** a navigable mounted hierarchy with layout, focus, selection, validation, overlay and collection-window details, synchronized with picking and removal.
+- [x] **M7.1 Inspector:** a navigable mounted hierarchy with layout, focus, selection, validation, overlay and collection-window details, synchronized with picking and removal.
 - [ ] **M7.2 Overrides:** useful layout/style controls beyond width, clear indication of overridden values, reset and accurate measurement/clip feedback; preserve coherent IDs and restore original behavior after reset.
 - [ ] **M7.3 Lab and ergonomics:** cover the full inventory in both themes and constrained sizes; demonstrate stateful custom components with concise macros/builders and no routine application-side reference-counting or native plumbing.
 
 Evidence: inspector/Lab examples and model/geometry tests, plus a small external
 application compile check using a renamed `scars-window` dependency.
 
-Completion record: pending.
+M7.1 completion record:
+
+- `Inspector::view()` provides a virtual mounted outline, keyboard disclosure and
+  selection, and live layout/clip/text metrics, focus/text selection/preedit,
+  validation, input scope, overlay and collection-window diagnostics. Its own UI is
+  excluded. Picking preserves application focus/preedit, retires pointer captures
+  and consumes release without activating the target. Tool controls remain usable
+  while picking. Highlights honor clipping and hidden state.
+- Owned snapshots contain no application models/builders/providers/callbacks;
+  text previews are bounded and passwords masked. Collection diagnostics report
+  counts, visible/overscan windows, realized/pinned rows, selection/cursor and table
+  columns without cloning datasets or realizing logical rows. A 100,000-row test
+  verifies bounded snapshots and callback release.
+- Hierarchy selection/clear updates immediately from captured data, independently
+  of source rendering; geometry follows layout. Label refresh preserves row
+  lifetimes/disclosure and manual scrolling. Removal clears selection. Rebinding
+  transfers ownership; old source teardown cannot clear the new source. Teardown
+  clears the live inspector while previously returned snapshots remain usable.
+  A separate view host can display the source inspector without replacing its data.
+- `m7_inspector` demonstrates forms, visibility, popovers and 10,000 virtual rows.
+  Dark/light selected collection previews were inspected. Raster examples accept
+  `--select-key KEY`. Seven focused core tests, actual pixel clipping/hidden-target
+  tests and hidden AppKit outline/focus tests pass. Full workspace tests, strict
+  Clippy, portable Linux compilation, formatting and inventory mapping pass.
+  `checks/renamed-consumer` is a locked standalone compile fixture using the `kit`
+  dependency name, `view!` and inspector interfaces; its compile check passes.
+- Rich override editing/reset remains M7.2; full Lab and application ergonomics
+  remain M7.3. Hidden protocol and CPU raster checks do not close M5.5/M8's actual
+  speech, composing-input candidate placement or visible Metal requirements.
 
 ## M8 — Release evidence and documentation
 

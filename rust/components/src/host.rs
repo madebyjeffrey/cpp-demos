@@ -137,6 +137,7 @@ pub(crate) struct Mounted {
     pub layouts: HashMap<NodeId, TextLayout>,
 }
 pub(crate) struct Inner {
+    pub inspection_id: u64,
     builder: Box<dyn Fn() -> View>,
     pub observer: Rc<Observer>,
     pub mounted: RefCell<Mounted>,
@@ -159,6 +160,9 @@ pub(crate) struct Inner {
 }
 impl Drop for Inner {
     fn drop(&mut self) {
+        let inspector = self.inspector.get_mut().clone();
+        let id = self.inspection_id;
+        crate::state::cleanup(move || inspector.retire(id));
         let colors = self
             .mounted
             .get_mut()
@@ -202,7 +206,9 @@ impl Drop for Inner {
 pub struct Host(pub(crate) Rc<Inner>);
 impl Host {
     pub fn new(builder: impl Fn() -> View + 'static) -> Self {
+        static NEXT_INSPECTION_HOST: AtomicU64 = AtomicU64::new(1);
         Self(Rc::new(Inner {
+            inspection_id: NEXT_INSPECTION_HOST.fetch_add(1, Ordering::Relaxed),
             builder: Box::new(builder),
             observer: Observer::new(),
             mounted: RefCell::new(Mounted::default()),
@@ -405,6 +411,9 @@ impl Host {
     }
     pub fn snapshot(&self) -> Result<Vec<Node>, Error> {
         self.refresh()?;
+        Ok(self.snapshot_mounted())
+    }
+    pub(crate) fn snapshot_mounted(&self) -> Vec<Node> {
         let i = self.0.interaction.borrow();
         let editors = self.0.editors.borrow();
         let mut nodes = self.0.mounted.borrow().nodes.clone();
@@ -436,7 +445,7 @@ impl Host {
                 n.value = Value::Text(e.text.clone());
             }
         }
-        Ok(nodes)
+        nodes
     }
     pub fn activate(&self, id: NodeId) -> Result<bool, Error> {
         self.refresh()?;

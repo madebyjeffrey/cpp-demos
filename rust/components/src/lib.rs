@@ -71,7 +71,7 @@ pub use fields::TextFieldKind;
 pub use geometry::*;
 pub use host::{Error, Host, Node, NodeId};
 pub use input::{Key, KeyEvent, Modifiers, Pointer, PointerKind};
-pub use inspector::{Inspection, Inspector};
+pub use inspector::{Inspection, InspectionCollection, InspectionOverlay, Inspector};
 pub use locale::EditLocale;
 pub use menu::{Menu, MenuAction, MenuInfo, MenuItemInfo, SplitAction};
 pub use metrics::*;

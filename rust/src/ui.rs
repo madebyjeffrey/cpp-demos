@@ -757,8 +757,14 @@ impl Renderer {
             }
             canvas.restore();
         }
-        if let Some(info) = host.inspector().selected.get() {
+        if let Some(info) = host
+            .inspection()
+            .filter(|info| !info.hidden && info.clip.width > 0. && info.clip.height > 0.)
+        {
+            canvas.save();
+            canvas.clip_rect(skrect(info.clip), None, true);
             round(canvas, info.bounds.inset(1.), 2., theme.accent, true);
+            canvas.restore();
         }
         for (_, clip, info, enabled) in scrollbars.into_iter().rev() {
             draw_scrollbars(
