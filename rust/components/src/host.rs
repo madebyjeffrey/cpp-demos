@@ -68,6 +68,9 @@ pub struct Node {
     pub range: Option<(f64, f64, f64)>,
     pub stepper: Option<crate::StepperInfo>,
     pub split: Option<crate::SplitInfo>,
+    pub tabs: Option<crate::TabsInfo>,
+    pub tab_id: Option<String>,
+    pub tab_strip: bool,
     pub(crate) split_options: Option<crate::SplitOptions>,
     pub(crate) split_ratio: f64,
     pub(crate) split_collapsed: crate::SplitPane,
@@ -119,6 +122,7 @@ pub(crate) struct Inner {
     pub deadlines: RefCell<Vec<crate::deadlines::Deadline>>,
     pub fields: RefCell<HashMap<NodeId, crate::fields::FieldState>>,
     pub splits: RefCell<HashMap<NodeId, crate::SplitPane>>,
+    pub tabs: RefCell<HashMap<NodeId, crate::tabs::TabsRuntime>>,
     pub editors: RefCell<HashMap<NodeId, crate::editing::Editor>>,
     pub scopes: RefCell<Vec<crate::overlay::Scope>>,
     pub closed_overlays: RefCell<HashSet<NodeId>>,
@@ -162,6 +166,7 @@ impl Host {
             deadlines: RefCell::new(Vec::new()),
             fields: RefCell::new(HashMap::new()),
             splits: RefCell::new(HashMap::new()),
+            tabs: RefCell::new(HashMap::new()),
             scroll: RefCell::new(HashMap::new()),
             inspector: RefCell::new(crate::Inspector::new()),
             autofocus: Cell::new(None),
@@ -201,6 +206,7 @@ impl Host {
         let tracking = Tracking::begin();
         let view = (self.0.builder)();
         let identities = self.0.mounted.borrow().identities.clone();
+        let retained = self.0.tabs.borrow().clone();
         let mut next = Mounted::default();
         mount(
             &view,
@@ -210,6 +216,7 @@ impl Host {
             true,
             false,
             &identities,
+            &retained,
             &mut next,
         )?;
         let inspector = self.0.inspector.borrow();
@@ -245,6 +252,27 @@ impl Host {
             .generation
             .set(self.0.generation.get().wrapping_add(1));
         self.0.observer.dirty.set(false);
+        {
+            let m = self.0.mounted.borrow();
+            let mut cache = self.0.tabs.borrow_mut();
+            cache.retain(|id, _| m.nodes.iter().any(|n| n.id == *id && n.kind == Kind::Tabs));
+            for n in m.nodes.iter().filter(|n| n.kind == Kind::Tabs) {
+                let runtime = cache.entry(n.id).or_default();
+                runtime
+                    .pages
+                    .retain(|id, _| n.tabs.as_ref().unwrap().items.iter().any(|p| p.id == *id));
+                for page in m
+                    .nodes
+                    .iter()
+                    .filter(|p| p.parent == Some(n.id) && p.kind == Kind::TabPanel)
+                {
+                    runtime
+                        .pages
+                        .entry(page.tab_id.clone().unwrap())
+                        .or_insert(None);
+                }
+            }
+        }
         {
             let mounted = self.0.mounted.borrow();
             let mut editors = self.0.editors.borrow_mut();
@@ -355,6 +383,9 @@ impl Host {
         let Some((d, value)) = target else {
             return Ok(false);
         };
+        if d.kind == Kind::Tab {
+            return self.select_tab(id, d.tab_id.as_deref().unwrap());
+        }
         if d.kind == Kind::Modal {
             return self.dismiss_overlay(id, crate::DismissReason::Action);
         }
@@ -452,6 +483,7 @@ pub(crate) fn focusable(kind: Kind) -> bool {
     matches!(
         kind,
         Kind::Button
+            | Kind::Tab
             | Kind::CollectionRow
             | Kind::Toggle
             | Kind::CheckBox
@@ -473,6 +505,7 @@ fn mount(
     enabled: bool,
     hidden: bool,
     old: &HashMap<Path, NodeId>,
+    retained: &HashMap<NodeId, crate::tabs::TabsRuntime>,
     next: &mut Mounted,
 ) -> Result<(), Error> {
     static NEXT: AtomicU64 = AtomicU64::new(1);
@@ -515,7 +548,14 @@ fn mount(
     } else {
         None
     };
-    let field_children = crate::fields::children(d, &value);
+    let mut tabs = d.tabs.as_ref().map(|t| t.info());
+    let field_children = if let Some(data) = &d.tabs {
+        let mut children = data.children(tabs.as_mut().unwrap(), retained.get(&id));
+        children.extend(d.children.clone());
+        children
+    } else {
+        crate::fields::children(d, &value)
+    };
     let image = if let Data::Image(b, m) = &d.data {
         Some((b.clone(), *m))
     } else {
@@ -584,6 +624,9 @@ fn mount(
         range,
         stepper,
         split: None,
+        tabs,
+        tab_id: d.tab_id.clone(),
+        tab_strip: d.tab_strip,
         split_ratio,
         split_collapsed,
         split_options: d.split.as_ref().map(|s| s.options),
@@ -604,12 +647,16 @@ fn mount(
             enabled && d.enabled,
             hidden || d.hidden,
             old,
+            retained,
             next,
         )?;
     }
     Ok(())
 }
 pub(crate) fn validate(d: &Description) -> Result<(), Error> {
+    if let Some(tabs) = &d.tabs {
+        tabs.validate()?;
+    }
     if let Some(data) = &d.overlay {
         crate::overlay::validate(data.options)?;
         if data

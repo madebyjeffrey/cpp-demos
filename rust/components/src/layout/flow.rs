@@ -116,7 +116,7 @@ impl Tree<'_> {
                 } else {
                     natural
                 };
-                if n.kind == Kind::Fragment
+                if matches!(n.kind, Kind::Fragment | Kind::TabPanel)
                     && items.len() == 1
                     && nodes[items[0]].style.height == Length::Auto
                     && available.is_finite()
@@ -173,7 +173,10 @@ impl Tree<'_> {
         let mut paragraph = self.layouts[&n.id].clone();
         let mut natural;
         let mut baseline = s.padding.top;
-        if n.kind == Kind::Split {
+        if n.kind == Kind::Tabs {
+            natural = self.reflow_tabs(i, inner, inner_height, nodes)?;
+            baseline = s.padding.top;
+        } else if n.kind == Kind::Split {
             natural = self.reflow_split(i, inner, inner_height, nodes)?;
             let children = &self.children[&Some(n.id)];
             let first = children[if n.split_collapsed == crate::SplitPane::First {
@@ -346,7 +349,7 @@ impl Tree<'_> {
             }
         } else {
             let extra = match n.kind {
-                Kind::Button | Kind::Toggle | Kind::Segment => 28.,
+                Kind::Button | Kind::Tab | Kind::Toggle | Kind::Segment => 28.,
                 Kind::CheckBox | Kind::Radio => 30.,
                 Kind::Switch => 54.,
                 _ => 0.,
@@ -368,7 +371,7 @@ impl Tree<'_> {
             let text_height = paragraph.size.height;
             natural = match n.kind {
                 Kind::Label => text_height,
-                Kind::Button | Kind::Toggle | Kind::Segment => {
+                Kind::Button | Kind::Tab | Kind::Toggle | Kind::Segment => {
                     control_height.max(text_height + 10.)
                 }
                 Kind::CheckBox | Kind::Radio | Kind::Switch => control_height.max(text_height + 6.),
@@ -384,6 +387,7 @@ impl Tree<'_> {
                 n.kind,
                 Kind::Label
                     | Kind::Button
+                    | Kind::Tab
                     | Kind::Toggle
                     | Kind::Segment
                     | Kind::TextField

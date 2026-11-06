@@ -80,6 +80,10 @@ attached context menus. `Popup::options` controls placement, sizing and focus;
 `view.context_menu(&menu, items)` attaches a menu without a separate overlay.
 See the [overlay contracts](../rust/components/README.md#completion-m3--overlay-policy).
 
+`cargo run --example m3_tabs` demonstrates retained tab pages. `Tabs`/`Tab` preserve
+visited controls and their editor/scroll/focus state; `Tab::lazy` defers heavier pages.
+See the [tab contracts](../rust/components/README.md#completion-m3--retained-tabs).
+
 `view!` supports ordinary expressions, `if`/`else`, keyed `for` loops, custom
 functions returning `View`, and `embed(view)` for an already-built value. Unknown
 properties fail compilation. Use stable keys for reordered items; unkeyed identity

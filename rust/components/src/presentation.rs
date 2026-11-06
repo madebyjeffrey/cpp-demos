@@ -96,23 +96,6 @@ impl Popup {
         menu.view(anchor, items)
     }
 }
-/// Tabs compose ordinary views. Only the selected page is mounted.
-pub fn tabs(selected: &State<String>, pages: Vec<(String, String, View)>) -> View {
-    let options = pages
-        .iter()
-        .map(|(id, label, _)| OptionItem::new(id, label))
-        .collect();
-    let active = selected.get();
-    let content = pages
-        .into_iter()
-        .find(|(id, _, _)| *id == active)
-        .map(|(_, _, v)| v)
-        .unwrap_or_else(|| View::label("No selected page"));
-    View::column(vec![
-        View::segmented(selected.binding(), options),
-        content.grow(1.),
-    ])
-}
 pub fn alert(popup: &Popup, title: impl Into<String>, message: impl Into<String>) -> View {
     popup.modal(title, View::label(message).wrap(true))
 }

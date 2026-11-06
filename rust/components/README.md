@@ -186,10 +186,11 @@ content is mounted. Put overlays after their anchors in the same layer.
 `dropdown` returns a button and its overlay so the button can live in a toolbar
 while the overlay lives in the root layer. Menus support enabled actions, arrows,
 Tab and activation. `on_context` handles a secondary click; `tooltip` displays
-help after a 600ms one-shot deadline. `tabs` mounts the active page; `wizard` adds
+help after a configurable one-shot deadline. `tabs` retains visited keyed pages;
+`wizard` adds
 step navigation; `split_button` combines a primary action with a menu anchor.
 `split_view` uses a dedicated adjustable divider and retained panes. The remaining
-presentations are initial Rust compositions; their closure work is tracked in the
+wizard and alert compositions have further policy/transaction work tracked in the
 completion checklist.
 
 For an actual macOS sheet, attach components with `Dialog::set_view` and use the
@@ -544,3 +545,50 @@ Owner loss/deactivation/unmount cancel it; pending and shown help settle without
 continuous frames. `advance_overlays_at` supports deterministic clocks and
 `tooltip_presentation` exposes fitted logical-point geometry. Native accessibility
 exposes help before the tooltip appears. Final interactive auditing remains M5.
+
+
+## Completion M3 — retained tabs
+
+`cargo run --example m3_tabs` demonstrates editing, scrolling and returning to a page.
+Create the selection model outside the builder; page IDs remain stable across reorders:
+
+```rust
+let pages = Tabs::new("draft");
+// In the builder:
+view! { tab_view(&pages, vec![
+    Tab::new("draft", "Draft", View::label("Editor content")),
+    Tab::new("preview", "Preview", View::label("Preview content")),
+    Tab::new("activity", "Activity", View::label("Activity")).enabled(false),
+], grow: 1); }
+```
+
+`Tabs::bound(binding)` accepts application-owned selection. `select` changes the
+requested ID, and `selected` reads it. `Host::tab_info` reports requested/effective
+selection, enabled items and visited count. A missing/disabled request displays the
+first enabled page without rewriting the binding. Empty/all-disabled groups have no
+active page. IDs must be nonempty and unique; labels can change independently.
+
+Visited pages keep mounted control IDs, editor undo/selection, scroll offsets and
+remembered focus. Inactive content has zero geometry and is unavailable to input or
+accessibility. Hidden search/repeat/help work cancels and page-owned popovers close.
+External model updates still refresh retained controls. Removing a page releases
+its host state; reintroducing that ID constructs fresh controls. Reordering keeps it.
+`Tab::lazy(id, label, || content)` defers a heavy page until first selection, then
+rebuilds it with other visited pages under the normal pure-builder contract. A failed
+build leaves the previous tree and visited cache intact. `Tab::new` takes an ordinary
+view; the existing tuple-based `tabs(&state, pages)` helper now retains pages too.
+
+The strip is one Tab stop. Arrows/Home/End activate enabled headers, skipping disabled
+ones; Tab enters the active page's remembered control (or first control). Control-Tab
+and Control-Shift-Tab cycle the nearest containing group, including from native
+editors. Pointer/keyboard activation focuses the selected header. A programmatic
+switch restores page focus when the group already owned it, and otherwise leaves
+outside focus alone; inactive windows defer restoration until reactivation.
+`Host::focus_tab_page` explicitly restores page focus. Overflowing strips accept
+horizontal scrolling, reveal selected/focused headers and refit after resize or reorder.
+
+Explicit activation commits preedit and rechecks availability after the commit's
+application callbacks. External selection changes cancel inactive preedit. Selection
+setters may reject/normalize requests; the displayed selection follows the accepted
+value. macOS exposes tab-group/radio-tab roles, selected children, page contents,
+values and disabled actions. Final interactive VoiceOver/IME auditing remains M5.

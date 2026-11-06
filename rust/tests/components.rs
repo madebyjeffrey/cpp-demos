@@ -542,6 +542,104 @@ fn main() {
             vec![ui::DismissReason::Escape, ui::DismissReason::Unmounted]
         );
     }
+    let tabs = ui::Tabs::new("a");
+    let draft = State::new("draft".to_owned());
+    let tab_host = window
+        .set_view({
+            let tabs = tabs.clone();
+            let draft = draft.clone();
+            move || {
+                tabs.view(vec![
+                    ui::Tab::new(
+                        "a",
+                        "Alpha",
+                        ui::View::text_field("Draft", draft.binding()).key("tab-draft"),
+                    ),
+                    ui::Tab::new("disabled", "Unavailable", ui::View::label("No")).enabled(false),
+                    ui::Tab::new("b", "Beta", ui::View::button("Other", || {})),
+                ])
+                .accessible_label("Documents")
+            }
+        })
+        .unwrap();
+    tab_host.set_active(true);
+    unsafe {
+        let roots: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        let group = roots.objectAtIndex(0);
+        let role: Retained<NSString> = msg_send![&*group, accessibilityRole];
+        assert_eq!(role.to_string(), "AXTabGroup");
+        let headers: Retained<NSArray<AnyObject>> = msg_send![&*group, accessibilityTabs];
+        assert_eq!(headers.len(), 3);
+        let alpha = headers.objectAtIndex(0);
+        let unavailable = headers.objectAtIndex(1);
+        let beta = headers.objectAtIndex(2);
+        let role: Retained<NSString> = msg_send![&*alpha, accessibilityRole];
+        assert_eq!(role.to_string(), "AXRadioButton");
+        let subrole: Retained<NSString> = msg_send![&*alpha, accessibilitySubrole];
+        assert_eq!(subrole.to_string(), "AXTabButton");
+        let parent: Retained<AnyObject> = msg_send![&*alpha, accessibilityParent];
+        assert!(std::ptr::eq(&*parent, &*group));
+        let value: Retained<AnyObject> = msg_send![&*group, accessibilityValue];
+        assert!(std::ptr::eq(&*value, &*alpha));
+        let selected: Retained<NSArray<AnyObject>> =
+            msg_send![&*group, accessibilitySelectedChildren];
+        assert_eq!(selected.len(), 1);
+        let pressed: bool = msg_send![&*unavailable, accessibilityPerformPress];
+        assert!(!pressed);
+        let contents: Retained<NSArray<AnyObject>> = msg_send![&*group, accessibilityContents];
+        assert_eq!(contents.len(), 1);
+        let panel = contents.objectAtIndex(0);
+        let fields: Retained<NSArray<AnyObject>> = msg_send![&*panel, accessibilityChildren];
+        let field = fields.objectAtIndex(0);
+        let field_id = tab_host
+            .snapshot()
+            .unwrap()
+            .into_iter()
+            .find(|n| n.key.as_deref() == Some("tab-draft"))
+            .unwrap()
+            .id;
+        tab_host.focus(field_id).unwrap();
+        tab_host
+            .select_text(
+                field_id,
+                ui::Selection {
+                    anchor: 5,
+                    caret: 5,
+                },
+            )
+            .unwrap();
+        let marked = NSString::from_str("日本");
+        let _: () = msg_send![native,setMarkedText:&*marked,selectedRange:NSRange::new(2,0),replacementRange:NSRange::new(isize::MAX as usize,0)];
+        let pressed: bool = msg_send![&*beta, accessibilityPerformPress];
+        assert!(pressed);
+        assert_eq!(draft.get(), "draft日本");
+        let _: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        let stale = NSString::from_str("hidden edit");
+        let _: () = msg_send![&*field,setAccessibilityValue:&*stale];
+        assert_eq!(draft.get(), "draft日本");
+        let pressed: bool = msg_send![&*alpha, accessibilityPerformPress];
+        assert!(pressed);
+        let _: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        let root_id = tab_host
+            .snapshot()
+            .unwrap()
+            .into_iter()
+            .find(|n| n.kind == ui::Kind::Tabs)
+            .unwrap()
+            .id;
+        assert!(tab_host.focus_tab_page(root_id).unwrap());
+        assert_eq!(tab_host.focused(), Some(field_id));
+        let _: () = msg_send![native,doCommandBySelector:objc2::sel!(undo:)];
+        assert_eq!(draft.get(), "draft");
+        let characters = NSString::from_str("\t");
+        let event=app_kit::NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(app_kit::NSEventType::KeyDown,foundation::NSPoint::ZERO,app_kit::NSEventModifierFlags::Control,0.,window.native_window().windowNumber(),None,&characters,&characters,false,48).unwrap();
+        let _: () = msg_send![native,keyDown:&*event];
+        let _: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        assert_eq!(tabs.selected(), "b");
+        window.clear_view();
+        let pressed: bool = msg_send![&*beta, accessibilityPerformPress];
+        assert!(!pressed);
+    }
     let list = ui::ListModel::new(
         (0..100_000)
             .map(|i| ui::ListItem::new(i.to_string(), format!("Row {i}")))

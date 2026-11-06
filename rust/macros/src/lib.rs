@@ -226,6 +226,15 @@ fn expand(item: Item, root: &Tokens) -> Result<Tokens> {
                         let value = one(&mut positional)?;
                         quote!(#value)
                     }
+                    "tab_view" => {
+                        if positional.len() != 2 {
+                            return Err(syn::Error::new(
+                                name.span(),
+                                "tab_view needs a model and page descriptions",
+                            ));
+                        }
+                        quote!(#root::tab_view(#(#positional),*))
+                    }
                     "split" | "split_view" => {
                         if positional.len() != 3 {
                             return Err(syn::Error::new(

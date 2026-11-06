@@ -7,6 +7,7 @@ fn any<T: Message>(value: Retained<T>) -> Retained<AnyObject> {
 }
 fn semantic(n: &Node) -> bool {
     !n.hidden
+        && !n.tab_strip
         && !matches!(
             n.kind,
             Kind::Fragment
@@ -18,6 +19,17 @@ fn semantic(n: &Node) -> bool {
                 | Kind::Spacer
                 | Kind::Separator
         )
+}
+fn tab_group(n: &Node, nodes: &[Node]) -> Option<NodeId> {
+    let mut parent = n.parent;
+    while let Some(id) = parent {
+        let node = nodes.iter().find(|n| n.id == id)?;
+        if node.kind == Kind::Tabs {
+            return Some(id);
+        }
+        parent = node.parent;
+    }
+    None
 }
 fn parent(n: &Node, nodes: &[Node]) -> Option<NodeId> {
     let mut id = n.parent;
@@ -120,7 +132,8 @@ fn role(kind: Kind) -> &'static NSString {
             Kind::Label => NSAccessibilityStaticTextRole,
             Kind::Button | Kind::Toggle => NSAccessibilityButtonRole,
             Kind::CheckBox | Kind::Switch => NSAccessibilityCheckBoxRole,
-            Kind::Radio | Kind::Segment => NSAccessibilityRadioButtonRole,
+            Kind::Radio | Kind::Segment | Kind::Tab => NSAccessibilityRadioButtonRole,
+            Kind::Tabs => NSAccessibilityTabGroupRole,
             Kind::RadioGroup => NSAccessibilityRadioGroupRole,
             Kind::Slider => NSAccessibilitySliderRole,
             Kind::Stepper => NSAccessibilityIncrementorRole,
@@ -217,6 +230,12 @@ define_class!(
                 }
             })
         }
+        #[unsafe(method_id(accessibilityTabs))]
+        fn tabs(&self)->Option<Retained<NSArray<AnyObject>>>{self.tab_elements(1)}
+        #[unsafe(method_id(accessibilitySelectedChildren))]
+        fn selected_children(&self)->Option<Retained<NSArray<AnyObject>>>{self.tab_elements(0)}
+        #[unsafe(method_id(accessibilityContents))]
+        fn contents(&self)->Option<Retained<NSArray<AnyObject>>>{self.tab_elements(2)}
         #[unsafe(method(accessibilityRowCount))]
         fn row_count(&self) -> isize {
             self.node()
@@ -225,11 +244,11 @@ define_class!(
         }
         #[unsafe(method_id(accessibilitySubrole))]
         fn subrole(&self)->Option<Retained<NSString>>{
-            self.node().and_then(|n|unsafe{match n.field_kind{
+            self.node().and_then(|n|unsafe{if n.kind==Kind::Tab {Some(NSAccessibilityTabButtonSubrole.retain())}else{match n.field_kind{
                 ui::TextFieldKind::Password=>Some(NSAccessibilitySecureTextFieldSubrole.retain()),
                 ui::TextFieldKind::Search=>Some(NSAccessibilitySearchFieldSubrole.retain()),
                 _=>None,
-            }})
+            }}})
         }
         #[unsafe(method(isAccessibilityEnabled))]
         fn enabled(&self) -> bool {
@@ -251,6 +270,7 @@ define_class!(
         #[unsafe(method_id(accessibilityValue))]
         fn value(&self)->Option<Retained<AnyObject>>{
             self.node().filter(|n|!n.secure).and_then(|n|{
+                if n.kind==Kind::Tabs{return self.tab_elements(0).and_then(|tabs|tabs.into_iter().next())}
                 if let Some(checked)=n.menu_item.as_ref().and_then(|m|m.checked){return Some(any(NSNumber::new_bool(checked)))}
                 if let Some(stepper)=&n.stepper{return numeric(&stepper.value)}
                 match n.value{
@@ -283,6 +303,7 @@ define_class!(
         }
         #[unsafe(method(accessibilityOrientation))]
         fn orientation(&self)->NSAccessibilityOrientation{
+            if self.node().is_some_and(|n|n.kind==Kind::Tabs){return NSAccessibilityOrientation::Horizontal;}
             self.node().and_then(|n|n.split.map(|s|if (s.orientation==ui::Orientation::Vertical)!=(n.kind==Kind::SplitDivider){NSAccessibilityOrientation::Vertical}else{NSAccessibilityOrientation::Horizontal})).unwrap_or(NSAccessibilityOrientation::Unknown)
         }
         #[unsafe(method_id(accessibilityValueDescription))]
@@ -414,6 +435,7 @@ define_class!(
                             && matches!(
                                 n.kind,
                                 Kind::Button
+                                    | Kind::Tab
                                     | Kind::Toggle
                                     | Kind::CheckBox
                                     | Kind::Radio
@@ -433,6 +455,7 @@ define_class!(
                                     | Kind::CheckBox
                                     | Kind::Radio
                                     | Kind::Segment
+                                    | Kind::Tab
                                     | Kind::Switch
                             )
                     }
@@ -469,6 +492,39 @@ define_class!(
     }
 );
 impl Element {
+    fn tab_elements(&self, part: u8) -> Option<Retained<NSArray<AnyObject>>> {
+        self.with(|m, _, n| {
+            if n.kind == Kind::Tab && (part != 2 || !n.value.selected()) {
+                return Ok(None);
+            }
+            let nodes = m.host.snapshot()?;
+            let root = if n.kind == Kind::Tabs {
+                Some(n.id)
+            } else if n.kind == Kind::Tab {
+                tab_group(n, &nodes)
+            } else {
+                None
+            };
+            let Some(root) = root else { return Ok(None) };
+            let elements: Vec<_> = nodes
+                .iter()
+                .filter(|p| {
+                    !p.hidden
+                        && if part == 2 {
+                            p.kind == Kind::TabPanel && p.parent == Some(root)
+                        } else {
+                            p.kind == Kind::Tab
+                                && tab_group(p, &nodes) == Some(root)
+                                && (part == 1 || p.value.selected())
+                        }
+                })
+                .map(|n| any(element(m, n.id)))
+                .collect();
+            Ok(Some(NSArray::from_retained_slice(&elements)))
+        })
+        .flatten()
+    }
+
     pub(super) fn with<T>(
         &self,
         f: impl FnOnce(&Mounted, &Surface, &Node) -> std::result::Result<T, ui::Error>,

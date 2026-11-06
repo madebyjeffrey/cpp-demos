@@ -33,7 +33,7 @@ overall goal complete while an in-scope item remains open.
 | State and descriptions | Reactive bindings, keys, macro conditions/repetition, host identity and inventory mapping | Ergonomic coverage of remaining component behaviors |
 | Layout and basic controls | Inventory, constrained layout, rich text, style coverage and two-axis scrolling verified | Final cross-component visual/semantic audit in M5/M8 |
 | Editing | Shared buffer, visual navigation/gestures, search/password/numeric policies and held steppers | Localization/value-control expansion in M6; final interactive IME audit in M5 |
-| Presentation | Retained splits, hierarchical menus/split actions, configured portals/help and nested focus scopes | Retained tab state, wizard policy and presentation transactions |
+| Presentation | Retained splits, hierarchical menus/split actions, configured portals/help, nested focus scopes and retained tab pages | Wizard policy and presentation transactions |
 | Collections | Fixed-height virtualization, keyed selection, basic trees/tables, cell conflict checks | Lazy tree lifecycle, cell/column interactions, richer selection and semantics |
 | Values and tooling | Typed drafts, sRGB/hex, calendar, ISO/zoned editing, picking/width overrides | Complete value-control policies and inspector/Lab coverage |
 | Verification | Core/CPU tests and native input/accessibility protocol tests | Interactive audits, final visible GPU/full-screen runs and repeatable checks |
@@ -174,7 +174,7 @@ Completion record:
 - [x] **M3.1 Split views:** draggable dividers, both orientations, pane limits, collapse/restore and keyboard adjustment; resize cursors, capture cancellation and accessible split semantics.
 - [x] **M3.2 Menus and split actions:** separators, checked/radio items, nested submenus, shortcut labels, disabled-item navigation, typeahead and complete open/close/activation behavior; a split action can retain its chosen primary action.
 - [x] **M3.3 Overlay policy:** configurable placement, sizing, viewport fitting, focus preservation and dismissal callbacks for popovers/tooltips/context menus, including nested scopes and owner removal.
-- [ ] **M3.4 Tabs:** stable page identity, enabled tabs, keyboard navigation and restoration of editor history, selection, scroll and focus after switching pages. Application model state alone does not satisfy this item.
+- [x] **M3.4 Tabs:** stable page identity, enabled tabs, keyboard navigation and restoration of editor history, selection, scroll and focus after switching pages. Application model state alone does not satisfy this item.
 - [ ] **M3.5 Wizards:** stable step IDs, validation that can block navigation, back/review policy, finish/cancel/change callbacks and valid behavior for empty/changed step sets.
 - [ ] **M3.6 Alerts and sheets:** an explicit result/completion transaction with default/cancel/destructive actions; exactly-once completion through action, Escape, dismiss, close and destruction. Demonstrate native parent-sheet isolation and focus restoration.
 
@@ -236,7 +236,24 @@ Completion record (in progress):
   satisfy its awake foreground-desktop prerequisite; it is unavailable evidence,
   not a pass. The prior M2 ownership check remains recorded, and M8 still requires
   final native regression evidence. Interactive auditing remains M5.
-- M3.4–M3.6 remain open.
+- M3.4: `Tabs`/`Tab` retain visited keyed page trees, including editor history,
+  selection, scroll offsets and focus; `Tab::lazy` defers unvisited page construction.
+  Hidden virtual lists keep their viewport/range so retained row editors survive.
+  Inactive pages are inert with zero geometry, hidden work cancels, overlays close,
+  external values refresh, reorder retains IDs and removal releases host state.
+  Empty/disabled/invalid selections have a visible fallback without source mutation.
+- Headers form one Tab stop, with arrows/Home/End and nested Control-(Shift)-Tab;
+  Tab enters remembered page content, explicit selection commits/revalidates preedit,
+  external changes cancel it, and source setters may reject/normalize selection.
+  Focus restoration respects outside focus. Overflow strips scroll horizontally,
+  reveal focused headers and resize without overriding manual wheel movement.
+- Evidence: ten focused portable interaction/layout/lifetime tests, legacy helper
+  and macro coverage; native tab-group/radio-tab roles, selected children/value,
+  active page contents, disabled/stale actions, IME commit/retained undo and native
+  Control-Tab pass. Workspace tests, strict Clippy and portable compilation pass;
+  dark/light `m3_tabs` previews inspected and native smoke passes. Final interactive
+  auditing remains M5.
+- M3.5–M3.6 remain open.
 
 
 ## M4 — Collections and structured editing

@@ -404,7 +404,7 @@ impl Renderer {
                     bg = bg.or_else(|| (n.focused || n.pressed).then_some(theme.selected));
                 }
                 Kind::Panel | Kind::GroupBox => bg = bg.or(Some(theme.panel)),
-                Kind::Button | Kind::Toggle | Kind::Segment | Kind::CollectionRow => {
+                Kind::Button | Kind::Tab | Kind::Toggle | Kind::Segment | Kind::CollectionRow => {
                     bg = bg.or(Some(if n.value.selected() || n.pressed {
                         theme.selected
                     } else if n.hovered {
@@ -421,9 +421,12 @@ impl Renderer {
             }
             match n.kind {
                 Kind::Button if n.menu_item.is_some() => (),
-                Kind::Button | Kind::Toggle | Kind::Segment | Kind::TextField | Kind::GroupBox => {
-                    round(canvas, b.inset(0.5), n.style.radius, theme.border, true)
-                }
+                Kind::Button
+                | Kind::Tab
+                | Kind::Toggle
+                | Kind::Segment
+                | Kind::TextField
+                | Kind::GroupBox => round(canvas, b.inset(0.5), n.style.radius, theme.border, true),
                 Kind::CheckBox | Kind::Radio => {
                     let r = Rect::new(b.x + 2., b.y + (b.height - 18.) / 2., 18., 18.);
                     let selected = n.value.selected();

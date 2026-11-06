@@ -132,6 +132,26 @@ impl TextInputClient for Client {
             .unwrap_or(0)
     }
     fn intercept_key(&self, key: &KeyEvent) -> bool {
+        if key.down && key.key == Key::Tab && key.modifiers.control {
+            return self
+                .owner
+                .upgrade()
+                .and_then(|m| {
+                    m.run(|m, _| {
+                        m.host.key(ui::KeyEvent {
+                            key: ui::Key::Tab,
+                            down: true,
+                            repeat: key.repeat,
+                            modifiers: ui::Modifiers {
+                                control: true,
+                                shift: key.modifiers.shift,
+                                ..Default::default()
+                            },
+                        })
+                    })
+                })
+                .unwrap_or(false);
+        }
         if key.down && key.key == Key::F10 && key.modifiers.shift {
             return self
                 .owner

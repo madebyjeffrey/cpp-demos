@@ -276,6 +276,7 @@ impl Host {
         if previous != Some(id) && self.0.interaction.borrow().active {
             self.blur_action(previous);
         }
+        self.remember_tab_focus(Some(id));
         self.advance_overlays_at(std::time::Instant::now());
         self.redraw();
         Ok(true)
@@ -291,6 +292,7 @@ impl Host {
         i.drag_tick = None;
         i.repeat = None;
         drop(i);
+        self.remember_tab_focus(None);
         self.blur_action(previous);
         self.redraw();
     }
@@ -314,7 +316,7 @@ impl Host {
                 }) {
                     return false;
                 }
-                if !matches!(n.kind, Kind::Radio | Kind::Segment) {
+                if !matches!(n.kind, Kind::Radio | Kind::Segment | Kind::Tab) {
                     return true;
                 }
                 let group: Vec<_> = nodes
@@ -645,8 +647,15 @@ impl Host {
                 Ok(true)
             };
         }
+        if let Some(handled) = self.tab_key(event)? {
+            return Ok(handled);
+        }
         if event.key == Key::Tab {
-            return self.focus_next(event.modifiers.shift);
+            return if event.modifiers.control {
+                Ok(false)
+            } else {
+                self.focus_next(event.modifiers.shift)
+            };
         }
         let Some(id) = self.focused() else {
             return self.scroll_key(None, event);

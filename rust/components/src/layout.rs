@@ -7,6 +7,7 @@ mod flow;
 mod menu;
 mod overlay;
 mod split;
+mod tabs;
 
 impl Host {
     pub fn layout(&self, size: Size, measure: &dyn Measure) -> Result<(), Error> {
@@ -222,6 +223,7 @@ impl Host {
         let collections: Vec<_> = mounted
             .nodes
             .iter()
+            .filter(|n| !n.hidden && !n.layout_hidden)
             .filter_map(|n| {
                 n.collection.clone().map(|model| {
                     (
@@ -253,6 +255,7 @@ impl Host {
         }
         self.update_drag_deadline(std::time::Instant::now());
         self.reconcile_menu()?;
+        self.reconcile_tabs()?;
         if let Some(id) = self.0.autofocus.take().filter(|id| self.in_scope(*id)) {
             self.focus(id)?;
         }
@@ -352,6 +355,8 @@ fn container(kind: Kind) -> bool {
             | Kind::Column
             | Kind::Row
             | Kind::Stepper
+            | Kind::Tabs
+            | Kind::TabPanel
             | Kind::Split
             | Kind::Block
             | Kind::Inline
@@ -457,7 +462,9 @@ impl Tree<'_> {
                 self.measure_node(child, Size::new(inner, 24.), text, nodes)?;
             }
         }
-        let mut size = if n.kind == Kind::Split {
+        let mut size = if n.kind == Kind::Tabs {
+            self.measure_tabs(i, Size::new(inner, available.height), text, nodes)?
+        } else if n.kind == Kind::Split {
             self.measure_split(i, Size::new(inner, f64::INFINITY), text, nodes)?
         } else if n.kind == Kind::RichText {
             let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
@@ -551,6 +558,10 @@ impl Tree<'_> {
             match n.kind {
                 Kind::Label => layout.size,
                 Kind::TextField => Size::new(240., control_height.max(text.size + 14.)),
+                Kind::Tab => Size::new(
+                    layout.size.width.ceil() + 29.,
+                    control_height.max(layout.size.height + 10.),
+                ),
                 Kind::Button | Kind::Toggle | Kind::Segment => Size::new(
                     layout.size.width + 28.,
                     control_height.max(layout.size.height + 10.),
@@ -592,6 +603,9 @@ impl Tree<'_> {
         if header(n.kind) && !n.text.is_empty() {
             size.height += layout.size.height + s.gap;
             size.width = size.width.max(layout.size.width);
+        }
+        if n.kind == Kind::Tab && available.width.is_finite() {
+            size.width = size.width.min(available.width);
         }
         size.width += s.padding.horizontal();
         size.height += s.padding.vertical();
@@ -717,7 +731,9 @@ impl Tree<'_> {
             return self.arrange_popover(i, bounds, nodes);
         }
         let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
-        if n.kind == Kind::Split {
+        if n.kind == Kind::Tabs {
+            self.arrange_tabs(i, content, nodes)?;
+        } else if n.kind == Kind::Split {
             self.arrange_split(i, content, nodes)?;
         } else if n.kind == Kind::RichText {
             let layout = self.layouts[&n.id].clone();
@@ -940,7 +956,7 @@ impl Tree<'_> {
         } else {
             let mut text_area = content;
             match n.kind {
-                Kind::Button | Kind::Toggle | Kind::Segment => {
+                Kind::Button | Kind::Tab | Kind::Toggle | Kind::Segment => {
                     text_area.x += 14.;
                     text_area.width = (text_area.width - 28.).max(0.);
                 }
@@ -964,7 +980,10 @@ impl Tree<'_> {
                     f64::INFINITY
                 },
             );
-            let x = if matches!(n.kind, Kind::Button | Kind::Toggle | Kind::Segment) && !constrained
+            let x = if matches!(
+                n.kind,
+                Kind::Button | Kind::Tab | Kind::Toggle | Kind::Segment
+            ) && !constrained
             {
                 content.x + (content.width - layout.size.width) / 2.
             } else {
@@ -1021,6 +1040,7 @@ impl Tree<'_> {
                 | Kind::RichText
                 | Kind::TextField
                 | Kind::Button
+                | Kind::Tab
                 | Kind::Toggle
                 | Kind::Segment
                 | Kind::CheckBox

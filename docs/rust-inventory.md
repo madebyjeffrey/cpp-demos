@@ -56,7 +56,7 @@ wrapping a row of independent labels alone does not close that behavior.
 | `SplitActionButton` | Retained `SplitAction`: selected leaf key path, primary invocation and unavailable-choice fallback; fixed `split_button` helper retained | M3.2 |
 | `OverlayPlacement`, `PopoverFocus`, `TooltipOptions`, `PopoverOptions` | `OverlayOptions`/`OverlayPlacement`/`OverlayFocus` and `TooltipOptions`: fitted/scrolled portals, nested focus return, explicit dismissal reasons, help and owner lifetimes | M3.3, M5.3 |
 | `SplitView`, `SplitViewOptions`, `SplitPane` | `Split` model and retained panes, draggable dividers, both axes/minima, collapse/restoration, keyboard/cursor/capture policy and native split semantics implemented | M3.1 |
-| `Tab`, `TabView` | Segmented selection mounts only active view; retained host-owned state/focus and enabled/key behavior incomplete | M3.4 |
+| `Tab`, `TabView` | `Tabs`/`Tab` retain visited keyed pages, undo/selection/scroll/focus, enabled fallback and nested keyboard navigation; lazy construction and native tab-group semantics | M3.4 |
 | `Wizard`, `WizardStep`, `WizardOptions`, `WizardNavigation` | Simple index/back/next composition; validation, stable steps, review, finish/cancel/change policies missing | M3.5 |
 | `Alert`, `AlertAction`, `AlertActionRole` | Basic Done popup and low-level native dialog exist; component result transaction/action roles and complete native sheet integration missing | M3.6 |
 | `RowWindow`, `RowModel`, `ListBox`, `ListBoxOptions` | Existing `ListModel`/`ListItem`, fixed-height virtual range/row builder and keyed selection; complete selection/activation/retention policies partial | M4.1–M4.2 |
