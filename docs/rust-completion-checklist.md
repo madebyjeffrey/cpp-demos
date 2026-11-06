@@ -651,7 +651,7 @@ Completion record:
   concise runnable lab; all five pages inspected in dark/light, native smoke passes.
   Interactive VoiceOver/IME and final visible GPU evidence remain M5.5/M8.
 
-M6.3 completion record:
+M6.3 completion record (`ddcaf28`):
 
 - `DatePicker` adds inclusive bounds, pure disabled-date/custom validators, readonly,
   blur/submit/cancel callbacks and one roving calendar cursor. Arrows, month/year
@@ -673,7 +673,7 @@ M6.3 completion record:
   suites are left for the dedicated desktop audit while user-assisted VoiceOver
   testing is in progress. No unavailable interactive evidence is counted as a pass.
 
-M6.4 standalone time checkpoint (item remains open):
+M6.4 standalone time checkpoint (`02b1f19`; item remains open):
 
 - `TimePicker` adds one transactional field, hour/minute/optional-second steppers,
   explicit 12/24-hour display, AM/PM selection, 1–60 minute/second steps, inclusive
@@ -688,8 +688,27 @@ M6.4 standalone time checkpoint (item remains open):
   windows stay invisible. Workspace tests, strict Clippy, portable Linux compilation,
   formatting and inventory mapping pass. Actual speech/candidate and visible GPU
   sessions remain M5.5/M8.
-- Combined local datetime/instant bounds, joint validation, DST policies and named
-  zone changes remain required before M6.4 can be checked off.
+- Combined local datetime followed in the checkpoint below; zoned instant bounds,
+  DST policies and named-zone changes remain required before M6.4 can be checked off.
+
+M6.4 local datetime checkpoint (item remains open):
+
+- `DateTimePicker` has one full-value draft and shared calendar/clock controls.
+  Joint inclusive bounds, disabled dates and custom validation guard every write.
+  Typed date/time changes can cross tight overnight bounds without an intermediate
+  model update. Exact clock steps carry through midnight/leap/year boundaries;
+  calendar choices retain the staged clock. Locale grammar, hidden precision,
+  readonly/blur/callback policies and source revisions follow the standalone controls.
+- Six focused core tests pass, including a one-write overnight transition, exact
+  extremes/carry, retained editor, calendar/clock coordination, mixed digits across
+  the whole value, callback authority, rejected setters and external A→B→A changes.
+  `m6_datetime` is the runnable example; dark/light previews inspected. Hidden native
+  datetime/time/date/focus tests pass, including joint draft/AX values, disabled
+  date choices, retained field, composition, readonly and retired objects while
+  asserting windows stay invisible. Workspace tests, strict Clippy, portable Linux
+  compilation, formatting and inventory mapping pass.
+- Zoned instant bounds, DST policies and named-zone changes still remain before
+  M6.4 can be checked off. No interactive speech/candidate checks are closed here.
 
 ## M7 — Developer tools and application ergonomics
 

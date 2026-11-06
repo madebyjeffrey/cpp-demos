@@ -67,7 +67,7 @@ wrapping a row of independent labels alone does not close that behavior.
 | `Date`, `Time`, `LocalDateTime`, `DateTimeResolution`, `RepeatedTimePolicy`, `DateTimeValidation` | Jiff civil/zoned values, explicit resolution and strict ISO consumption; checked numeric Gregorian date localization implemented; full time/value policies remain | M6.1–M6.4, M6.6 |
 | `DatePicker`, `DatePickerOptions` | ISO/localized drafts, inclusive bounds, pure disabled/custom validation, readonly/blur/submit policy, roving keyboard calendar, source synchronization and retained field identity implemented; interactive audit remains | M6.3 |
 | `TimePicker`, `TimePickerOptions`, `HourCycle` | Exact time draft, component steppers, 12/24-hour policy, optional seconds, locale profiles, bounds/custom validation and readonly/blur/callback policies implemented; combined datetime/zone controls remain | M6.4 |
-| `DateTimePicker`, `DateTimePickerOptions`, `ZonedDateTimePickerOptions` | Local ISO draft and `ZonedPicker` exist; combined controls, bounds and validation/commit options incomplete | M6.4–M6.6 |
+| `DateTimePicker`, `DateTimePickerOptions`, `ZonedDateTimePickerOptions` | Civil datetime has one draft, calendar/clock controls, exact day carry, joint bounds/custom validation and localized clock policies; zoned instant bounds and zone-change control remain | M6.4–M6.6 |
 
 Color format/parse/HSV functions belong to M6.5. Numeric display/parse/configuration
 helpers belong to M2.6/M6.1–M6.2; exact integers must not pass through f64. Date/time

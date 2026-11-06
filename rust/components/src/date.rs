@@ -380,6 +380,12 @@ impl DatePicker {
         true
     }
     pub fn view(&self) -> View {
+        self.render(true)
+    }
+    pub(crate) fn calendar_view(&self) -> View {
+        self.render(false)
+    }
+    fn render(&self, show_field: bool) -> View {
         let month = self.page().month;
         let prev = self.clone();
         let next = self.clone();
@@ -507,7 +513,9 @@ impl DatePicker {
         if let Some(error) = self.draft.error() {
             fields.push(View::label(error).wrap(true).foreground(0xffff8787));
         }
-        children.push(View::column(fields).key("$date-fields"));
+        if show_field {
+            children.push(View::column(fields).key("$date-fields"));
+        }
         let mut root = View::panel(children).accessible_label(self.rules.locale.date_hint());
         Rc::make_mut(&mut root.0).calendar = Some(self.clone());
         root

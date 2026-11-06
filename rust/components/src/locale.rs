@@ -243,12 +243,24 @@ impl EditLocale {
             },
         )
     }
+    pub(crate) fn check_digits(&self, text: &str) -> Result<(), String> {
+        self.profile()
+            .map_or(Ok(()), |p| p.ascii_digits(text).map(|_| ()))
+    }
     pub(crate) fn clock_label(&self) -> &'static str {
         match self.profile() {
             Some(Profile::De) => "Uhrzeit",
             Some(Profile::Fr) => "Heure",
             Some(Profile::Ar) => "الوقت",
             _ => "Time",
+        }
+    }
+    pub(crate) fn datetime_label(&self) -> &'static str {
+        match self.profile() {
+            Some(Profile::De) => "Datum und Uhrzeit",
+            Some(Profile::Fr) => "Date et heure",
+            Some(Profile::Ar) => "التاريخ والوقت",
+            _ => "Date and time",
         }
     }
     pub(crate) fn clock_part(&self, index: usize) -> &'static str {

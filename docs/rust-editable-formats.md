@@ -1,7 +1,7 @@
 # Editable value formats
 
 M6 editable-format contract. ASCII/ISO editing remains the default. `EditLocale` selects a
-checked locale profile shared by `Numeric`, `DatePicker` and `TimePicker`. Read-only display
+checked locale profile shared by `Numeric`, `DatePicker`, `TimePicker` and `DateTimePicker`. Read-only display
 formatters may support more locales than editable controls. A display formatter does not define an input grammar.
 
 ## Default grammar
@@ -45,8 +45,8 @@ supported profiles are intentionally finite and testable:
 
 These are advertised editing patterns with four-digit years, not a claim to cover
 every CLDR date pattern/calendar. Calendar labels and hints must follow the chosen
-profile. The standalone time control adds the explicit clock policy below; legacy
-time/datetime draft helpers retain ISO. BCE/extended-year editing remains available in ISO mode.
+profile. The time and civil datetime controls add the explicit clock policy below;
+legacy draft helpers retain ISO. BCE/extended-year editing remains available in ISO mode.
 
 - Validate profile names at construction. Unknown/malformed profiles and unsupported
   calendar/numbering extensions return an error; never silently substitute an edit
@@ -133,4 +133,28 @@ External source revisions invalidate stale edits, including A→B→A transition
 `cargo run --example m6_time --locked --offline` demonstrates two clock policies
 over one exact value. Six portable tests and the hidden native `time_picker` harness
 cover precision, localized grammar, steps, validation, lifecycle and text composition.
-Combined datetime/instant bounds and timezone policy remain open under M6.4.
+Zoned instant bounds and timezone policy remain open under M6.4.
+
+## Combined civil datetime control
+
+`DateTimePicker` uses the chosen date grammar, a literal `T`, then the same clock
+grammar as `TimePicker`. For example, German 12-hour editing with seconds uses
+`29.02.2024T01:02:03,123 PM`. Digit-set consistency applies across the whole value.
+The default is ISO date plus 24-hour `HH:MM`; hidden seconds/nanoseconds are retained.
+Offsets, named zones and timestamp suffixes are rejected by this civil editor.
+
+One full-value field owns the draft. Editing the date and time across tight joint
+bounds does not write intermediate application values. Apply/Enter or default blur
+publishes only a complete, valid candidate; cancel restores the whole value.
+Calendar choices retain the staged clock and commit only a valid whole candidate.
+Clock steppers commit a valid draft plus the adjustment, with exact carry through
+midnight/leap/year boundaries. Invalid syntax disables both; invalid whole-candidate
+validation disables clock stepping. Calendar choices may repair a date that violates
+joint bounds, provided the new whole candidate passes every rule. Nothing clamps
+an invalid committed model or silently discards uncommitted text.
+
+Inclusive datetime bounds, disabled-date predicates and custom validators check
+the whole value on every commit/choice/step. Date and clock configuration is shared,
+including locale, 12/24-hour mode, optional seconds, step sizes and readonly policy.
+`m6_datetime` demonstrates an overnight booking range. The local editor does not
+resolve timezones; instant limits, DST decisions and named-zone changes remain M6.4.

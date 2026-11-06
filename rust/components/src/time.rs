@@ -123,7 +123,7 @@ impl Clock {
             .map_err(|e| e.to_string())
         }
     }
-    pub fn step(&self, time: Time, part: TimePart, increase: bool) -> Option<Time> {
+    pub(crate) fn step_seconds(&self, time: Time, part: TimePart, increase: bool) -> Option<i64> {
         if part == TimePart::Second && !self.seconds
             || part == TimePart::Period && self.cycle != HourCycle::H12
         {
@@ -141,11 +141,14 @@ impl Clock {
                 }
             }
         };
-        let delta = if part == TimePart::Period || increase {
+        Some(if part == TimePart::Period || increase {
             seconds
         } else {
             -seconds
-        };
+        })
+    }
+    pub fn step(&self, time: Time, part: TimePart, increase: bool) -> Option<Time> {
+        let delta = self.step_seconds(time, part, increase)?;
         let nanos = (i64::from(time.hour()) * 3600
             + i64::from(time.minute()) * 60
             + i64::from(time.second())
@@ -394,77 +397,16 @@ impl TimePicker {
             self.value.get() == next
         })
     }
-    fn part_view(&self, part: TimePart) -> View {
-        let index = match part {
-            TimePart::Hour => 0,
-            TimePart::Minute => 1,
-            TimePart::Second => 2,
-            TimePart::Period => unreachable!(),
-        };
-        let label = self.rules.clock.locale.clock_part(index);
-        let (down, up, read, change) = (self.clone(), self.clone(), self.clone(), self.clone());
-        let mut stepper = View::row(vec![
-            View::button("−", move || {
-                down.step(part, false);
-            })
-            .enabled(self.can_step(part, false))
-            .accessible_label(format!(
-                "{} {label}",
-                self.rules.clock.locale.action(ActionLabel::Decrease)
-            ))
-            .width(34),
-            View::button("+", move || {
-                up.step(part, true);
-            })
-            .enabled(self.can_step(part, true))
-            .accessible_label(format!(
-                "{} {label}",
-                self.rules.clock.locale.action(ActionLabel::Increase)
-            ))
-            .width(34),
-        ])
-        .gap(4.)
-        .width(72)
-        .shrink(0.)
-        .read_only(self.read_only)
-        .accessible_label(label);
-        let data = Rc::make_mut(&mut stepper.0);
-        data.kind = crate::Kind::Stepper;
-        data.stepper = Some(StepperData {
-            read: Rc::new(move || {
-                let time = read.current().unwrap_or_else(|| read.value.get());
-                let (min, max) = if part == TimePart::Hour {
-                    if read.rules.clock.cycle == HourCycle::H12 {
-                        (1, 12)
-                    } else {
-                        (0, 23)
-                    }
-                } else {
-                    (0, 59)
-                };
-                StepperInfo {
-                    value: read.rules.clock.part(time, part).to_string(),
-                    min: min.to_string(),
-                    max: max.to_string(),
-                    can_increment: read.can_step(part, true),
-                    can_decrement: read.can_step(part, false),
-                }
-            }),
-            change: Rc::new(move |increase| change.step(part, increase)),
-        });
-        let time = self.current().unwrap_or_else(|| self.value.get());
-        View::column(vec![
-            View::label(format!(
-                "{label} · {}",
-                self.rules
-                    .clock
-                    .locale
-                    .clock_digits(&format!("{:02}", self.rules.clock.part(time, part)))
-            )),
-            stepper,
-        ])
-        .grow(1.)
-        .min_width(0.)
+    fn parts(&self) -> View {
+        let (read, can, change) = (self.clone(), self.clone(), self.clone());
+        ClockControls {
+            clock: self.rules.clock.clone(),
+            read: Rc::new(move || read.current().unwrap_or_else(|| read.value.get())),
+            can: Rc::new(move |part, up| can.can_step(part, up)),
+            change: Rc::new(move |part, up| change.step(part, up)),
+            read_only: self.read_only,
+        }
+        .view()
     }
     pub fn view(&self) -> View {
         let (submit, cancel, blur, apply, revert) = (
@@ -474,45 +416,6 @@ impl TimePicker {
             self.clone(),
             self.clone(),
         );
-        let mut parts = vec![
-            self.part_view(TimePart::Hour),
-            self.part_view(TimePart::Minute),
-        ];
-        if self.rules.clock.seconds {
-            parts.push(self.part_view(TimePart::Second));
-        }
-        if self.rules.clock.cycle == HourCycle::H12 {
-            let read = self.clone();
-            let write = self.clone();
-            let period = Binding::new(
-                move || {
-                    if read.current().unwrap_or_else(|| read.value.get()).hour() < 12 {
-                        "am".into()
-                    } else {
-                        "pm".into()
-                    }
-                },
-                move |v: String| {
-                    if let Some(time) = write.current()
-                        && (v == "pm" && time.hour() < 12 || v == "am" && time.hour() >= 12)
-                    {
-                        write.step(TimePart::Period, true);
-                    }
-                },
-            );
-            let labels = self.rules.clock.locale.periods();
-            parts.push(
-                View::segmented(
-                    period,
-                    vec![
-                        crate::OptionItem::new("am", labels[0]),
-                        crate::OptionItem::new("pm", labels[1]),
-                    ],
-                )
-                .enabled(!self.read_only && self.current().is_some())
-                .accessible_label("AM/PM"),
-            );
-        }
         let mut children = vec![
             View::label(self.rules.clock.hint()),
             View::text_field(self.rules.clock.hint(), self.binding())
@@ -527,7 +430,7 @@ impl TimePicker {
                         blur.commit();
                     }
                 }),
-            View::row(parts).gap(12.).key("$time-parts"),
+            self.parts(),
             View::row(vec![
                 View::button(
                     self.rules.clock.locale.action(ActionLabel::Apply),
@@ -545,5 +448,131 @@ impl TimePicker {
             children.push(View::label(error).wrap(true).foreground(0xffff8787));
         }
         View::panel(children).accessible_label(self.rules.clock.locale.clock_label())
+    }
+}
+
+// Shared rendering; each owner supplies whole-candidate validation and arithmetic.
+#[derive(Clone)]
+pub(crate) struct ClockControls {
+    pub clock: Clock,
+    pub read: Rc<dyn Fn() -> Time>,
+    pub can: Rc<dyn Fn(TimePart, bool) -> bool>,
+    pub change: Rc<dyn Fn(TimePart, bool) -> bool>,
+    pub read_only: bool,
+}
+impl ClockControls {
+    fn part_view(&self, part: TimePart) -> View {
+        let index = match part {
+            TimePart::Hour => 0,
+            TimePart::Minute => 1,
+            TimePart::Second => 2,
+            TimePart::Period => unreachable!(),
+        };
+        let label = self.clock.locale.clock_part(index);
+        let (down, up, read, change) = (self.clone(), self.clone(), self.clone(), self.clone());
+        let mut stepper = View::row(vec![
+            View::button("−", move || {
+                (down.change)(part, false);
+            })
+            .enabled((self.can)(part, false))
+            .accessible_label(format!(
+                "{} {label}",
+                self.clock.locale.action(ActionLabel::Decrease)
+            ))
+            .width(34),
+            View::button("+", move || {
+                (up.change)(part, true);
+            })
+            .enabled((self.can)(part, true))
+            .accessible_label(format!(
+                "{} {label}",
+                self.clock.locale.action(ActionLabel::Increase)
+            ))
+            .width(34),
+        ])
+        .gap(4.)
+        .width(72)
+        .shrink(0.)
+        .read_only(self.read_only)
+        .accessible_label(label);
+        let data = Rc::make_mut(&mut stepper.0);
+        data.kind = crate::Kind::Stepper;
+        data.stepper = Some(StepperData {
+            read: Rc::new(move || {
+                let time = (read.read)();
+                let (min, max) = if part == TimePart::Hour {
+                    if read.clock.cycle == HourCycle::H12 {
+                        (1, 12)
+                    } else {
+                        (0, 23)
+                    }
+                } else {
+                    (0, 59)
+                };
+                StepperInfo {
+                    value: read.clock.part(time, part).to_string(),
+                    min: min.to_string(),
+                    max: max.to_string(),
+                    can_increment: (read.can)(part, true),
+                    can_decrement: (read.can)(part, false),
+                }
+            }),
+            change: Rc::new(move |increase| (change.change)(part, increase)),
+        });
+        let time = (self.read)();
+        View::column(vec![
+            View::label(format!(
+                "{label} · {}",
+                self.clock
+                    .locale
+                    .clock_digits(&format!("{:02}", self.clock.part(time, part)))
+            )),
+            stepper,
+        ])
+        .grow(1.)
+        .min_width(0.)
+    }
+    pub fn view(&self) -> View {
+        let mut parts = vec![
+            self.part_view(TimePart::Hour),
+            self.part_view(TimePart::Minute),
+        ];
+        if self.clock.seconds {
+            parts.push(self.part_view(TimePart::Second));
+        }
+        if self.clock.cycle == HourCycle::H12 {
+            let read = self.clone();
+            let write = self.clone();
+            let period = Binding::new(
+                move || {
+                    if (read.read)().hour() < 12 {
+                        "am".into()
+                    } else {
+                        "pm".into()
+                    }
+                },
+                move |v: String| {
+                    let time = (write.read)();
+                    if (write.can)(TimePart::Period, true)
+                        && (v == "pm" && time.hour() < 12 || v == "am" && time.hour() >= 12)
+                    {
+                        (write.change)(TimePart::Period, true);
+                    }
+                },
+            );
+            let labels = self.clock.locale.periods();
+            parts.push(
+                View::segmented(
+                    period,
+                    vec![
+                        crate::OptionItem::new("am", labels[0]),
+                        crate::OptionItem::new("pm", labels[1]),
+                    ],
+                )
+                .enabled(!self.read_only && (self.can)(TimePart::Period, true))
+                .accessible_label(labels.join("/")),
+            );
+        }
+        View::row(parts).gap(12.).key("$time-parts")
     }
 }

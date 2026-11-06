@@ -26,6 +26,7 @@ mod alert;
 mod collections;
 mod control_semantics;
 mod date;
+mod datetime;
 mod deadlines;
 mod draft;
 mod editing;
@@ -57,6 +58,7 @@ mod wizard;
 pub use alert::{Alert, AlertAction, AlertActionRole, AlertReason, AlertResult, AlertSubscription};
 pub use collections::*;
 pub use date::{CalendarDay, CalendarInfo, DatePicker};
+pub use datetime::DateTimePicker;
 pub use draft::{
     Draft, Number, Numeric, StepperInfo, Validation, ValidationStatus, numeric_field, stepper,
 };

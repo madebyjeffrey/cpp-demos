@@ -117,3 +117,8 @@ harness = false
 name = "time_picker"
 path = "tests/time_picker.rs"
 harness = false
+
+[[test]]
+name = "datetime_picker"
+path = "tests/datetime_picker.rs"
+harness = false

@@ -159,7 +159,7 @@ clipboard and accessibility. `Surface::set_view` replaces a mount transactionall
 Closing the last top-level window quits unless explicitly suppressed.
 
 Typed editors use `Draft<T>` to separate unfinished text from committed values.
-`Numeric`, `ColorPicker`, `DatePicker`, `TimePicker`, `ZonedPicker` and the time helpers build on
+`Numeric`, `ColorPicker`, `DatePicker`, `TimePicker`, `DateTimePicker`, `ZonedPicker` and the time helpers build on
 it. Initial editable formats are explicit ASCII numbers and ISO dates/times;
 ICU4X supplies Unicode boundaries and localized integer display. Named zones use
 Jiff and bundled timezone data. Ambiguous/nonexistent local times are rejected by
@@ -168,8 +168,10 @@ default, with explicit earlier/later resolution available.
 `TimePicker::new(value.binding())` adds dedicated component steppers around one
 draft. Configure `hour_cycle`, `show_seconds`, bounds and step sizes before mounting,
 then embed `picker.view()`. `m6_time` demonstrates two clocks sharing an exact value;
-hour/minute edits preserve hidden seconds/nanoseconds. Combined datetime and zone
-controls remain in progress under M6.4.
+hour/minute edits preserve hidden seconds/nanoseconds. Zoned controls remain in
+progress under M6.4. `DateTimePicker::new(value.binding())`
+provides one civil datetime draft with a calendar and clock steppers; `m6_datetime`
+demonstrates joint overnight bounds without intermediate application writes.
 
 See [component contracts](../rust/components/README.md) for layouts, controls,
 selection, popup placement, virtual models, deadlines, native semantics and

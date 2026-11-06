@@ -91,6 +91,13 @@ impl<T: Clone + PartialEq + 'static> Draft<T> {
         draft.read_only = self.read_only;
         draft
     }
+    // Projected controls must also discard state when another part of the shared
+    // draft changes, including source A→B→A transitions.
+    pub(crate) fn revision(&self) -> u64 {
+        self.edit
+            .version()
+            .wrapping_add(self.value.revision().unwrap_or(0))
+    }
     pub fn binding(&self) -> Binding<String> {
         let read = self.clone();
         let write = self.clone();

@@ -1480,4 +1480,40 @@ publish newer authoritative values without a subsequent stale write.
 tests cover exact values, locales, boundaries, callbacks, keyboard/blur and source
 changes. The hidden native `time_picker` harness covers AX values/actions, marked
 text confirmation, readonly behavior and retired objects. This is a checkpoint:
-combined datetime/instant validation and timezone editing still keep M6.4 open.
+zoned instant validation and timezone editing still keep M6.4 open.
+
+## M6.4 checkpoint — combined civil datetime
+
+```rust
+let picker = DateTimePicker::new(value.binding())
+    .bounds(min_datetime, max_datetime)
+    .show_seconds(true)
+    .minute_step(15)
+    .validate(|datetime| validate_booking(datetime));
+// In a builder: embed(picker.view());
+```
+
+One field owns the full draft: date, literal `T`, then the clock grammar. Locale,
+hour cycle, optional seconds and precision follow `DatePicker`/`TimePicker`.
+Applications can edit both parts across tight overnight limits before one valid
+write; no application-side date/time staging is needed. Calendar choices keep the
+staged clock, and clock steps carry exactly through midnight, leap and year changes.
+Every write checks joint inclusive bounds, disabled dates and the pure custom
+validator. Invalid text and rejected setters remain editable; invalid external
+values remain visible. A malformed draft disables choices/steps; clock steps also
+require a valid whole candidate. A calendar choice can repair a parseable invalid
+date only when the resulting whole value is valid.
+
+The group shares readonly, blur/submit/cancel and validation callbacks with the
+standalone controls. Configure before mounting. External revisions reset stale
+text, calendar selection and focus; changing the number of calendar rows retains
+the field. Calendar arrows/page keys inspect without writing, and Escape restores
+the group. `binding()`, `draft()`, `validation()`, `commit()`, `cancel()`, `select()`,
+`calendar()` and `step(TimePart, increase)` expose the same behavior directly.
+
+`cargo run --example m6_datetime` demonstrates an overnight range. Six focused
+portable tests cover one-write joint editing, exact carry/extremes, localized
+grammar, shared calendar/clock state, readonly/lifecycle/source changes, rejected
+setters and callback authority. Native text/AX/composition coverage is in the
+hidden `datetime_picker` harness. Zoned instant limits, DST and zone changes remain
+required for M6.4 completion.
