@@ -81,8 +81,10 @@ No script automatically checks off the completion report.
 
 The [resource report](rust-resources.md) documents the `m8_resources` terminal
 example, measured collection/editing sessions, cache ownership and the visible
-idle-frame cases included in the native desktop suite. Those visible cases remain
-unverified until that suite actually runs on an awake foreground desktop.
+idle-frame cases included in the native desktop suite. The visible cases passed
+on macOS 27.2: each of three resource-lifecycle scenarios delivered animated
+Metal frames, then settled with zero idle frames or callbacks. The example smoke
+matrix and interactive VoiceOver/IME audit are still pending in `rust-todo.md`.
 
 ## CI
 
