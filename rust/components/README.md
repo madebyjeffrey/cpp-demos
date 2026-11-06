@@ -1208,3 +1208,49 @@ loading/retry, stale objects and a 100,000-child outline. Full-array count/copy 
 zero proxies; requested entries alone populate the lazy array's cache. Two hundred
 transient ranged queries return the weak registry to its original size. Combined
 notifications/lifecycle and actual VoiceOver/IME sessions remain M5.4/M5.5.
+
+## Completion M5 — table semantics
+
+`table.view()` exposes one native AXTable with its application-supplied accessible
+label. Logical AXRows contain AXCells; AXColumns link the same cells and expose
+header buttons. Ordinary children include rows, columns and a header group, also
+reachable through the table header attribute. Header/column sort direction and help describe multi-sort precedence.
+Pressing a sortable header uses the existing sort cycle. Resize controls and custom
+cell controls keep their native actions; custom control focus/hit testing is preserved.
+
+`TableModel::snapshot()` shares immutable row data/order/tokens and copies callback-free
+`TableColumnInfo` metadata. It never retains validators, display builders or the model.
+`TableCellInfo` reports live indexes, lifetimes, selection, editability, current draft
+text and validation errors without realizing a row. Changing sort or column order
+preserves surviving logical identities; removal and reinsertion create new lifetimes.
+
+Native row, column and column-cell arrays are lazy immutable NSArray subclasses.
+Counts/copy do not create every proxy; indexed requests allocate only requested
+entries. `accessibilityCellForColumn:row:` reaches offscreen cells and rejects invalid
+indexes. Visible rows exclude overscan; visible cells/columns respect horizontal
+clipping. Weak caches share identities across hierarchy, indexed queries, focus and
+hit testing, then remove entries on proxy deallocation. Retained arrays preserve their
+original membership/order; entries read current attributes and become inert after
+replacement, removal or unmount.
+
+Selection arrays/setters follow row/cell mode and reject foreign, stale or disabled
+targets atomically. Selection ranges use stable key order. Replacing selection does
+not take focus from another control; explicit focus reveals only the target row and
+preserves multiselection. Columns do not support independent column selection.
+
+Confirm starts an editable cell's shared text editor. Setting its value uses the same
+validation/commit path as keyboard editing; invalid drafts remain available through
+value/help and the native editor child. The editor retains text input/selection APIs,
+and its parent is the logical cell. Readonly cells, disabled ancestors and modal
+isolation block mutation. Switching editors rechecks data/model lifetimes after
+application commit callbacks. A stale proxy cannot edit replacement data.
+
+The mappings follow Apple's [table protocol](https://developer.apple.com/documentation/appkit/nsaccessibilitytable)
+and [cell-based table properties](https://developer.apple.com/documentation/appkit/nsaccessibilityprotocol).
+Run `cargo run --example m4_table -- --semantics` for portable metadata, `m4_table`
+for sorting/selection/columns, or `m4_table_edit` for validated drafts. Focused core
+checks are `cargo test -p scars-ui --test table_semantics`; native checks are
+`SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test table_accessibility --locked --offline`.
+The latter exercises a 100,000-row table, lazy allocation, shared identities, index
+changes, row/cell selection, custom controls, editing/errors and stale-object/resource
+cleanup. Combined notification and actual VoiceOver/IME audits remain M5.4/M5.5.

@@ -6,6 +6,9 @@ fn any<T: Message>(value: Retained<T>) -> Retained<AnyObject> {
     unsafe { Retained::cast_unchecked(value) }
 }
 fn semantic(n: &Node) -> bool {
+    if n.table_root.is_some() {
+        return !n.hidden;
+    }
     !n.hidden
         && !n.combo_toggle
         && !(n.kind == Kind::Modal && n.overlay_owner.is_some() && n.combo_owner.is_some())
@@ -75,6 +78,7 @@ pub(super) fn list(
         .iter()
         .filter(|n| {
             semantic(n)
+                && !super::table_accessibility::scaffold(&nodes, n, parent_id)
                 && m.host.in_scope(n.id)
                 && parent(n, &nodes).filter(|id| m.host.in_scope(*id)) == parent_id
         })
@@ -92,6 +96,9 @@ pub(crate) fn focused(s: &Rc<SurfaceState>) -> Option<Retained<AnyObject>> {
     m.run(|m, _| {
         Ok(m.host.focused().map(|id| {
             let nodes = m.host.snapshot().unwrap_or_default();
+            if let Some(value) = super::table_accessibility::logical(m, id, true) {
+                return value;
+            }
             if let Some(node) = nodes.iter().find(|n| n.id == id)
                 && let Some(tree) = &node.tree_model
                 && let Some(info) = tree.cursor().and_then(|key| tree.row(&key))
@@ -127,7 +134,8 @@ pub(crate) fn hit_test(s: &Rc<SurfaceState>, point: NSPoint) -> Option<Retained<
             .rev()
             .find(|n| semantic(n) && n.clip.contains(p) && n.bounds.contains(p))
             .map(|n| {
-                super::collection_accessibility::logical(m, n.id)
+                super::table_accessibility::logical(m, n.id, false)
+                    .or_else(|| super::collection_accessibility::logical(m, n.id))
                     .unwrap_or_else(|| any(element(m, n.id)))
             }))
     })
@@ -189,6 +197,8 @@ define_class!(
     impl Element {
         #[unsafe(method(scarsLogicalRowCacheCount))]
         fn logical_cache_count(&self)->usize{self.with(|m,_,_|Ok(m.row_cache.borrow().len())).unwrap_or(0)}
+        #[unsafe(method(scarsTableEntryCacheCount))]
+        fn table_cache_count(&self)->usize{self.with(|m,_,_|Ok(m.table_cache.borrow().len())).unwrap_or(0)}
     }
     unsafe impl NSAccessibility for Element {
         #[unsafe(method(isAccessibilityElement))]
@@ -198,7 +208,8 @@ define_class!(
         #[unsafe(method_id(accessibilityRole))]
         fn role(&self) -> Option<Retained<NSString>> {
             self.node().map(|n| {
-                if n.combo.is_some() {unsafe {NSAccessibilityComboBoxRole.retain()}}
+                if n.table_root.is_some() {unsafe {NSAccessibilityTableRole.retain()}}
+                else if n.combo.is_some() {unsafe {NSAccessibilityComboBoxRole.retain()}}
                 else if n.menu_item.is_some() { unsafe { NSAccessibilityMenuItemRole.retain() } }
                 else if n.menu_panel { unsafe { NSAccessibilityMenuRole.retain() } }
                 else if n.tree_model.is_some(){unsafe{NSAccessibilityOutlineRole.retain()}}
@@ -234,9 +245,10 @@ define_class!(
         #[unsafe(method_id(accessibilityParent))]
         fn parent(&self) -> Option<Retained<AnyObject>> {
             self.with(|m, s, n| {
+                if let Some(parent)=super::table_accessibility::editor_parent(m,n){return Ok(parent)}
                 let nodes = m.host.snapshot()?;
                 Ok(parent(n, &nodes)
-                    .map(|id|super::collection_accessibility::logical(m,id).unwrap_or_else(||any(element(m,id))))
+                    .map(|id|super::table_accessibility::logical(m,id,false).or_else(||super::collection_accessibility::logical(m,id)).unwrap_or_else(||any(element(m,id))))
                     .unwrap_or_else(|| any(s.native_view().retain())))
             })
         }
@@ -250,7 +262,7 @@ define_class!(
         }
         #[unsafe(method_id(accessibilityChildren))]
         fn children(&self) -> Option<Retained<NSArray<AnyObject>>> {
-            self.with(|m, _, n| {
+            self.table_array("AXChildren",0,usize::MAX).or_else(||self.with(|m, _, n| {
                 if let Some(model) = &n.collection {
                     let range = if n.tree_model.is_some(){0..model.len()}else{model.visible_range()};
                     Ok(super::collection_accessibility::rows(
@@ -262,7 +274,7 @@ define_class!(
                 } else {
                     list(m, Some(n.id))
                 }
-            })
+            }))
         }
         #[unsafe(method_id(accessibilityLinkedUIElements))]
         fn linked(&self)->Option<Retained<NSArray<AnyObject>>> {
@@ -276,22 +288,31 @@ define_class!(
         #[unsafe(method_id(accessibilityTabs))]
         fn tabs(&self)->Option<Retained<NSArray<AnyObject>>>{self.tab_elements(1)}
         #[unsafe(method_id(accessibilitySelectedChildren))]
-        fn selected_children(&self)->Option<Retained<NSArray<AnyObject>>>{self.combo_selected().or_else(||self.collection_selected(0,usize::MAX)).or_else(||self.tab_elements(0))}
+        fn selected_children(&self)->Option<Retained<NSArray<AnyObject>>>{self.table_array("AXSelectedChildren",0,usize::MAX).or_else(||self.combo_selected()).or_else(||self.collection_selected(0,usize::MAX)).or_else(||self.tab_elements(0))}
         #[unsafe(method_id(accessibilityContents))]
         fn contents(&self)->Option<Retained<NSArray<AnyObject>>>{self.tab_elements(2)}
         #[unsafe(method_id(accessibilityRows))]
-        fn rows(&self)->Option<Retained<NSArray<AnyObject>>>{self.rows_all()}
+        fn rows(&self)->Option<Retained<NSArray<AnyObject>>>{self.table_array("AXRows",0,usize::MAX).or_else(||self.rows_all())}
         #[unsafe(method_id(accessibilityVisibleRows))]
-        fn visible_rows(&self)->Option<Retained<NSArray<AnyObject>>>{self.rows_visible(0,usize::MAX)}
+        fn visible_rows(&self)->Option<Retained<NSArray<AnyObject>>>{self.table_array("AXVisibleRows",0,usize::MAX).or_else(||self.rows_visible(0,usize::MAX))}
         #[unsafe(method_id(accessibilitySelectedRows))]
-        fn selected_rows(&self)->Option<Retained<NSArray<AnyObject>>>{self.collection_selected(0,usize::MAX)}
+        fn selected_rows(&self)->Option<Retained<NSArray<AnyObject>>>{self.table_array("AXSelectedRows",0,usize::MAX).or_else(||self.collection_selected(0,usize::MAX))}
         #[unsafe(method(setAccessibilitySelectedRows:))]
-        fn set_selected_rows(&self,values:Option<&NSArray<AnyObject>>){self.set_tree_selection(values)}
+        fn set_selected_rows(&self,values:Option<&NSArray<AnyObject>>){if self.node().is_some_and(|n|n.table_root.is_some()){self.table_selection(values,false)}else{self.set_tree_selection(values)}}
+        #[unsafe(method_id(accessibilityHeader))] fn header(&self)->Option<Retained<AnyObject>>{self.with(|_,_,n|Ok(n.table_root.as_ref().map(|_|super::table_accessibility::entry(self.ivars().owner.clone(),n.id,super::table_accessibility::Part::Headers)))).flatten()}
+        #[unsafe(method_id(accessibilitySelectedColumns))] fn selected_columns(&self)->Option<Retained<NSArray<AnyObject>>>{self.with(|_,_,n|Ok(n.table_root.as_ref().map(|_|NSArray::new()))).flatten()}
+        #[unsafe(method(setAccessibilitySelectedColumns:))] fn set_selected_columns(&self,_values:Option<&NSArray<AnyObject>>){}
+        #[unsafe(method_id(accessibilityColumns))] fn columns(&self)->Option<Retained<NSArray<AnyObject>>>{self.table_array("AXColumns",0,usize::MAX)}
+        #[unsafe(method_id(accessibilityVisibleColumns))] fn visible_columns(&self)->Option<Retained<NSArray<AnyObject>>>{self.table_array("AXVisibleColumns",0,usize::MAX)}
+        #[unsafe(method_id(accessibilityColumnHeaderUIElements))] fn headers(&self)->Option<Retained<NSArray<AnyObject>>>{self.table_array("AXColumnHeaderUIElements",0,usize::MAX)}
+        #[unsafe(method_id(accessibilitySelectedCells))] fn selected_cells(&self)->Option<Retained<NSArray<AnyObject>>>{self.table_array("AXSelectedCells",0,usize::MAX)}
+        #[unsafe(method(setAccessibilitySelectedCells:))] fn select_cells(&self,values:Option<&NSArray<AnyObject>>){self.table_selection(values,true)}
+        #[unsafe(method_id(accessibilityVisibleCells))] fn visible_cells(&self)->Option<Retained<NSArray<AnyObject>>>{self.table_array("AXVisibleCells",0,usize::MAX)}
+        #[unsafe(method_id(accessibilityCellForColumn:row:))] fn cell_at(&self,column:isize,row:isize)->Option<Retained<AnyObject>>{self.table_cell(column,row)}
+        #[unsafe(method(accessibilityColumnCount))] fn column_count(&self)->isize{self.node().and_then(|n|n.table_root).map_or(0,|t|t.column_count() as isize)}
         #[unsafe(method(accessibilityRowCount))]
         fn row_count(&self) -> isize {
-            self.node()
-                .and_then(|n| n.collection)
-                .map_or(0, |m| m.len() as isize)
+            self.node().map_or(0,|n|n.table_root.map_or_else(||n.collection.map_or(0,|m|m.len() as isize),|t|t.row_count() as isize))
         }
         #[unsafe(method_id(accessibilitySubrole))]
         fn subrole(&self)->Option<Retained<NSString>>{
@@ -307,13 +328,21 @@ define_class!(
         }
         #[unsafe(method(isAccessibilityFocused))]
         fn focused(&self) -> bool {
-            self.node().is_some_and(|n| n.focused&&n.tree_model.as_ref().is_none_or(|t|t.cursor().is_none()))
+            self.with(|m,_,n|Ok(if let Some(t)=&n.table_root {
+                let no_cursor=if t.options().selection_mode==ui::TableSelectionMode::Rows{t.row_cursor().is_none()}else{t.cursor().is_none()};
+                let nodes=m.host.snapshot()?;
+                no_cursor&&nodes.iter().any(|body|body.focused&&body.table_model.as_ref()==Some(t)&&super::table_accessibility::within(&nodes,body.id,n.id))
+            }else{n.focused&&n.tree_model.as_ref().is_none_or(|t|t.cursor().is_none())})).unwrap_or(false)
         }
         #[unsafe(method(setAccessibilityFocused:))]
         fn focus(&self, value: bool) {
             if value {
                 self.with(|m, s, n| {
                     s.focus();
+                    if let Some(table)=&n.table_root {
+                        let nodes=m.host.snapshot()?;
+                        if let Some(body)=nodes.iter().find(|body|body.table_model.as_ref()==Some(table)&&super::table_accessibility::within(&nodes,body.id,n.id)) {return m.host.focus(body.id)}
+                    }
                     m.host.focus(n.id)
                 });
             }
@@ -487,6 +516,9 @@ define_class!(
         unsafe fn allowed(&self, selector: objc2::runtime::Sel) -> bool {
             self.node()
                 .is_some_and(|n| match selector.name().to_bytes() {
+                    b"setAccessibilitySelectedColumns:"=>false,
+                    b"setAccessibilitySelectedRows:" if n.table_root.is_some()=>n.enabled&&n.table_root.as_ref().is_some_and(|t|t.options().selection_mode==ui::TableSelectionMode::Rows),
+                    b"setAccessibilitySelectedCells:"=>n.enabled&&n.table_root.as_ref().is_some_and(|t|t.options().selection_mode==ui::TableSelectionMode::Cells),
                     b"setAccessibilitySelectedRows:"=>n.enabled&&n.tree_model.is_some(),
                     b"accessibilityPerformPress" => {
                         n.enabled
@@ -528,6 +560,7 @@ define_class!(
         #[unsafe(method(accessibilityArrayAttributeCount:))]
         fn array_count(&self, attribute: &NSString) -> usize {
             let name=attribute.to_string();
+            if let Some(count)=self.table_count(&name){return count}
             if matches!(name.as_str(), "AXChildren" | "AXRows") {
                 self.node().and_then(|n|n.collection).map_or_else(||self.accessibilityChildren().map_or(0,|v|v.len()),|m|m.len())
             } else if name=="AXSelectedRows"||name=="AXSelectedChildren" {self.node().and_then(|n|n.collection).map_or_else(||self.accessibilitySelectedChildren().map_or(0,|a|a.len()),|m|m.selection_count())}
@@ -544,13 +577,13 @@ define_class!(
             count: usize,
         ) -> Option<Retained<NSArray<AnyObject>>> {
             let name=attribute.to_string();
-            if matches!(name.as_str(), "AXChildren" | "AXRows") {
+            self.table_array(&name,index,count).or_else(||{if matches!(name.as_str(), "AXChildren" | "AXRows") {
                 self.row_array(index, count)
             } else if name=="AXSelectedRows"||name=="AXSelectedChildren" {self.collection_selected(index,count)}
             else if name=="AXVisibleRows" {self.rows_visible(index,count)}
             else {
                 None
-            }
+            }})
         }
 
     }

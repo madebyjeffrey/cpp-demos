@@ -30,6 +30,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     )?;
     table.select_cell(TableCell::new("0", "name"), ListSelection::Replace);
+    if std::env::args().any(|arg| arg == "--semantics") {
+        let snapshot = table.snapshot();
+        println!(
+            "{} rows, {} columns",
+            snapshot.rows().len(),
+            snapshot.column_count()
+        );
+        for column in 0..snapshot.column_count() {
+            println!("column {column}: {:?}", snapshot.column(column).unwrap());
+            let cell = snapshot.cell(0, column).unwrap();
+            println!("first cell: {:?}", table.cell_info(&cell).unwrap());
+        }
+        return Ok(());
+    }
+
     common::run("SCARS · Keyed tables", (940, 650), move || {
         let mode = table.clone();
         let order = table.clone();
@@ -43,7 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 button("Move document column",on_click:move||{let target=if order.column_index("name")==Some(0){order.columns().len()-1}else{0};order.move_column("name",target).unwrap();});
                 button("Clear sort",on_click:move||clear.set_sort(vec![]).unwrap());
             }
-            embed(table.view(),grow:1,key:"documents");
+            embed(table.view().accessible_label("Workspace documents"),grow:1,key:"documents");
             label(format!("100,000 rows · {} selected · cursor {} · {} sort columns",table.selection_count(),table.cursor().map_or("—".into(),|c|format!("{} / {}",c.row,c.column)),table.sort().len()),label_style:LabelStyle::Micro,wrap:true,shrink:0);
             label("Arrows move; Shift extends a row range or cell rectangle. Command/Control toggles pointer selection. Column order never changes what a cell key means.",label_style:LabelStyle::Status,wrap:true,shrink:0);
         }}

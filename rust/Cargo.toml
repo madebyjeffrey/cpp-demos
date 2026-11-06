@@ -77,3 +77,8 @@ harness = false
 name = "tree_accessibility"
 path = "tests/tree_accessibility.rs"
 harness = false
+
+[[test]]
+name = "table_accessibility"
+path = "tests/table_accessibility.rs"
+harness = false

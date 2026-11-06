@@ -123,7 +123,7 @@ impl TableModel {
             .gap(0.)
             .grow(1.);
         let error = self.edit_error();
-        View::column(vec![
+        let mut root = View::column(vec![
             scroll,
             View::label(error.as_deref().unwrap_or(""))
                 .label_style(crate::LabelStyle::Error)
@@ -133,7 +133,9 @@ impl TableModel {
                 .key("$edit-error"),
         ])
         .gap(4.)
-        .height(options.header_height + options.visible_rows as f64 * options.row_height)
+        .height(options.header_height + options.visible_rows as f64 * options.row_height);
+        Rc::make_mut(&mut root.0).table_root = Some(self.clone());
+        root
     }
     fn cell_view(&self, cell: TableCell, column: &super::table::Column, height: f64) -> View {
         let text = self.text(&cell.row, &cell.column).unwrap_or_default();

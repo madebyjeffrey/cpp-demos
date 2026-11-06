@@ -123,6 +123,9 @@ See the [combo contracts](../rust/components/README.md#completion-m4--combo-boxe
 resize/reorder, sort descriptors and row/cell selection across 100,000 rows.
 Construct `TableColumn`s and keyed `TableRow::cell` values, then embed `table.view()`.
 Header drag/keyboard controls and shared scrolling preserve logical cell identity.
+Native AXTable rows, columns, headers and cells include offscreen data through lazy
+arrays. `--semantics` prints portable metadata; `table_accessibility` is the opt-in
+native protocol test. See the [table semantic contracts](../rust/components/README.md#completion-m5--table-semantics).
 See the [table contracts](../rust/components/README.md#completion-m4--keyed-tables-and-columns).
 
 `cargo run --example m4_table_edit` adds integrated editing with `.editable(true)`,
@@ -183,10 +186,10 @@ Linux is a compile check for the portable core; its native backend is not implem
 This is the first Rust implementation of the staged component system. Collection
 virtualization uses fixed row heights; durable per-row edit state belongs outside
 the viewport. Trees accept application-loaded lazy children. Table accessibility
-currently exposes logical row summaries and indexed row actions. Layout supports
+exposes logical rows/columns/cells, indexed queries, selection and validated editing. Layout supports
 rich inline paragraphs, constrained reflow and both-axis scrolling with draggable
 bars. Split views have draggable, keyboard-adjustable dividers with collapse and
 retained pane state. Color controls currently expose sRGB channels. These interfaces do not claim full C++ behavior or pixel parity.
 The [completion checklist](rust-completion-checklist.md) tracks remaining work,
-including localized editing, table-cell semantics and an actual VoiceOver/IME audit.
+including localized editing, combined native notifications and an actual VoiceOver/IME audit.
 Variable-height virtualization is a separate extension.

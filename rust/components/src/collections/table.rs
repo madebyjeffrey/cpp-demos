@@ -276,6 +276,9 @@ impl TableModel {
             .map(|c| c.value.clone())
             .collect()
     }
+    pub fn column_count(&self) -> usize {
+        self.0.columns.with(|columns| columns.len())
+    }
     pub fn column_index(&self, key: &str) -> Option<usize> {
         self.0.columns.get().iter().position(|c| c.value.id == key)
     }
@@ -656,6 +659,75 @@ impl TableModel {
         } else {
             self.0.cells.with(|c| c.selected.len())
         }
+    }
+    /// Logical ranges do not clone the complete selection or realize any controls.
+    pub fn is_row_selected(&self, key: &str) -> bool {
+        self.options().selection_mode == TableSelectionMode::Rows && self.0.list.is_selected(key)
+    }
+    pub fn selected_rows(&self, start: usize, count: usize) -> Vec<String> {
+        if self.options().selection_mode == TableSelectionMode::Rows {
+            self.0.list.selected_range(start, count)
+        } else {
+            vec![]
+        }
+    }
+    pub fn selected_cells(&self, start: usize, count: usize) -> Vec<TableCell> {
+        if self.options().selection_mode == TableSelectionMode::Cells {
+            self.0
+                .cells
+                .with(|c| c.selected.iter().skip(start).take(count).cloned().collect())
+        } else {
+            vec![]
+        }
+    }
+    /// Reject a wrong-mode, disabled or missing target before publishing any change.
+    pub fn set_selection(&self, selection: TableSelection) -> Result<(), Error> {
+        crate::state::check_write();
+        let rows = self.options().selection_mode == TableSelectionMode::Rows;
+        if rows && !selection.cells.is_empty()
+            || !rows && !selection.rows.is_empty()
+            || !self.options().multiple_selection
+                && selection.rows.len() + selection.cells.len() > 1
+            || selection.rows.iter().any(|key| {
+                self.0
+                    .list
+                    .index_of(key)
+                    .and_then(|i| self.0.list.item(i))
+                    .is_none_or(|r| !r.enabled)
+            })
+            || selection.cells.iter().any(|cell| !self.enabled(cell))
+        {
+            return Err(Error("Table selection must contain current enabled targets and respect the selection mode".into()));
+        }
+        crate::state::batch(|| {
+            if rows {
+                let cursor = selection
+                    .rows
+                    .last()
+                    .cloned()
+                    .or_else(|| self.0.list.cursor());
+                let anchor = selection
+                    .rows
+                    .first()
+                    .cloned()
+                    .or_else(|| self.0.list.anchor());
+                self.0
+                    .list
+                    .restore_selection(selection.rows, cursor, anchor);
+            } else {
+                let mut cells = self.0.cells.get();
+                if let Some(cursor) = selection.cells.last() {
+                    cells.cursor = Some(cursor.clone());
+                    self.0.list.focus_key(&cursor.row);
+                }
+                if let Some(anchor) = selection.cells.first() {
+                    cells.anchor = Some(anchor.clone());
+                }
+                cells.selected = selection.cells;
+                self.0.cells.set(cells);
+            }
+        });
+        Ok(())
     }
     pub fn row_cursor(&self) -> Option<String> {
         self.0.list.cursor()

@@ -4,6 +4,8 @@ mod accessibility;
 mod collection_accessibility;
 mod input;
 mod row_array;
+mod table_accessibility;
+mod table_array;
 pub(super) use accessibility::{children, focused, hit_test};
 
 pub(super) struct Mounted {
@@ -20,6 +22,7 @@ pub(super) struct Mounted {
             objc2::rc::Weak<collection_accessibility::Row>,
         >,
     >,
+    table_cache: RefCell<table_accessibility::Cache>,
     generation: Cell<u64>,
     focus: Cell<Option<ui::NodeId>>,
     value: RefCell<String>,
@@ -134,6 +137,7 @@ impl Mounted {
         }
         self.cache.borrow_mut().clear();
         self.row_cache.borrow_mut().clear();
+        self.table_cache.borrow_mut().clear();
     }
 }
 impl Surface {
@@ -170,6 +174,7 @@ impl Surface {
             previous_input: self.state.text_input.borrow().clone(),
             cache: RefCell::new(Default::default()),
             row_cache: RefCell::new(Default::default()),
+            table_cache: RefCell::new(Default::default()),
             generation: Cell::new(0),
             focus: Cell::new(None),
             value: RefCell::new(String::new()),

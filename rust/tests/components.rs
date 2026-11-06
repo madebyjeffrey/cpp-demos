@@ -1159,11 +1159,14 @@ fn main() {
     let table_host = window
         .set_view({
             let table = table.clone();
-            move || table.view()
+            move || table.view().accessible_label("Table regression")
         })
         .unwrap();
     unsafe {
-        let name = find_label(native, "Name column").unwrap();
+        let table_ax = find_label(native, "Table regression").unwrap();
+        let headers: Retained<NSArray<AnyObject>> =
+            msg_send![&*table_ax, accessibilityColumnHeaderUIElements];
+        let name = headers.objectAtIndex(0);
         let pressed: bool = msg_send![&*name, accessibilityPerformPress];
         assert!(pressed);
         let pressed: bool = msg_send![&*name, accessibilityPerformPress];
@@ -1189,7 +1192,9 @@ fn main() {
         assert_eq!(table.cursor(), Some(ui::TableCell::new("4998", "team")));
         let focused: Retained<AnyObject> = msg_send![native, accessibilityFocusedUIElement];
         let label: Retained<NSString> = msg_send![&*focused, accessibilityLabel];
-        assert_eq!(label.to_string(), "Team cell");
+        assert_eq!(label.to_string(), "Team");
+        let value: Retained<NSString> = msg_send![&*focused, accessibilityValue];
+        assert_eq!(value.to_string(), "Team cell");
         let id = table_host.focused();
         table.move_column("team", 0).unwrap();
         let _: Option<Retained<AnyObject>> = msg_send![native, accessibilityFocusedUIElement];
@@ -1207,8 +1212,12 @@ fn main() {
         assert!(!stale);
         let fresh: Retained<AnyObject> = msg_send![native, accessibilityFocusedUIElement];
         let label: Retained<NSString> = msg_send![&*fresh, accessibilityLabel];
-        assert_eq!(label.to_string(), "Row 4998");
-        let resize = find_label(native, "Resize Name column").unwrap();
+        assert_eq!(label.to_string(), "Name");
+        let value: Retained<NSString> = msg_send![&*fresh, accessibilityValue];
+        assert_eq!(value.to_string(), "Row 4998");
+        let headers: Retained<NSArray<AnyObject>> =
+            msg_send![&*table_ax, accessibilityColumnHeaderUIElements];
+        let resize = find_label(&headers.objectAtIndex(1), "Resize Name column").unwrap();
         let _: () = msg_send![&*resize,setAccessibilityFocused:true];
         let width = table.columns()[1].width;
         send(124);

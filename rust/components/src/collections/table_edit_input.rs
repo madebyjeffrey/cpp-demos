@@ -1,15 +1,25 @@
 use crate::{Error, Host, NodeId, TableCell, TextCommand};
 impl Host {
     pub(crate) fn start_table_cell_edit(&self, id: NodeId, cell: TableCell) -> Result<bool, Error> {
+        self.start_table_cell_edit_checked(id, cell, None)
+    }
+    pub(crate) fn start_table_cell_edit_checked(
+        &self,
+        id: NodeId,
+        cell: TableCell,
+        expected: Option<(u64, u64)>,
+    ) -> Result<bool, Error> {
         self.unmark_text(true)?;
         self.refresh()?;
         let Some(parent) = self.table_container(id) else {
             return Ok(false);
         };
-        let Some(model) = self.table(parent) else {
+        let Some(model) = self.table(parent).filter(|_| self.list(parent).is_some()) else {
             return Ok(false);
         };
-        if !model.is_editable(&cell) {
+        let tokens = (model.row_token(&cell.row), model.column_token(&cell.column));
+        if expected.is_some_and(|(r, c)| tokens != (Some(r), Some(c))) || !model.is_editable(&cell)
+        {
             return Ok(false);
         }
         if let Some(edit) = model.active_edit() {
@@ -30,6 +40,15 @@ impl Host {
                 self.redraw();
                 return Ok(true);
             }
+        }
+        // Committing another draft can call application code, retire data or replace
+        // the mounted model. Never start an editor for the new lifetime by accident.
+        self.refresh()?;
+        if self.table(parent).as_ref() != Some(&model)
+            || self.list(parent).is_none()
+            || (model.row_token(&cell.row), model.column_token(&cell.column)) != tokens
+        {
+            return Ok(false);
         }
         if model.start_edit(cell).is_err() {
             return Ok(false);

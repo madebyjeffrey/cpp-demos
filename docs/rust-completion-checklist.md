@@ -464,7 +464,7 @@ Completion record (in progress):
 Implement semantics alongside M1–M4; this milestone closes their combined audit.
 
 - [x] **M5.1 Tree semantics:** hierarchy, disclosure level, expanded/loading state and expand/collapse actions for logical offscreen items, with correct parent and selection relationships.
-- [ ] **M5.2 Table semantics:** columns, cells, headers, row/cell selection, editing and sort information; indexed queries must remain bounded and avoid creating the full table.
+- [x] **M5.2 Table semantics:** columns, cells, headers, row/cell selection, editing and sort information; indexed queries must remain bounded and avoid creating the full table.
 - [ ] **M5.3 Control/presentation semantics:** correct menu, tab, split, alert, validation, help and value roles/states/actions, rather than exposing every composition merely as generic groups/buttons.
 - [ ] **M5.4 Lifecycle/notifications:** stable logical identity, native focus/selection/value/layout notifications and coordinate conversion; retained objects become inert after removal, unmount or close, including nested presentations.
 - [ ] **M5.5 Interactive audit:** record actual VoiceOver and IME sessions covering navigation, editing, popup/sheet transitions, password reveal and candidate placement at both backing scales. Fix issues found; keep unavailable checks open.
@@ -475,7 +475,7 @@ and [logical row proxies](../rust/src/macos/components/collection_accessibility.
 
 Completion record:
 
-- M5.1: tree views expose AXOutline/AXRow semantics with logical parent/direct-child
+- M5.1 (`5ec5034`): tree views expose AXOutline/AXRow semantics with logical parent/direct-child
   links, disclosure levels, selected/enabled/focused state, accessible labels and
   loading/failure descriptions. Selection and disclosure actions validate mount,
   modal scope, effective enabled state and lifetime tokens; offscreen actions do not
@@ -494,6 +494,32 @@ Completion record:
   `m4_tree` is the runnable example; `--semantics` prints portable semantic state.
   Dark/light previews inspected and native smoke passes. Combined notification and
   interactive VoiceOver/IME audits remain open under M5.4/M5.5.
+
+- M5.2: one AXTable exposes keyed rows/cells/columns, a header group, header links,
+  live indexes, row/cell selection, sort direction/precedence and validated editing.
+  Ordinary child traversal and table-specific attributes share proxies. Resize and
+  custom controls remain actionable; native focus/hit testing preserves custom
+  controls and editor text APIs. Internal scroll/layout scaffolding is not exposed
+  as a competing table. Independent column selection is explicitly unsupported.
+- Callback-free immutable `TableSnapshot` metadata backs lazy native arrays, including
+  column-cell arrays and full child hierarchies. Count/copy and bounded range queries
+  do not create every proxy or widget. Shared weak identities survive sort/reorder;
+  replacement/unmount retires old objects. Querying offscreen cells does not realize
+  them; explicit focus/editing reveals only the target row. Bulk selection validates
+  all targets before mutation and preserves outside focus. Mutations respect enabled
+  ancestors/modal scope and recheck lifetimes after reentrant commit callbacks.
+- Evidence: five portable semantic tests plus table/edit regressions cover immutable
+  data/order/tokens, callback-resource release, multi-sort metadata, atomic selection,
+  100,000-row offscreen edits, validation and stale/reentrant actions. AppKit tests
+  verify the actual hierarchy/roles, lazy count/copy/ranges, linked identities,
+  index changes, row/cell modes, custom focus/hit testing, editor parentage/errors,
+  readonly/disabled guards and 200 transient queries returning cache size to baseline.
+  Reference AppKit table children were inspected to verify the header-group mapping.
+  Existing component/tree native suites, workspace tests, strict Clippy, formatting,
+  inventory mapping and portable compilation pass. `m4_table --semantics` provides
+  the portable example; `m4_table` and `m4_table_edit` provide native demonstrations.
+  Dark/light previews inspected and native example smoke passes. Actual interactive
+  VoiceOver/IME and combined notifications remain M5.4/M5.5.
 
 ## M6 — Localization and complete value controls
 

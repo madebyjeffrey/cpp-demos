@@ -63,6 +63,7 @@ pub struct Node {
     pub table_editor: Option<crate::TableEdit>,
     pub table_edit_error: Option<String>,
     pub table_model: Option<crate::TableModel>,
+    pub table_root: Option<crate::TableModel>,
     pub table_order: Vec<String>,
     pub table_cell: Option<crate::TableCell>,
     pub table_column: Option<String>,
@@ -721,6 +722,7 @@ fn mount(
             .map(|t| t.columns().into_iter().map(|c| c.id).collect())
             .unwrap_or_default(),
         table_model: d.table.clone(),
+        table_root: d.table_root.clone(),
         table_cell: d.table_cell.as_ref().map(|a| a.cell.clone()),
         table_column: d.table_header.as_ref().map(|a| a.column.clone()),
         table_resize: d.table_header.as_ref().is_some_and(|a| a.resize),
