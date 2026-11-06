@@ -98,12 +98,12 @@ Every public C++ `View` modifier is listed, including those with existing Rust n
 
 | C++ types/family | Rust mapping / remaining work | Closure |
 | --- | --- | --- |
-| `LayoutOverride`, `InspectionOverlay`, `FlexLineInspection`, `SplitInspection`, `TabInspection`, `ScrollInspection`, `ListInspection`, `InspectionNode`, `Inspector` | `Inspection`, `Inspector`, node snapshots and whole-style overrides exist; hierarchy, box/flex/split/tab/scroll/collection/draft/semantic state, overlay modes and UI editing need completion | M7.1–M7.2 |
+| `LayoutOverride`, `InspectionOverlay`, `FlexLineInspection`, `SplitInspection`, `TabInspection`, `ScrollInspection`, `ListInspection`, `InspectionNode`, `Inspector` | `Inspection`/`Inspector` provide a mounted hierarchy and owned layout/focus/selection/validation/split/tab/scroll/collection diagnostics; partial `StyleOverride` patches, retained property drafts, resets, measurement feedback and clipped box/flex highlights are implemented. Full Lab and final visual evidence remain M7.3/M8 | M7.1–M7.2 |
 | `Host` construction/options/theme/text-layout assignment/refresh | Rust host constructor, `set_theme`, `layout(..., Measure)` and refresh; native connection provided by window mounting | M1, M7.3 |
 | `Host` pointer/key/clipboard/editing/focus/cursor and text-input queries | Existing core dispatch and native adapter; input/geometry/secure/notification completion assigned above | M1.5, M2, M5 |
 | `Host` layout/scroll/list/tree/table/logical queries and actions | Snapshots/models exist; bounded logical semantics and full query/action behavior must be completed without forcing native types into the core | M1.4, M4, M5 |
 | `Host` menu/popover/tooltip/alert presentation, scheduling and invalidation | Menus/popovers/tooltips/alerts have scoped lifetimes and dismissal/completion callbacks; native sheets share alert transactions; final idle/cancel regression evidence remains | M3.6, M8.4 |
-| `Host` inspection/picking/layout overrides/previews | Existing picking and width UI; full developer tool contracts and diagnostic previews pending | M7, M8.2 |
+| `Host` inspection/picking/layout overrides/previews | Picking, hierarchy, property edits/reset and clipped diagnostic overlays implemented; full Lab/ergonomics and final preview evidence remain M7.3/M8.2 | M7, M8.2 |
 
 Run `python3 scripts/check_rust_inventory.py` after changing the reference or matrix.
 It verifies that exported type names and all `View` modifier names are represented;

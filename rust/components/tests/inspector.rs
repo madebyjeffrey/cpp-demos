@@ -520,3 +520,254 @@ fn source_rebinding_cannot_publish_or_retire_another_hosts_selection() {
     assert!(inspector.nodes().is_empty());
     assert!(inspector.selected.get().is_none());
 }
+
+#[test]
+fn property_patches_follow_reactive_source_and_reset_each_property() {
+    let inspector = Inspector::new();
+    let large = State::new(false);
+    let present = State::new(true);
+    let source = Host::new({
+        let (large, present) = (large.clone(), present.clone());
+        move || {
+            View::column(if present.get() {
+                vec![
+                    View::button("Target", || {})
+                        .key("target")
+                        .width(if large.get() { 220 } else { 100 })
+                        .padding(if large.get() { 12 } else { 4 })
+                        .foreground(if large.get() { 0xff123456 } else { 0xffabcdef }),
+                ]
+            } else {
+                vec![]
+            })
+            .align(Align::Start)
+        }
+    });
+    source.set_inspector(inspector.clone());
+    layout(&source);
+    let id = node(&source, "target").id;
+    inspector.select(id);
+    inspector
+        .set_override(id, StyleOverride::default().width(160).bold(true))
+        .unwrap();
+    large.set(true);
+    layout(&source);
+    let info = inspector.selected.get().unwrap();
+    assert_eq!(info.id, id);
+    assert_eq!(info.bounds.width, 160.);
+    assert_eq!(info.style.padding, Insets::all(12.));
+    assert_eq!(info.style.foreground, Some(0xff123456));
+    assert_eq!(info.source_style.width, Length::Points(220.));
+    assert_eq!(
+        info.overridden,
+        vec![StyleProperty::Width, StyleProperty::Bold]
+    );
+    assert_eq!(info.measured.width, 160.);
+    assert_eq!(info.content_bounds.width, 136.);
+    inspector.reset_property(id, StyleProperty::Width);
+    layout(&source);
+    assert_eq!(node(&source, "target").bounds.width, 220.);
+    assert!(node(&source, "target").style.bold);
+    inspector
+        .set_override(id, inspector.style_override(id).foreground(None))
+        .unwrap();
+    layout(&source);
+    assert_eq!(node(&source, "target").style.foreground, None);
+    assert_eq!(
+        node(&source, "target").text_style.color,
+        source.theme().text
+    );
+    inspector.reset_override(id);
+    layout(&source);
+    assert_eq!(node(&source, "target").text_style.color, 0xff123456);
+    inspector
+        .set_override(id, StyleOverride::default().width(220))
+        .unwrap();
+    large.set(false);
+    layout(&source);
+    assert_eq!(
+        node(&source, "target").bounds.width,
+        220.,
+        "equal-valued overrides remain explicit"
+    );
+    present.set(false);
+    layout(&source);
+    assert!(inspector.style_override(id).is_empty());
+    assert!(
+        !inspector
+            .set_override(id, StyleOverride::default().width(50))
+            .unwrap()
+    );
+    present.set(true);
+    layout(&source);
+    assert_ne!(node(&source, "target").id, id);
+    assert_eq!(node(&source, "target").bounds.width, 100.);
+}
+
+#[test]
+fn invalid_patches_are_atomic_and_reactive_conflicts_are_visible_and_recoverable() {
+    let inspector = Inspector::new();
+    let minimum = State::new(0.);
+    let source = Host::new({
+        let minimum = minimum.clone();
+        move || {
+            View::column(vec![
+                View::label("Target").key("target").min_width(minimum.get()),
+            ])
+        }
+    });
+    source.set_inspector(inspector.clone());
+    layout(&source);
+    let id = node(&source, "target").id;
+    inspector.select(id);
+    let patch = StyleOverride::default().max_width(120).padding(6);
+    inspector.set_override(id, patch).unwrap();
+    assert!(inspector.set_override(id, patch.padding(-1)).is_err());
+    assert!(
+        inspector
+            .set_override(id, patch.font_size(Some(f64::NAN)))
+            .is_err()
+    );
+    assert_eq!(inspector.style_override(id), patch);
+    minimum.set(200.);
+    layout(&source);
+    let info = inspector.selected.get().unwrap();
+    assert!(info.override_error.is_some());
+    assert_eq!(
+        info.style, info.source_style,
+        "conflicting patches suspend as a unit"
+    );
+    minimum.set(0.);
+    layout(&source);
+    assert!(inspector.selected.get().unwrap().override_error.is_none());
+    assert_eq!(node(&source, "target").style.padding, Insets::all(6.));
+    let other = Host::new(|| View::label("New source"));
+    other.set_inspector(inspector.clone());
+    assert!(inspector.nodes().is_empty());
+    assert!(inspector.style_override(id).is_empty());
+    layout(&other);
+    drop(source);
+    assert_eq!(inspector.nodes().len(), 1);
+}
+
+#[test]
+fn property_editors_preserve_invalid_drafts_and_commit_only_the_edited_property() {
+    let inspector = Inspector::new();
+    let source =
+        Host::new(|| View::column(vec![View::button("Target", || {}).key("target").width(100)]));
+    source.set_inspector(inspector.clone());
+    layout(&source);
+    let id = node(&source, "target").id;
+    inspector.select(id);
+    inspector.show_page(InspectorPage::Layout);
+    let panel = Host::new({
+        let i = inspector.clone();
+        move || i.view()
+    });
+    panel.set_active(true);
+    layout(&panel);
+    let field = node(&panel, "edit-width").id;
+    panel.focus(field).unwrap();
+    assert!(panel.set_text(field, "-").unwrap());
+    layout(&panel);
+    key(&panel, Key::Enter);
+    layout(&panel);
+    assert_eq!(node(&panel, "edit-width").value, Value::Text("-".into()));
+    assert_eq!(
+        node(&panel, "edit-width").validation.unwrap().status,
+        ValidationStatus::Invalid
+    );
+    assert!(inspector.style_override(id).is_empty());
+    panel.set_text(field, "50%").unwrap();
+    layout(&panel);
+    key(&panel, Key::Enter);
+    layout(&source);
+    layout(&panel);
+    assert_eq!(inspector.style_override(id).width, Some(percent(50.)));
+    assert_eq!(
+        inspector.selected.get().unwrap().overridden,
+        vec![StyleProperty::Width]
+    );
+    inspector.reset_property(id, StyleProperty::Width);
+    layout(&source);
+    layout(&panel);
+    assert_eq!(node(&panel, "edit-width").value, Value::Text("100".into()));
+    assert!(
+        panel
+            .snapshot()
+            .unwrap()
+            .iter()
+            .any(|n| n.text == "width · source")
+    );
+    // Other codecs exercise real retained editors rather than a parallel parser.
+    for (property, text) in [
+        ("padding", "2 4"),
+        ("position", "relative"),
+        ("left", "-5"),
+        ("max_width", "inf"),
+    ] {
+        let field = node(&panel, &format!("edit-{property}")).id;
+        panel.focus(field).unwrap();
+        panel.set_text(field, text).unwrap();
+        layout(&panel);
+        key(&panel, Key::Enter);
+        layout(&source);
+        layout(&panel);
+    }
+    assert_eq!(
+        inspector.style_override(id).padding,
+        Some(Insets::symmetric(2., 4.))
+    );
+    assert_eq!(inspector.style_override(id).left, Some(Length::Points(-5.)));
+    inspector.show_page(InspectorPage::Style);
+    layout(&panel);
+    let field = node(&panel, "edit-foreground").id;
+    panel.focus(field).unwrap();
+    panel.set_text(field, "#12345680").unwrap();
+    layout(&panel);
+    key(&panel, Key::Enter);
+    layout(&source);
+    assert_eq!(node(&source, "target").style.foreground, Some(0x80123456));
+    inspector.reset_all_overrides();
+    layout(&source);
+    assert_eq!(
+        node(&source, "target").style,
+        inspector.selected.get().unwrap().source_style
+    );
+}
+
+#[test]
+fn flex_diagnostics_report_real_wrap_lines_and_overflow() {
+    let inspector = Inspector::new();
+    let source = Host::new(|| {
+        View::column(vec![
+            View::row(vec![
+                View::label("A").width(80).shrink(0.),
+                View::label("B").width(80).shrink(0.),
+            ])
+            .key("row")
+            .width(120)
+            .wrap(true)
+            .gap(10.),
+        ])
+    });
+    source.set_inspector(inspector.clone());
+    layout(&source);
+    let id = node(&source, "row").id;
+    inspector.select(id);
+    let info = inspector.selected.get().unwrap();
+    assert_eq!(info.flex_lines.len(), 2);
+    assert!(
+        info.flex_lines
+            .iter()
+            .all(|line| line.items.len() == 1 && line.free == 40.)
+    );
+    inspector
+        .set_override(id, StyleOverride::default().wrap(false))
+        .unwrap();
+    layout(&source);
+    let info = inspector.selected.get().unwrap();
+    assert_eq!(info.flex_lines.len(), 1);
+    assert_eq!(info.flex_lines[0].free, -50.);
+    assert_eq!(info.flex_lines[0].gap, 10.);
+}

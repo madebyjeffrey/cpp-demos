@@ -21,6 +21,15 @@ pub fn run_inspected(
         if let Some(inspector) = inspector.clone() {
             host.set_inspector(inspector);
         }
+        if let Some(i) = args.iter().position(|v| v == "--inspector-page") {
+            host.inspector()
+                .show_page(match args.get(i + 1).map(String::as_str) {
+                    Some("layout") => InspectorPage::Layout,
+                    Some("style") => InspectorPage::Style,
+                    Some("details") => InspectorPage::Details,
+                    _ => return Err("--inspector-page needs details, layout or style".into()),
+                });
+        }
         if args.iter().any(|v| v == "--light") {
             host.set_theme(Theme::light());
         }
@@ -36,6 +45,16 @@ pub fn run_inspected(
                 .map(|n| n.id)
                 .ok_or("No inspector node matches --select-key")?;
             inspector.select(id);
+            if args.iter().any(|v| v == "--override-preview") {
+                inspector.set_override(
+                    id,
+                    StyleOverride::default()
+                        .width(percent(80.))
+                        .padding(12)
+                        .radius(12)
+                        .bold(true),
+                )?;
+            }
             host.layout(Size::new(size.0 as f64, size.1 as f64), &renderer)?;
         }
         if args.iter().any(|v| v == "--inspect") {

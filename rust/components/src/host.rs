@@ -29,6 +29,9 @@ pub struct Node {
     pub key: Option<String>,
     pub text: String,
     pub value: Value,
+    /// Preferred size from the final layout measurement, before allocation.
+    pub measured: Size,
+    pub flex_lines: Vec<crate::InspectionFlexLine>,
     pub bounds: Rect,
     pub clip: Rect,
     pub text_bounds: Rect,
@@ -281,6 +284,7 @@ impl Host {
         let _ = inspector.overrides.get();
         let _ = inspector.selected.get();
         let _ = inspector.picking.get();
+        let _ = inspector.highlight.get();
         drop(inspector);
         let deps = tracking.finish();
         let epoch = self.0.observer.epoch.get().wrapping_add(1);
@@ -737,6 +741,8 @@ fn mount(
         clip: Rect::default(),
         text_bounds: Rect::default(),
         baseline: 0.,
+        measured: Size::default(),
+        flex_lines: vec![],
         spans: None,
         rich: d.rich.clone(),
         text_style: TextStyle {
@@ -910,7 +916,6 @@ pub(crate) fn validate(d: &Description) -> Result<(), Error> {
     if let Some(split) = &d.split {
         split.options.validate()?;
     }
-    let s = d.style;
     if let Some(runs) = &d.rich {
         for run in runs {
             if let crate::rich_text::Run::Text(span) = run {
@@ -918,6 +923,17 @@ pub(crate) fn validate(d: &Description) -> Result<(), Error> {
             }
         }
     }
+    validate_style(d.style)?;
+    if let Data::Number(_, min, max, step) = &d.data
+        && (!min.is_finite() || !max.is_finite() || !step.is_finite() || min > max || *step < 0.)
+    {
+        return Err(Error("Invalid numeric range".into()));
+    }
+    Ok(())
+}
+
+/// Shared validation for application styles and inspector patches.
+pub(crate) fn validate_style(s: Style) -> Result<(), Error> {
     if [
         s.padding.top,
         s.padding.right,
@@ -959,11 +975,6 @@ pub(crate) fn validate(d: &Description) -> Result<(), Error> {
         {
             return Err(Error("Offsets must be finite".into()));
         }
-    }
-    if let Data::Number(_, min, max, step) = &d.data
-        && (!min.is_finite() || !max.is_finite() || !step.is_finite() || min > max || *step < 0.)
-    {
-        return Err(Error("Invalid numeric range".into()));
     }
     Ok(())
 }

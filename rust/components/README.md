@@ -264,9 +264,9 @@ Create `Inspector` outside the builder, include `inspector.view()` if desired, a
 attach it using `window.view_host().unwrap().set_inspector(inspector)`. Picking
 outlines a real mounted node without activating or blurring it. The virtual mounted
 hierarchy synchronizes browsing, picking and removal, with live geometry, focus,
-selection, validation, scope and collection-window details. Width overrides remain
-keyed by mounted identity and can be reset; invalid style values return layout
-errors. Escape in the source host exits picking. `Host::pick` also works without the inspector panel.
+selection, validation, scope and collection-window details. Per-property style
+overrides follow current application values for all untouched properties; invalid
+edits are rejected and reactive constraint conflicts are reported in the panel. Escape in the source host exits picking. `Host::pick` also works without the inspector panel.
 Use `autofocus: true` on a control to focus it when the host has no valid focus;
 a newly mounted autofocus control also takes focus, with later controls taking
 precedence (useful for inline editing). `on_cancel` runs on Escape after any IME
@@ -1721,3 +1721,54 @@ including inspector interfaces and `view!`. From this workspace, run
 Its native-engine optimization profile matches this workspace; source-build policy
 still applies. Richer override controls and the full Lab remain M7.2/M7.3. Actual
 VoiceOver/IME and visible GPU evidence remain M5.5/M8.
+
+
+## M7.2 — Property overrides and layout feedback
+
+The inspector has Details, Layout and Style pages. Layout/Style edit dimensions,
+constraints, per-edge spacing, flex, positioning, text and appearance properties.
+Fields retain unfinished/invalid drafts; Enter or Apply commits a valid value.
+Lengths accept `auto`, points or `50%`; insets accept one, two or four values;
+optional properties accept `inherit`; colors use `#RRGGBB` or `#RRGGBBAA`.
+Each row shows the application value and whether it is explicitly overridden.
+Reset a property, a node or all nodes to follow the latest application values.
+Properties retain their normal component semantics: for example, `orientation`
+controls separator orientation; row/column direction follows the component kind.
+
+```rust
+inspector.set_override(id, StyleOverride::default().width(percent(80.)).padding(12))?;
+inspector.reset_property(id, StyleProperty::Width);
+inspector.reset_override(id);
+```
+
+`StyleOverride` is a partial patch. An absent property follows the source;
+`foreground(None)` explicitly restores inheritance. Even an override equal to the
+source remains explicit. `style_override(id)` returns the current patch;
+`set_override` replaces it atomically and returns false for an unknown source node.
+Invalid patches preserve the previous patch. If reactive source constraints later
+conflict with an existing patch, the whole patch is suspended, the source renders
+and `Inspection::override_error` explains the conflict. The patch resumes when it
+becomes valid, or can be reset. Actual unmount or source rebinding retires patches;
+stable mounted IDs retain them across rebuilds. Inspector drafts retain no source
+models, providers or callbacks.
+
+Snapshots distinguish `source_style` from effective `style`, list explicit
+`overridden` properties, and report the final preferred `measured` size before
+allocation, allocated bounds, effective clip, padding-inset `content_bounds` and
+resolved `text_style`. These are logical points; a measured size may differ from
+allocation because of flex, root allocation or clipping. `flex_lines` comes from
+the actual layout plan and includes item IDs, final gap and signed space before
+justification (negative means overflow).
+
+Choose Outline, Box or Flex highlights in the panel, or set `highlight` to
+`InspectionHighlight::{Selection, BoxModel, Flex}`. All modes honor effective
+clipping and hidden state. Box shows the allocated padding/content boxes; Flex
+shows actual lines and child boxes. It does not draw outside the selected clip.
+Use `show_page(InspectorPage::Layout)` to open a property page programmatically.
+
+Run `cargo run --example m7_inspector --locked --offline`. Toggle Compact layout
+while overriding the preview width to verify that its application padding and
+background remain reactive. Raster previews also accept `--inspector-page layout`
+or `style`, and `--select-key preview --override-preview` applies a sample patch.
+
+The example also accepts `--box` or `--flex` to select a diagnostic highlight.

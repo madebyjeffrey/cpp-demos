@@ -95,6 +95,27 @@ fn main() {
         assert_eq!(clicks.get(), 0);
         inspector.select(target);
         sync(&host);
+        inspector.show_page(InspectorPage::Layout);
+        sync(&host);
+        let field = find(native, "Override width", "AXTextField").unwrap();
+        let value = NSString::from_str("150");
+        let _: () = msg_send![&*field, setAccessibilityValue: &*value];
+        sync(&host);
+        let apply = find(native, "Apply width", "AXButton").unwrap();
+        let pressed: bool = msg_send![&*apply, accessibilityPerformPress];
+        assert!(pressed);
+        sync(&host);
+        assert_eq!(
+            inspector.style_override(target).width,
+            Some(Length::Points(150.))
+        );
+        assert_eq!(inspector.selected.get().unwrap().bounds.width, 150.);
+        let reset = find(native, "Reset width", "AXButton").unwrap();
+        let pressed: bool = msg_send![&*reset, accessibilityPerformPress];
+        assert!(pressed);
+        sync(&host);
+        assert!(inspector.style_override(target).is_empty());
+        assert_eq!(clicks.get(), 0, "editing must never activate the source");
         visible.set(false);
         sync(&host);
         assert!(inspector.selected.get().is_none());
@@ -104,7 +125,7 @@ fn main() {
     }
     assert!(!window.native_window().isVisible());
     window.close();
-    println!("Hidden inspector outline selection, source diagnostics and retirement passed");
+    println!("Hidden inspector selection, property edits/reset and retirement passed");
 }
 #[cfg(not(target_os = "macos"))]
 fn main() {}

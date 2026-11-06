@@ -1,17 +1,31 @@
 //! A live mounted hierarchy with owned diagnostics and stable outline navigation.
+mod editor;
+mod overrides;
 mod snapshot;
 use crate::state::{Observer, Tracking};
-use crate::{
-    Binding, Error, Host, Length, Node, NodeId, Point, State, Style, TreeModel, TreeNode,
-    TreeOptions, View,
-};
-pub use snapshot::{Inspection, InspectionCollection, InspectionOverlay};
+use crate::{Error, Host, Node, NodeId, Point, State, TreeModel, TreeNode, TreeOptions, View};
+pub use overrides::{StyleOverride, StyleProperty};
+pub use snapshot::{Inspection, InspectionCollection, InspectionFlexLine, InspectionOverlay};
 use std::{
     cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
     rc::Rc,
 };
 type Shape = Vec<(NodeId, Option<NodeId>, String)>;
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum InspectionHighlight {
+    #[default]
+    Selection,
+    BoxModel,
+    Flex,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum InspectorPage {
+    #[default]
+    Details,
+    Layout,
+    Style,
+}
 struct Data {
     attached: Cell<u64>,
     nodes: State<Vec<Inspection>>,
@@ -21,12 +35,15 @@ struct Data {
     selection_key: RefCell<Option<String>>,
     capturing: Cell<bool>,
     observer: Rc<Observer>,
+    page: State<String>,
+    editors: RefCell<HashMap<(NodeId, StyleProperty), crate::Draft<String>>>,
 }
 #[derive(Clone)]
 pub struct Inspector {
     pub picking: State<bool>,
     pub selected: State<Option<Inspection>>,
-    pub overrides: State<HashMap<NodeId, Style>>,
+    pub highlight: State<InspectionHighlight>,
+    pub(crate) overrides: State<HashMap<NodeId, StyleOverride>>,
     data: Rc<Data>,
 }
 impl Inspector {
@@ -41,6 +58,8 @@ impl Inspector {
             selection_key: RefCell::new(None),
             capturing: Cell::new(false),
             observer: Observer::new(),
+            page: State::new("details".into()),
+            editors: RefCell::new(HashMap::new()),
         });
         let weak = Rc::downgrade(&data);
         let selection = selected.clone();
@@ -65,6 +84,7 @@ impl Inspector {
         Self {
             picking: State::new(false),
             selected,
+            highlight: State::new(InspectionHighlight::Selection),
             overrides: State::new(HashMap::new()),
             data,
         }
@@ -107,11 +127,11 @@ impl Inspector {
                 } else {
                     "Hierarchy available after layout"
                 })
-                .height(260)
+                .height(180)
             },
             |tree| {
                 tree.view()
-                    .height(260)
+                    .height(180)
                     .accessible_label("Mounted hierarchy")
             },
         ));
@@ -182,49 +202,99 @@ impl Inspector {
             if let Some(c) = &info.collection {
                 lines.push(format!("Collection: {} known, {} rows, {} columns\nWindow {:?}; {} realized, {} pinned\n{} selected; cursor {:?}\nOffset {:.1}; viewport {:.1}; row height {:.1}",c.total,c.rows,c.columns,c.window,c.realized,c.pinned,c.selected,c.cursor,c.offset,c.viewport,c.row_height));
             }
-            lines.extend(info.details);
+            lines.push(format!(
+                "Measured: {:.1} × {:.1}; content: {:.1} × {:.1}",
+                info.measured.width,
+                info.measured.height,
+                info.content_bounds.width,
+                info.content_bounds.height
+            ));
+            lines.push(format!(
+                "Resolved text: {:.1}pt, color #{:08X}, bold {}",
+                info.text_style.size, info.text_style.color, info.text_style.bold
+            ));
+            lines.push(format!("{} explicit overrides", info.overridden.len()));
+            if let Some(error) = &info.override_error {
+                lines.push(format!("Override suspended: {error}"));
+            }
+            lines.extend(info.details.clone());
+            let (read, write) = (self.highlight.clone(), self.highlight.clone());
             children.push(
-                View::scroll(
+                View::segmented(
+                    crate::Binding::new(
+                        move || {
+                            match read.get() {
+                                InspectionHighlight::Selection => "outline",
+                                InspectionHighlight::BoxModel => "box",
+                                InspectionHighlight::Flex => "flex",
+                            }
+                            .into()
+                        },
+                        move |value: String| {
+                            write.set(match value.as_str() {
+                                "box" => InspectionHighlight::BoxModel,
+                                "flex" => InspectionHighlight::Flex,
+                                _ => InspectionHighlight::Selection,
+                            })
+                        },
+                    ),
+                    vec![
+                        crate::OptionItem::new("outline", "Outline"),
+                        crate::OptionItem::new("box", "Box"),
+                        crate::OptionItem::new("flex", "Flex"),
+                    ],
+                )
+                .accessible_label("Inspector highlight"),
+            );
+            for (index, line) in info.flex_lines.iter().enumerate() {
+                lines.push(format!(
+                    "Flex line {}: {} items; gap {:.1}; free {:.1}",
+                    index + 1,
+                    line.items.len(),
+                    line.gap,
+                    line.free
+                ));
+            }
+            children.push(
+                crate::View::segmented(
+                    self.data.page.binding(),
+                    vec![
+                        crate::OptionItem::new("details", "Details"),
+                        crate::OptionItem::new("layout", "Layout"),
+                        crate::OptionItem::new("style", "Style"),
+                    ],
+                )
+                .accessible_label("Inspector page"),
+            );
+            let content = if self.data.page.get() == "details" {
+                View::column(
                     lines
                         .into_iter()
                         .map(|s| View::label(s).wrap(true))
                         .collect(),
                 )
-                .max_height(280.)
                 .gap(8.)
-                .accessible_label("Selected control details"),
-            );
-            let (read, write) = (self.selected.clone(), self.clone());
-            children.push(View::label("Override width"));
+            } else {
+                self.property_view(&info)
+            };
             children.push(
-                View::slider(
-                    Binding::new(
-                        move || read.get().map_or(100., |n| n.bounds.width),
-                        move |width: f64| {
-                            if let Some(info) = write.selected.get() {
-                                let mut style = info.style;
-                                style.width = Length::Points(width);
-                                write.overrides.update(|m| {
-                                    m.insert(info.id, style);
-                                });
-                            }
-                        },
-                    ),
-                    40.,
-                    800.,
-                    1.,
-                )
-                .accessible_label("Override width"),
+                View::scroll(vec![content])
+                    .grow(1.)
+                    .basis(0)
+                    .min_height(0.)
+                    .accessible_label("Selected control details"),
             );
-            children.push(View::button(
-                "Reset overrides",
-                self.overrides.action(|m| m.set(HashMap::new())),
-            ));
+            let (reset, all) = (self.clone(), self.clone());
+            let id = info.id;
+            children.push(View::row(vec![
+                View::button("Reset node", move || reset.reset_override(id)),
+                View::button("Reset all", move || all.reset_all_overrides()),
+            ]));
         } else {
             children
                 .push(View::label("Browse the hierarchy or pick a rendered control.").wrap(true));
         }
-        let mut view = View::panel(children).padding(16.).gap(8.);
+        let mut view = View::panel(children).padding(16.).gap(8.).min_height(0.);
         Rc::make_mut(&mut view.0).inspector_panel = true;
         view
     }
@@ -247,7 +317,9 @@ impl Inspector {
             self.selected.set(None);
             self.overrides.set(HashMap::new());
             self.picking.set(false);
+            self.highlight.set(InspectionHighlight::Selection);
         });
+        self.data.editors.borrow_mut().clear();
     }
     fn observe_tree(&self, tree: &TreeModel) {
         let tracking = Tracking::begin();
@@ -298,6 +370,13 @@ impl Inspector {
                 .collect();
             let changed = *self.data.shape.borrow() != shape;
             let initial = self.data.shape.borrow().is_empty();
+            let live: HashSet<_> = nodes.iter().map(|n| n.id).collect();
+            self.overrides
+                .update(|m| m.retain(|id, _| live.contains(id)));
+            self.data
+                .editors
+                .borrow_mut()
+                .retain(|(id, _), _| live.contains(id));
             self.data.nodes.set(nodes.clone());
             if changed {
                 *self.data.shape.borrow_mut() = shape;
@@ -374,6 +453,10 @@ impl Default for Inspector {
 }
 impl Host {
     pub fn set_inspector(&self, inspector: Inspector) {
+        let previous_source = inspector.data.attached.get();
+        if previous_source != 0 && previous_source != self.0.inspection_id {
+            inspector.retire(previous_source);
+        }
         inspector.data.attached.set(self.0.inspection_id);
         let old = self.0.inspector.replace(inspector.clone());
         if !Rc::ptr_eq(&old.data, &inspector.data) {
@@ -418,6 +501,15 @@ impl Host {
     }
     fn inspect_node(&self, n: &Node, nodes: &[Node]) -> Inspection {
         let mut info = Inspection::from_node(n, nodes);
+        if let Some(d) = self.0.mounted.borrow().descriptions.get(&n.id) {
+            info.source_style = d.style;
+            if let Some(patch) = self.inspector().overrides.with(|m| m.get(&n.id).copied()) {
+                info.overridden = patch.properties();
+                info.override_error = crate::host::validate_style(patch.apply(d.style))
+                    .err()
+                    .map(|e| e.0);
+            }
+        }
         info.in_scope = self.in_scope(n.id);
         if let Some(o) = &mut info.overlay {
             o.active = self.active_modal() == Some(n.id);

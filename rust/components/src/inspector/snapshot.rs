@@ -1,9 +1,17 @@
 //! Owned, bounded inspector data. Never retain live models, providers or callbacks.
 use crate::{
-    Kind, Node, NodeId, OverlayOptions, Point, Rect, ScrollInfo, Selection, Style, TextFieldKind,
-    Validation, Value,
+    Kind, Node, NodeId, OverlayOptions, Point, Rect, ScrollInfo, Selection, Size, Style,
+    StyleProperty, TextFieldKind, TextStyle, Validation, Value,
 };
 use std::ops::Range;
+#[derive(Clone, Debug, PartialEq)]
+pub struct InspectionFlexLine {
+    pub bounds: Rect,
+    pub items: Vec<NodeId>,
+    pub gap: f64,
+    /// Signed space after flex allocation, before justification; negative means overflow.
+    pub free: f64,
+}
 #[derive(Clone, Debug, PartialEq)]
 pub struct InspectionCollection {
     pub total: usize,
@@ -42,6 +50,13 @@ pub struct Inspection {
     pub clip: Rect,
     pub text_bounds: Rect,
     pub baseline: f64,
+    pub measured: Size,
+    pub content_bounds: Rect,
+    pub text_style: TextStyle,
+    pub source_style: Style,
+    pub overridden: Vec<StyleProperty>,
+    pub override_error: Option<String>,
+    pub flex_lines: Vec<InspectionFlexLine>,
     pub style: Style,
     pub enabled: bool,
     pub hidden: bool,
@@ -178,6 +193,13 @@ impl Inspection {
             clip: n.clip,
             text_bounds: n.text_bounds,
             baseline: n.baseline,
+            measured: n.measured,
+            content_bounds: n.bounds.inset(n.style.padding),
+            text_style: n.text_style,
+            source_style: n.style,
+            overridden: vec![],
+            override_error: None,
+            flex_lines: n.flex_lines.clone(),
             style: n.style,
             enabled: n.enabled,
             hidden: n.hidden || n.layout_hidden,

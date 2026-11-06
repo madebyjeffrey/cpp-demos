@@ -120,15 +120,13 @@ fn inspector_picks_real_nodes_and_restores_style_overrides() {
     let info = host.pick(Point { x: 20., y: 20. }).unwrap().unwrap();
     assert_eq!(info.kind, Kind::Button);
     let original = info.bounds.width;
-    let mut style = info.style;
-    style.width = Length::Points(120.);
     inspector.selected.set(Some(info.clone()));
-    inspector.overrides.update(|map| {
-        map.insert(info.id, style);
-    });
+    inspector
+        .set_override(info.id, StyleOverride::default().width(120))
+        .unwrap();
     host.layout(Size::new(400., 200.), &Metrics).unwrap();
     assert_eq!(inspector.selected.get().unwrap().bounds.width, 120.);
-    inspector.overrides.set(Default::default());
+    inspector.reset_all_overrides();
     host.layout(Size::new(400., 200.), &Metrics).unwrap();
     assert_eq!(inspector.selected.get().unwrap().bounds.width, original);
 }

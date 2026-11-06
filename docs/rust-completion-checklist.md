@@ -35,7 +35,7 @@ overall goal complete while an in-scope item remains open.
 | Editing | Shared buffer, visual navigation/gestures, localized typed drafts, search/password policies and held steppers | Final interactive VoiceOver/IME audit in M5 |
 | Presentation | Retained splits/tabs/wizards, hierarchical menus, configured portals, transactional alerts and native sheets | Final interactive and visible desktop audits in M5/M8 |
 | Collections | Virtual lists, lazy trees, combo boxes and keyed tables with retained validated edits | Combined native semantics and interactive audits |
-| Values and tooling | Shared typed draft lifecycle, RGB/HSV/hex, calendars, localized civil/zoned editing, picking/width overrides | Richer inspector overrides and full Lab in M7.2/M7.3; final visual/interaction evidence in M8 |
+| Values and tooling | Shared typed draft lifecycle, RGB/HSV/hex, calendars, localized civil/zoned editing, mounted inspector/property overrides and box/flex feedback | Full Lab in M7.3; final visual/interaction evidence in M8 |
 | Verification | Core/CPU tests and native input/accessibility protocol tests | Interactive audits, final visible GPU/full-screen runs and repeatable checks |
 
 The main reference is the [current C++ public inventory](../scars/src/scars.cppm),
@@ -838,13 +838,13 @@ M6.6 completion record (`f15de33`):
 ## M7 — Developer tools and application ergonomics
 
 - [x] **M7.1 Inspector:** a navigable mounted hierarchy with layout, focus, selection, validation, overlay and collection-window details, synchronized with picking and removal.
-- [ ] **M7.2 Overrides:** useful layout/style controls beyond width, clear indication of overridden values, reset and accurate measurement/clip feedback; preserve coherent IDs and restore original behavior after reset.
+- [x] **M7.2 Overrides:** useful layout/style controls beyond width, clear indication of overridden values, reset and accurate measurement/clip feedback; preserve coherent IDs and restore original behavior after reset.
 - [ ] **M7.3 Lab and ergonomics:** cover the full inventory in both themes and constrained sizes; demonstrate stateful custom components with concise macros/builders and no routine application-side reference-counting or native plumbing.
 
 Evidence: inspector/Lab examples and model/geometry tests, plus a small external
 application compile check using a renamed `scars-window` dependency.
 
-M7.1 completion record:
+M7.1 completion record (`43b59c1`):
 
 - `Inspector::view()` provides a virtual mounted outline, keyboard disclosure and
   selection, and live layout/clip/text metrics, focus/text selection/preedit,
@@ -870,9 +870,38 @@ M7.1 completion record:
   Clippy, portable Linux compilation, formatting and inventory mapping pass.
   `checks/renamed-consumer` is a locked standalone compile fixture using the `kit`
   dependency name, `view!` and inspector interfaces; its compile check passes.
-- Rich override editing/reset remains M7.2; full Lab and application ergonomics
-  remain M7.3. Hidden protocol and CPU raster checks do not close M5.5/M8's actual
+- Rich override editing/reset is completed in M7.2 below; full Lab and application
+  ergonomics remain M7.3. Hidden protocol and CPU raster checks do not close M5.5/M8's actual
   speech, composing-input candidate placement or visible Metal requirements.
+
+M7.2 completion record:
+
+- Layout/Style pages edit individual dimensions, constraints, insets, flex,
+  positioning, typography and appearance. Retained drafts preserve invalid input;
+  Enter/Apply commits valid edits. Each row identifies source/overridden values,
+  with property/node/all resets. Application code uses a small typed
+  `StyleOverride` builder; untouched properties remain reactive. Explicit equal
+  values and inheritance overrides remain distinct from no override.
+- Invalid patch assignments are atomic. Later reactive constraint conflicts
+  suspend the whole patch, render the source and expose an error; valid patches
+  resume or reset. Mounted identities retain patches across rebuilds; unmount and
+  source rebinding retire them without affecting another source.
+- Snapshots distinguish source/effective styles, explicit overrides, final
+  preferred measurement, allocation, padding-inset content, clip and resolved text.
+  Actual flex plans report line/item geometry, justified gaps and signed free
+  space/overflow. Outline/Box/Flex highlights respect clipping and hidden state.
+- `m7_inspector` demonstrates reactive preview padding/background, property pages,
+  resets and diagnostic overlays. Dark/light property and box/flex raster previews
+  were inspected. Raster flags include `--select-key preview --override-preview
+  --inspector-page layout`; `--box`/`--flex` also select highlight modes.
+- Eleven focused inspector tests cover property drafts/codecs, reactive behavior,
+  atomic validation/conflict recovery, lifecycle and flex overflow alongside M7.1
+  contracts. Two CPU pixel tests verify real diagnostic changes and clipping.
+  Hidden AppKit tests pass for property editing/reset, source nonactivation,
+  outline selection/retirement and tab/focus protocol regressions. Full workspace
+  tests, strict Clippy, portable Linux compilation, renamed-consumer compilation,
+  formatting and inventory checks pass. Native harness skips in the ordinary
+  workspace run are not counted as passes. M7.3 and actual M5.5/M8 audits remain.
 
 ## M8 — Release evidence and documentation
 

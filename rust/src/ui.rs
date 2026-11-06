@@ -763,6 +763,32 @@ impl Renderer {
         {
             canvas.save();
             canvas.clip_rect(skrect(info.clip), None, true);
+            match host.inspector().highlight.get() {
+                InspectionHighlight::BoxModel => {
+                    round(canvas, info.bounds, 0., 0x4055aaff, false);
+                    round(canvas, info.content_bounds, 0., 0x4040cc88, false);
+                    round(canvas, info.content_bounds.inset(1.), 0., 0xff40cc88, true);
+                }
+                InspectionHighlight::Flex => {
+                    let nodes = host.inspector().nodes();
+                    let nodes: HashMap<_, _> = nodes.iter().map(|n| (n.id, n)).collect();
+                    for line in &info.flex_lines {
+                        round(canvas, line.bounds.inset(1.), 0., 0xffffaa55, true);
+                        for child in line
+                            .items
+                            .iter()
+                            .filter_map(|id| nodes.get(id))
+                            .filter(|n| !n.hidden)
+                        {
+                            canvas.save();
+                            canvas.clip_rect(skrect(child.clip), None, true);
+                            round(canvas, child.bounds.inset(2.), 0., 0xff40cc88, true);
+                            canvas.restore();
+                        }
+                    }
+                }
+                InspectionHighlight::Selection => {}
+            }
             round(canvas, info.bounds.inset(1.), 2., theme.accent, true);
             canvas.restore();
         }

@@ -51,11 +51,6 @@ impl Host {
         let overrides = self.inspector().overrides.get();
         let descriptions = mounted.descriptions.clone();
         for node in &mut mounted.nodes {
-            if let Some(style) = overrides.get(&node.id) {
-                let mut description = (*descriptions[&node.id]).clone();
-                description.style = *style;
-                crate::host::validate(&description)?;
-            }
             node.revealed = self
                 .0
                 .fields
@@ -77,6 +72,7 @@ impl Host {
                     .unwrap_or_default();
             }
             node.layout_hidden = false;
+            node.flex_lines.clear();
             node.text = descriptions[&node.id].text.clone();
             if descriptions[&node.id].field_action.is_some()
                 && node
@@ -89,6 +85,10 @@ impl Host {
             node.style = overrides
                 .get(&node.id)
                 .copied()
+                .filter(|patch| {
+                    crate::host::validate_style(patch.apply(descriptions[&node.id].style)).is_ok()
+                })
+                .map(|patch| patch.apply(descriptions[&node.id].style))
                 .unwrap_or(descriptions[&node.id].style);
         }
         let mut tree = Tree {
@@ -157,6 +157,7 @@ impl Host {
         let mut field_layouts = Vec::new();
         let mut reveal_caret = None;
         for node in &mut mounted.nodes {
+            node.measured = tree.desired.get(&node.id).copied().unwrap_or_default();
             if let Some(editor) = editors.get_mut(&node.id) {
                 let layout = crate::metrics::field_layout(
                     measure,
@@ -860,6 +861,29 @@ impl Tree<'_> {
                     } else {
                         cross_limit
                     };
+                    let main_limit = if horiz { content.width } else { content.height };
+                    let margins = line
+                        .iter()
+                        .map(|c| nodes[*c].style.margin.main(horiz))
+                        .sum::<f64>();
+                    nodes[i].flex_lines.push(crate::InspectionFlexLine {
+                        bounds: if horiz {
+                            Rect::new(
+                                content.x,
+                                content.y + line_offset,
+                                content.width,
+                                line_cross,
+                            )
+                        } else {
+                            content
+                        },
+                        items: line.iter().map(|c| nodes[*c].id).collect(),
+                        gap: spacing,
+                        free: main_limit
+                            - allocated
+                            - margins
+                            - gap * line.len().saturating_sub(1) as f64,
+                    });
                     let mut baseline_children = Vec::new();
                     for (j, child) in line.iter().enumerate() {
                         let cs = nodes[*child].style;

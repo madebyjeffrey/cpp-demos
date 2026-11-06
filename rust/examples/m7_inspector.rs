@@ -3,6 +3,11 @@ mod common;
 use scars_window::ui::*;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let inspector = Inspector::new();
+    if std::env::args().any(|a| a == "--box") {
+        inspector.highlight.set(InspectionHighlight::BoxModel);
+    } else if std::env::args().any(|a| a == "--flex") {
+        inspector.highlight.set(InspectionHighlight::Flex);
+    }
     let inspect = inspector.clone();
     let name = State::new("Project Atlas".to_owned());
     let copies = Numeric::new(State::new(3i64).binding(), 0, 10, 1);
@@ -36,15 +41,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             view! {layer{
                 row(padding:20,gap:20){
-                    scroll(grow:1,min_width:0,basis:0){column(gap:14){
+                    scroll(grow:1,min_width:0,basis:0){column(gap:14,key:"form"){
                         label("Mounted inspector",label_style:LabelStyle::Heading);
-                        label("Browse with arrows or pick a control. Selection updates live; inspect hidden/disabled nodes, validation, focus, popup scope and virtual windows. Picking does not activate the target.",wrap:true);
+                        label("Browse with arrows or pick a control. Use Layout/Style to edit individual properties. Reset follows current application state; Box/Flex show layout diagnostics. Picking preserves focus and never activates the target.",wrap:true);
                         text_field("Project name",bind:name,accessible_label:"Project name",validation:validation,key:"name");
                         embed(numeric_field("Copies",&copies),key:"copies");
                         checkbox("Compact layout",bind:compact,key:"compact");
                         checkbox("Show preview",bind:visible);
                         button("Options",on_click:move||p.show(),key:"options");
-                        panel(hidden:!visible.get(),key:"preview"){label("Preview content",enabled:!compact.get());}
+                        panel(hidden:!visible.get(),foreground:0xfff0f6ff,padding:if compact.get(){4}else{16},background:if compact.get(){0xff304050}else{0xff274d71},key:"preview"){label("Preview content",enabled:!compact.get());}
                         label("10,000 items; only the viewport and overscan are mounted.",wrap:true);
                         embed(rows.view(),height:200,key:"items");
                     }}

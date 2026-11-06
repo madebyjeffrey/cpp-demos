@@ -485,6 +485,9 @@ impl Tree<'_> {
     }
     pub(super) fn translate(&self, i: usize, dy: f64, parent_clip: Rect, nodes: &mut [Node]) {
         nodes[i].bounds.y += dy;
+        for line in &mut nodes[i].flex_lines {
+            line.bounds.y += dy;
+        }
         nodes[i].text_bounds.y += dy;
         nodes[i].clip = parent_clip.intersection(nodes[i].bounds);
         for child in self.children.get(&Some(nodes[i].id)).into_iter().flatten() {
