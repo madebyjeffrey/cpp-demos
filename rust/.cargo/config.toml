@@ -2,3 +2,14 @@
 MACOSX_DEPLOYMENT_TARGET = "26.0"
 # Skia's binary-cache feature supplies source-download support too. Always compile it.
 FORCE_SKIA_BUILD = { value = "1", force = true }
+
+# Older rust-objcopy versions can misalign stripped macro dylibs on macOS 27.
+# Keep symbols even when callers disable debug information to save build space.
+[profile.dev]
+strip = "none"
+
+[profile.test]
+strip = "none"
+
+[profile.release]
+strip = "none"

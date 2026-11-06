@@ -7,6 +7,9 @@ in Rust. Cargo builds Skia and its C++ bindings through `skia-bindings`; there i
 no dependency on the parent C++ project's CMake build or Skia checkout.
 
 Requires macOS 26+, Rust 1.88+, the Xcode command-line tools, Python 3, Ninja and Git.
+Rust 1.88.0 is checked with the dedicated `msrv` validation suite, including a
+source-built Skia and all-target native compilation; see the
+[release audit](../docs/rust-release-audit.md) for exact evidence and open gates.
 The first build needs internet access to fetch Skia sources, dependencies and GN.
 The native backend currently supports macOS only. Geometry, input, menu and text-input contracts
 are platform independent. The local Cargo configuration sets the macOS deployment
@@ -96,11 +99,15 @@ cargo build --locked --all-targets
 
 Cargo reads configuration from the invocation directory and its ancestors, not
 from path dependencies. When using this crate from a different Cargo project,
-copy the `[env]` settings from this crate's `.cargo/config.toml` into that project's
-configuration (including the macOS deployment target), and copy the
+merge this crate's `.cargo/config.toml` into that project's configuration,
+including its `[env]` and dev/test/release profile settings, and copy the
 `[profile.dev.package.skia-bindings]` optimization override into its root manifest.
-Alternatively set `FORCE_SKIA_BUILD=1` and `MACOSX_DEPLOYMENT_TARGET=26.0` in that
-project's build environment. No separate Skia bootstrap command is needed.
+The profile settings preserve symbols when debug information is disabled, avoiding
+an older Rust stripping issue on macOS 27; see the [release audit](../docs/rust-release-audit.md).
+Environment-based setups should set `FORCE_SKIA_BUILD=1`,
+`MACOSX_DEPLOYMENT_TARGET=26.0`, `CARGO_PROFILE_DEV_STRIP=none` and
+`CARGO_PROFILE_TEST_STRIP=none` and `CARGO_PROFILE_RELEASE_STRIP=none`.
+No separate Skia bootstrap command is needed.
 
 Use it from another Cargo project:
 

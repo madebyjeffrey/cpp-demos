@@ -568,6 +568,7 @@ define_class!(
             self.node()
                 .is_some_and(|n| match selector.name().to_bytes() {
                     b"isAccessibilityExpanded"=>n.combo.is_some()||n.menu.as_ref().is_some_and(|m|m.trigger)||n.menu_item.as_ref().is_some_and(|m|m.submenu),
+                    b"setAccessibilityExpanded:"=>false,
                     b"setAccessibilitySelectedColumns:"=>false,
                     b"setAccessibilitySelectedRows:" if n.table_root.is_some()=>n.enabled&&n.table_root.as_ref().is_some_and(|t|t.options().selection_mode==ui::TableSelectionMode::Rows),
                     b"setAccessibilitySelectedCells:"=>n.enabled&&n.table_root.as_ref().is_some_and(|t|t.options().selection_mode==ui::TableSelectionMode::Cells),

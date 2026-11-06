@@ -1,6 +1,6 @@
 # Rust SCARS completion report and checklist
 
-Date: 2026-11-05. Reviewed baseline: `82583e7`.
+Baseline: 2026-11-05, `82583e7`. Current release audit: 2026-11-06.
 
 The Rust workspace is a usable first implementation across the six original
 milestones. It is **not yet complete against their exit criteria**. This report
@@ -36,7 +36,11 @@ overall goal complete while an in-scope item remains open.
 | Presentation | Retained splits/tabs/wizards, hierarchical menus, configured portals, transactional alerts and native sheets | Final interactive and visible desktop audits in M5/M8 |
 | Collections | Virtual lists, lazy trees, combo boxes and keyed tables with retained validated edits | Combined native semantics and interactive audits |
 | Values and tooling | Shared typed draft lifecycle, RGB/HSV/hex, calendars, localized civil/zoned editing, mounted inspector/property overrides and box/flex feedback | Final visual/interaction evidence in M8 |
-| Verification | Core/CPU tests and native input/accessibility protocol tests | Interactive audits, final visible GPU/full-screen runs and repeatable checks |
+| Verification | Repeatable local/CI checks, core/CPU/native-protocol tests, example matrix and minimum-Rust compilation | Interactive audits, final visible GPU/full-screen/idle/example runs and inventory sign-off |
+
+The [release audit](rust-release-audit.md) reconciles all 44 items with concrete
+evidence and the five remaining gates. The inventory is implementation coverage;
+it does not close native or interactive verification automatically.
 
 The main reference is the [current C++ public inventory](../scars/src/scars.cppm),
 including options and modifiers, not only control names. The
@@ -609,6 +613,13 @@ The hidden native regression also checks both selected and unselected tabs befor
 and after a tab switch: selection updates while the expansion selector remains
 unavailable. This protocol evidence does not substitute for the speech recheck.
 
+A further protocol audit reproduced an unsupported inherited expansion setter
+still being advertised by generic tab elements. Generic elements now reject
+`setAccessibilityExpanded:`; menu expansion reads and guarded press/show actions
+remain available, while logical tree rows keep their separately implemented
+setter. The hidden tab/menu/focus regression passes. Rebuild/restart
+`m5_semantics` before the actual speech recheck; this is not a VoiceOver pass.
+
 ## M6 — Localization and complete value controls
 
 - [x] **M6.1 Editable format policy:** specify supported locale/grammar combinations, display/edit round trips and unsupported-format behavior. Preserve an explicit ASCII/ISO mode; do not silently guess ambiguous grouping or dates.
@@ -1033,6 +1044,36 @@ M8.5 headless regression evidence prepared; native examples remain open:
   displays. No native examples ran. M8.5 remains unchecked until those real
   windowing runs pass; native, VoiceOver and IME evidence is not inferred from
   successful CPU previews or model/view tests.
+
+M8.6 audit and build evidence prepared; sign-off remains open:
+
+- The [release audit](rust-release-audit.md) reconciles all 44 checklist items
+  against concrete tests/examples and distinguishes 39 checked items from the
+  five open gates. An option-family table maps C++ fields to Rust options,
+  modifiers, model ownership and callbacks. The reference source is unchanged
+  from `82583e7`; name coverage still maps 162 types and 47 modifiers/annotations.
+- Inventory/component documentation no longer defers completed native semantics,
+  localization, shared drafts, inspector overrides or the full Lab to earlier
+  milestones. Intentional palette/style/font, locale and model-ownership interface
+  changes are explicit. Optional extensions retain their original scope.
+- Actual Rust 1.88.0 validation passes: 277 core/macro tests, dev and release
+  workspace/all-target compilation, Linux-core compilation and the separate
+  renamed consumer. Both native-engine profiles record full source Skia builds.
+  The portable `foundation` example also runs under the minimum compiler.
+- An older stripping-tool issue on macOS 27 was reproduced in debug-disabled
+  and release builds, then resolved by shared dev/test/release `strip=none`
+  configuration. The `msrv` entry point selects its own exact compiler, records
+  matching metadata and runs all five gates. Ten validator tests pass; the
+  primary/minimum CI matrix passes Actionlint. Remote CI execution is unclaimed.
+- The hidden native expansion-selector regression found and corrected the
+  unsupported inherited setter described under M5.5. Actual tab speech remains
+  unverified. M8.6 stays unchecked until M5.5/M8.1/M8.4/M8.5 are closed with real
+  foreground/interactive evidence and the final inventory sign-off is recorded.
+- Final local reruns pass all ten headless gates and all five minimum-Rust gates,
+  including dev/release source builds. The audit's 44 statuses match the checklist
+  and local documentation links resolve. A fresh desktop probe again reports
+  `active-displays=0`, `front=com.apple.loginwindow`, `ready=0`; no unavailable
+  foreground/interactive work is counted as passed.
 
 M8.3 completion record:
 

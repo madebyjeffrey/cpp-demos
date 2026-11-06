@@ -38,6 +38,21 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(values[1][check.NATIVE_FLAGS[0]], "1")
             self.assertTrue(all(values[1][flag] is None for flag in check.NATIVE_FLAGS[1:]))
 
+    def test_minimum_suite_selects_and_reports_its_actual_toolchain_without_native_opt_ins(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(os.environ, {"RUSTUP_TOOLCHAIN": "stable", **{flag: "1" for flag in check.NATIVE_FLAGS}}):
+                env = check.environment(Path(directory), "msrv")
+            program = "import os; print(os.environ['RUSTUP_TOOLCHAIN'])"
+            self.assertEqual(check.metadata((sys.executable, "-c", program), env=env), check.MINIMUM_RUST)
+            self.assertTrue(all(flag not in env for flag in check.NATIVE_FLAGS))
+            steps = check.plan("msrv", True)
+            self.assertEqual(len(steps), 5)
+            self.assertTrue(all("--locked" in step.command and "--offline" in step.command for step in steps))
+            self.assertIn("--workspace", steps[1].command)
+            self.assertIn("--all-targets", steps[1].command)
+            self.assertIn("--release", steps[2].command)
+            self.assertIn("x86_64-unknown-linux-gnu", steps[3].command)
+
     def test_failure_is_recorded_and_prevents_followup_execution(self):
         with tempfile.TemporaryDirectory() as directory:
             directory = Path(directory)

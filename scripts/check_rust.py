@@ -30,6 +30,7 @@ PROTOCOL_TESTS = (
     "table_accessibility", "date_picker", "time_picker", "datetime_picker",
     "zoned_picker", "color_picker", "localized_values", "inspector",
 )
+MINIMUM_RUST = "1.88.0"
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,15 @@ def plan(suite: str, offline: bool) -> list[Step]:
         if offline:
             command += ("--offline",)
         return Step(name, command + args[split:], env=env or {})
+
+    if suite == "msrv":
+        return [
+            cargo("minimum-core-tests", "test", "-p", "scars-ui", "-p", "scars-ui-macros", "--all-targets"),
+            cargo("minimum-workspace-compile", "check", "--workspace", "--all-targets"),
+            cargo("minimum-release-compile", "check", "--workspace", "--all-targets", "--release"),
+            cargo("minimum-portable-compile", "check", "-p", "scars-ui", "--lib", "--target", "x86_64-unknown-linux-gnu"),
+            cargo("minimum-consumer", "check", "--manifest-path", "checks/renamed-consumer/Cargo.toml"),
+        ]
 
     if suite == "native":
         desktop = {NATIVE_FLAGS[0]: "1"}
@@ -92,6 +102,8 @@ def environment(output: Path, suite: str) -> dict[str, str]:
     target = Path(env.get("CARGO_TARGET_DIR", RUST / "target"))
     env["CARGO_TARGET_DIR"] = str((RUST / target).resolve() if not target.is_absolute() else target)
     env["CARGO_TERM_COLOR"] = "never"
+    if suite == "msrv":
+        env["RUSTUP_TOOLCHAIN"] = MINIMUM_RUST
     if suite in ("headless", "native"):
         # Keep old artifacts out of the current run without deleting user files.
         run = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid4().hex[:8]
@@ -191,9 +203,9 @@ def handle_termination() -> None:
     signal.signal(signal.SIGTERM, interrupted)
 
 
-def metadata(command: tuple[str, ...], cwd: Path = RUST) -> str:
+def metadata(command: tuple[str, ...], cwd: Path = RUST, env: Optional[dict[str, str]] = None) -> str:
     try:
-        return subprocess.check_output(command, cwd=cwd, text=True, stderr=subprocess.STDOUT).strip()
+        return subprocess.check_output(command, cwd=cwd, env=env, text=True, stderr=subprocess.STDOUT).strip()
     except (OSError, subprocess.CalledProcessError) as error:
         return f"Unavailable: {error}"
 
@@ -201,7 +213,7 @@ def metadata(command: tuple[str, ...], cwd: Path = RUST) -> str:
 def main(argv: Optional[list[str]] = None) -> int:
     handle_termination()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", choices=("headless", "portable", "native"), default="headless")
+    parser.add_argument("--suite", choices=("headless", "portable", "native", "msrv"), default="headless")
     parser.add_argument("--offline", action="store_true", help="Pass --offline to Cargo (requires cached sources/build prerequisites)")
     parser.add_argument("--output", type=Path, help="Log/report directory; default rust/target/validation/SUITE")
     parser.add_argument("--plan", action="store_true", help="Print commands without running or claiming checks passed")
@@ -220,7 +232,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         "schema": 1, "suite": args.suite, "started_at": now(), "platform": platform.platform(),
         "revision": metadata(("git", "rev-parse", "HEAD")),
         "dirty": bool(metadata(("git", "status", "--porcelain"))),
-        "rustc": metadata(("rustc", "-Vv")), "cargo": metadata(("cargo", "-V")),
+        "rustc": metadata(("rustc", "-Vv"), env=env), "cargo": metadata(("cargo", "-V"), env=env),
         "source_build": {key: env[key] for key in ("FORCE_SKIA_BUILD", "MACOSX_DEPLOYMENT_TARGET", "CARGO_TARGET_DIR")},
         "build_profile": {key: env.get(key, "Cargo default") for key in ("CARGO_PROFILE_DEV_DEBUG", "CARGO_PROFILE_TEST_DEBUG", "CARGO_BUILD_JOBS")},
         "native_execution": "requested" if args.suite == "native" else "not_run",

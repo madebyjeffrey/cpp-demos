@@ -1,8 +1,11 @@
 # SCARS components
 
-The portable foundation is implemented: reactive `State`/`Binding`, immutable
-descriptions, `view!`, mounted identity, action dispatch and ICU4X text services.
-Layout, interactive controls and native widget accessibility are implemented in stage 2.
+The portable core implements reactive state, layout, editing, presentation,
+virtual collections, localized value controls and inspection. `scars-window`
+adds AppKit windows, native input/accessibility and Skia rendering. Start with the
+[quick guide](../../docs/rust-guide.md) and [full Lab](../../docs/rust-lab.md).
+The sections below document each stage's contracts; current release evidence and
+open native/interactive gates are in the [release audit](../../docs/rust-release-audit.md).
 
 From `rust/`:
 
@@ -118,8 +121,8 @@ accessibility elements. The portable `Host` can also use any pure `Measure` prov
 
 Editing uses byte indices internally and checked UTF-16 conversion at AppKit.
 IME drafts do not reach the binding until committed; external binding changes
-cancel drafts. Selection/deletion use ICU4X grapheme boundaries. This milestone
-has no undo history or multiline/password/numeric editing; those belong to stage 3.
+cancel drafts. Selection/deletion use ICU4X grapheme boundaries. Undo history and
+multiline/password/numeric editing are described in the Stage 3 and M2 sections.
 
 Tests: `cargo test --workspace`; native protocol/actions additionally use
 `SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test components` on an awake desktop.
@@ -142,10 +145,10 @@ and checked steps for i32/i64/u32/u64/f64; integer arithmetic never passes throu
 f64. `numeric_field("Copies", &number)` composes the editor and step buttons;
 Blur, Enter or stepping applies valid edits by default. Invalid and incomplete drafts stay visible.
 
-The initial editable grammar is ungrouped ASCII numbers (`.` for decimal values).
-Grouping separators and localized digits are not accepted by these parsers. Use a
-custom `Draft` parser/formatter when an application selects a localized grammar.
-ICU4X localized integer display remains available independently.
+The default editable grammar is ungrouped ASCII numbers (`.` for decimal values).
+Select `EditLocale` for checked localized numbers/dates; the M6 sections describe
+the five supported profiles. A custom `Draft` codec can supply another explicit
+grammar. ICU4X localized integer display is also available independently.
 
 `Host::debounce(key, delay, action)` replaces pending work under the same key.
 Mounted windows schedule the earliest deadline as a one-shot redraw; detached
@@ -278,7 +281,7 @@ composition has first been cancelled.
 `cargo run --example m1_layout` demonstrates the current work; it also supports
 `--light`, `--render file.png` and resize. `cargo run --example m1_scroll` demonstrates
 nested two-axis scrolling. M1 evidence is recorded in
-[the checklist](../../docs/rust-completion-checklist.md); later milestones remain open.
+[the checklist](../../docs/rust-completion-checklist.md); final release gates remain in M5.5/M8.
 
 `padding` and `margin` accept a scalar, `Insets::symmetric(vertical, horizontal)`,
 or `[top, right, bottom, left]` values. `basis` controls the flex main-axis basis;
@@ -919,7 +922,7 @@ Eleven focused tests cover metadata, hidden-key validation, caching/empty result
 failures/retry, read-only queries, deferred completion, replacement generations,
 reentrant callbacks, scheduler consistency, disclosure rendering and resource teardown.
 Native checks cover retired row proxies after snapshot replacement. Interaction is
-covered below; hierarchical native semantics and the actual interactive audit remain M5.
+covered below; hierarchical native semantics are described under M5.1. The actual interactive audit remains M5.5.
 
 ## Completion M4 — tree interaction
 
@@ -959,7 +962,7 @@ Nested notifications are suppressed to prevent recursive callback loops.
 Eight focused interaction tests cover keyboard/selection/focus retention, model
 replacement inside callbacks, deferred/error states and bounded 100,000-child
 navigation. Native protocol tests exercise actual AppKit keys and focused AX objects.
-Hierarchical/offscreen native tree semantics and interactive VoiceOver auditing remain M5.
+Hierarchical/offscreen native tree semantics are described under M5.1; interactive VoiceOver auditing remains M5.5.
 
 
 ## Completion M4 — combo boxes
@@ -1078,7 +1081,7 @@ controls across reordering while retiring removed/reinserted columns even with e
 text. `begin_edit(row, visual_column_index)` and `edit_cell(&TableCell)` return an
 external keyed `CellEdit`; `commit` checks row/column lifetimes and original value.
 Integrated editing is described below.
-Full native table/column/cell semantics and interactive audits remain M5.
+Native table/column/cell semantics are described under M5.2; interactive audits remain M5.5.
 
 `TableModel::new(headers, Vec<ListItem>)` remains a positional convenience with
 `column-N` IDs. The old public `rows`/`headers` fields are replaced by queries and
@@ -1212,7 +1215,7 @@ it checks actual outline/row attributes, direct links, selection/focus/hit ident
 loading/retry, stale objects and a 100,000-child outline. Full-array count/copy creates
 zero proxies; requested entries alone populate the lazy array's cache. Two hundred
 transient ranged queries return the weak registry to its original size. Combined
-notifications/lifecycle and actual VoiceOver/IME sessions remain M5.4/M5.5.
+notifications/lifecycle are covered under M5.4; actual VoiceOver/IME sessions remain M5.5.
 
 ## Completion M5 — table semantics
 
@@ -1258,7 +1261,7 @@ checks are `cargo test -p scars-ui --test table_semantics`; native checks are
 `SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test table_accessibility --locked --offline`.
 The latter exercises a 100,000-row table, lazy allocation, shared identities, index
 changes, row/cell selection, custom controls, editing/errors and stale-object/resource
-cleanup. Combined notification and actual VoiceOver/IME audits remain M5.4/M5.5.
+cleanup. Combined notification coverage is recorded under M5.4; actual VoiceOver/IME audits remain M5.5.
 
 ## Completion M5 — control and presentation semantics
 
@@ -1282,8 +1285,8 @@ attach validation themselves, and numeric steppers report their available direct
 
 Validation uses AppKit's standard help/value-description attributes; it does not
 invent a platform-specific invalid-state selector. Portable snapshots retain the
-full `Validation` status/message/dirty state. Typed value controls still follow their
-current explicit ASCII/ISO grammar; broader value policies/localization remain M6.
+full `Validation` status/message/dirty state. Typed value controls use the explicit
+ASCII/ISO or checked localized grammar described in M6, including shared draft policies.
 
 `Host::set_selected`/`set_check_state` assign a control's value without synthesizing
 an unrelated button click. Readonly, disabled, hidden, modal and stale targets are
@@ -1719,7 +1722,7 @@ The standalone `checks/renamed-consumer` fixture compiles `scars-window` as `kit
 including inspector interfaces and `view!`. From this workspace, run
 `CARGO_TARGET_DIR=target cargo check --manifest-path checks/renamed-consumer/Cargo.toml --locked --offline`.
 Its native-engine optimization profile matches this workspace; source-build policy
-still applies. Richer override controls and the full Lab remain M7.2/M7.3. Actual
+still applies. Override controls and the full Lab are described in M7.2/M7.3. Actual
 VoiceOver/IME and visible GPU evidence remain M5.5/M8.
 
 

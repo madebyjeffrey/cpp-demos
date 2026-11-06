@@ -25,6 +25,7 @@ configuration and consumer profile preserve the same native source-build setting
 | --- | --- | --- |
 | Headless | `python3 scripts/check_rust.py` | Validator tests, inventory, workspace/consumer formatting, strict all-target Clippy, core/macro/raster/application tests, Linux core compilation, renamed-consumer compilation and example regressions |
 | Portable | `python3 scripts/check_rust.py --suite portable` | Validator/inventory/format checks, core/macro Clippy and tests, Linux core compilation; no Skia/native dependency build |
+| Minimum Rust | `python3 scripts/check_rust.py --suite msrv` | Selects Rust 1.88.0 explicitly; core/macro tests, dev/release workspace/all-target compilation with source Skia, Linux-core and renamed-consumer compilation |
 | Native | `python3 scripts/check_rust.py --suite native` | Desktop readiness, actual visible Metal/lifecycle, full-screen, secure input, foreground sheets, every opt-in native protocol harness and native example smoke checks, run sequentially |
 
 Append `--offline` when appropriate. `--plan` prints commands without executing
@@ -32,6 +33,19 @@ checks or producing a passing report. Native execution requires macOS 26+ and an
 awake, unlocked logged-in desktop; the readiness probe must pass before any native
 test starts. Native mode opens windows and enters/exits a full-screen Space.
 It should be run after the headless build has finished, when the desktop is free.
+
+Install the minimum toolchain before using `--suite msrv`:
+
+```sh
+rustup toolchain install 1.88.0 --profile minimal --target x86_64-unknown-linux-gnu
+python3 scripts/check_rust.py --suite msrv --offline
+```
+
+That suite overrides the child toolchain even when the caller's default is newer;
+its report reads Rust/Cargo metadata from the same child environment. Rust 1.88.0
+passed 277 portable tests, dev/release all-target macOS/source-Skia compilation, Linux-core
+compilation and the renamed consumer locally. Compilation does not certify native
+window interaction. The [release audit](rust-release-audit.md) records this scope.
 
 ## Results
 
@@ -73,8 +87,9 @@ unverified until that suite actually runs on an awake foreground desktop.
 ## CI
 
 [The workflow](../.github/workflows/rust.yml) runs the same entry point on Ubuntu
-24.04 for the portable core/macros and macOS 26 for the full headless renderer and
-consumer. Rust is pinned to the locally verified 1.99.1 toolchain; checkout and
+24.04 for the portable core/macros. Its macOS 26 matrix runs full headless checks
+on Rust 1.99.1 and minimum-version checks on Rust 1.88.0. Both toolchains passed
+their local checks; checkout and
 artifact-upload actions are pinned to release commits. These runner labels are
 listed in GitHub's [runner-image inventory](https://github.com/actions/runner-images#available-images).
 Action pins come from the official [checkout v7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1)

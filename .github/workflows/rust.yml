@@ -5,7 +5,8 @@ name: Rust validation
     paths:
       - 'rust/**'
       - 'scripts/check_rust*.py'
-      - 'scripts/tests/test_check_rust.py'
+      - 'scripts/tests/test_check_rust*.py'
+      - 'scripts/rust_gallery.py'
       - 'scars/src/scars.cppm'
       - 'docs/rust-*.md'
       - '.github/workflows/rust.yml'
@@ -13,7 +14,8 @@ name: Rust validation
     paths:
       - 'rust/**'
       - 'scripts/check_rust*.py'
-      - 'scripts/tests/test_check_rust.py'
+      - 'scripts/tests/test_check_rust*.py'
+      - 'scripts/rust_gallery.py'
       - 'scars/src/scars.cppm'
       - 'docs/rust-*.md'
       - '.github/workflows/rust.yml'
@@ -56,11 +58,20 @@ jobs:
           retention-days: 14
 
   macos:
-    name: macOS renderer and consumer
+    name: macOS Rust ${{ matrix.rust }}
     runs-on: macos-26
     timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rust: '1.99.1'
+            suite: headless
+          - rust: '1.88.0'
+            suite: msrv
     env:
       CARGO_BUILD_JOBS: '2'
+      RUSTUP_TOOLCHAIN: ${{ matrix.rust }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -69,12 +80,12 @@ jobs:
         run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt --component clippy --target x86_64-unknown-linux-gnu
       - name: Ensure source-build tools
         run: command -v ninja >/dev/null || brew install ninja
-      - name: Run headless checks
-        run: python3 scripts/check_rust.py
+      - name: Run selected validation suite
+        run: python3 scripts/check_rust.py --suite "${{ matrix.suite }}"
       - name: Upload report, logs and Lab previews
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: rust-macos-headless
-          path: rust/target/validation/headless
+          name: rust-macos-${{ matrix.suite }}
+          path: rust/target/validation/${{ matrix.suite }}
           retention-days: 14

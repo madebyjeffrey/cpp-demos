@@ -119,6 +119,8 @@ fn main() {
                 !expanded,
                 "selected and unselected tabs must omit expansion state"
             );
+            let writable: bool = msg_send![&**tab,isAccessibilitySelectorAllowed:objc2::sel!(setAccessibilityExpanded:)];
+            assert!(!writable, "tabs must not advertise an expansion setter");
         }
         let changed: bool = msg_send![&*second, accessibilityPerformPress];
         assert!(changed);
@@ -134,6 +136,12 @@ fn main() {
         assert!(expanded, "menu buttons retain their expansion state");
         let expanded: bool = msg_send![&*menu, isAccessibilityExpanded];
         assert!(!expanded);
+        let writable: bool =
+            msg_send![&*menu,isAccessibilitySelectorAllowed:objc2::sel!(setAccessibilityExpanded:)];
+        assert!(
+            !writable,
+            "menu expansion uses its guarded press/show action"
+        );
     }
     assert!(
         !window.native_window().isVisible(),

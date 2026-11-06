@@ -1,10 +1,12 @@
 # SCARS public interface → Rust completion inventory
 
-Reference: [`scars.cppm`](../scars/src/scars.cppm). Reviewed 2026-11-05 against
-`82583e7`. This maps exported control/model types, option families and view
+Reference: [`scars.cppm`](../scars/src/scars.cppm), unchanged from `82583e7`.
+Implementation review updated 2026-11-06. This maps exported control/model types, option families and view
 modifiers. It records coverage, not a claim of behavioral parity or passed audits.
 `Existing` means a callable Rust equivalent exists; `Partial` or `Pending` names
 its closure item in the [completion checklist](rust-completion-checklist.md).
+The [release audit](rust-release-audit.md) records current evidence and the five
+open checklist items. Implementation coverage and release sign-off are separate.
 
 Rust deliberately uses ordinary numbers/`Length`, typed enums, standard byte ranges,
 owned snapshots and private description/ownership internals. C++ spelling, literal
@@ -18,14 +20,14 @@ The older UI engine and C++ `detail` namespace are excluded.
 | `Color` | Existing ARGB u32 styling and typed sRGB `Color` value | M6.5 |
 | `Point`, `Size`, `Rect`, `Length`, `Constraints`, `Insets` | Geometry/points/percent/Auto and per-edge insets implemented; constraints represented by min/max style and viewport, not a duplicate public constraint object | M1.2–M1.3 |
 | `Align`, `Justify`, `Position`, `Orientation`, `Density`, `TextWrap`, `TextOverflow`, `LabelStyle` | Typed style enums and required variants implemented; regression coverage in styles/reflow tests | M1.2 |
-| `Theme` | Light/dark palette, inherited density/accent and label roles implemented; full Lab has dark/light and constrained-size coverage | M1.2, M7.3 |
+| `Theme` | Light/dark palette, inherited density/accent and label roles implemented; Lab has dark/light, state, scale and constrained-size coverage. Component geometry/colors use `Style`; custom fonts use `Renderer::with_font` bytes | M1.2, M7.3, M8.2 |
 | `State`, `Binding` | Existing tracked owned Rust handles; thread confinement enforced by types | M8.4 |
 | `View` | Existing immutable descriptions, typed constructors and `view!`; description internals stay private, inspection uses snapshots | M1.2, M7.3 |
 | `TextInlineBox`, `TextSpan`, `TextLayoutOptions`, `TextPlacement`, `GlyphPosition`, `TextLine`, `TextLayout`, `TextLayoutEngine` | `Measure`/`TextLayout`, styled `Span`, inline `View` boxes, UTF-8 visual `TextLine` geometry/caret affinity and cached SkParagraph implemented. Renderer types stay out of the portable core | M1.2, M2.2 |
 | `TextRange`, `TextSelection`, `TextCommand`, `TextBuffer` | Standard byte ranges/`Selection`, reusable `TextBuffer`/`TextOptions`, visual/logical commands, gestures, composition and bounded/coalesced history implemented | M2.1–M2.3 |
 | `Clipboard`, `TextInputSnapshot` | Native clipboard and Rust `TextInputClient`/`TextInputState`; portable `TextInput` | M2.3, M5.4–M5.5 |
 | `PointerKind`, `PointerEvent`, `Key`, `KeyEvent`, `Cursor` | Portable/native events include both wheel axes, capture cancellation, text gestures/commands and resize cursor transport; final interactive audit remains | M5.4–M5.5 |
-| `Role`, `Element`, `LogicalItem`, `LogicalCell`, `LogicalColumn` | Portable tree/table metadata and lazy native outline/table rows, cells, columns, headers and guarded actions are implemented; typed control/presentation roles, validation/help and guarded actions are implemented; combined notification/interactive audits remain | M5.1–M5.4 |
+| `Role`, `Element`, `LogicalItem`, `LogicalCell`, `LogicalColumn` | Portable tree/table metadata and lazy native outline/table rows, cells, columns, headers and guarded actions implemented; control/presentation roles, validation/help, combined notification/lifecycle tests implemented. Actual VoiceOver/IME audit remains | M5.1–M5.4, M5.5 |
 | `HostOptions`, `Host` | Host refresh/layout/input/mount exist; relevant invalidation, cursor, scroll, text, selection, presentation, inspection and logical-query contracts are assigned across the checklist | M1.4–M1.5, M2, M3, M4, M5, M7 |
 
 Public Unicode/UTF conversion helpers map to `text`; SkParagraph construction to
@@ -33,8 +35,8 @@ Public Unicode/UTF conversion helpers map to `text`; SkParagraph construction to
 explicit cache release (see [resource measurements](rust-resources.md)).
 `automatic`, `infinity`, `percent` and C++ length literals map to
 `Length::Auto`, `f64::INFINITY`, `percent` and ordinary numeric arguments.
-Rich inline text/boxes need a portable description and measurement interface;
-wrapping a row of independent labels alone does not close that behavior.
+Rich inline text/boxes use portable `Span`/`Measure` data shaped together by
+SkParagraph, including baseline and placeholder geometry.
 
 ## Controls, models and option families
 
@@ -44,7 +46,7 @@ wrapping a row of independent labels alone does not close that behavior.
 | `ToggleButton`, `CheckBox`, `CheckState`, `Switch`, `RadioGroup`, `SegmentedControl`, `Option` | Existing bound controls, `CheckState`, `OptionItem` | M1.5, M5.3, M7.3 |
 | `Slider`, `SliderOptions` | Stepped bounded slider with pointer/key/capture lifetime and independent validated `page_step`; full Lab and focused keyboard tests cover it | M7.3, M8.6 |
 | `ProgressBar` | Existing determinate/indeterminate progress | M5.3, M8.4 |
-| `Bitmap`, `Image`, `ContentMode` | Validated encoded/RGBA data and fit/fill/stretch/center rendering; all four modes appear in the Lab; final resource/visual evidence remains | M7.3, M8.2–M8.4 |
+| `Bitmap`, `Image`, `ContentMode` | Validated encoded/RGBA data and fit/fill/stretch/center rendering; all four modes appear in the Lab and CPU matrix. Resource cache bounds measured; visible GPU/idle evidence remains | M7.3, M8.2, M8.1/M8.4 |
 | `FlexRow`, `FlexColumn`, `Block`, `Inline`, `Layer` | Row/column/block/inline/layer and shaped rich inline text implemented with width-dependent reflow and baselines | M1.2–M1.3 |
 | `Section`, `GroupBox`, `Panel`, `Spacer`, `Separator` | Grouping/spacer and both separator orientations implemented | M1.2 |
 | `ForEach`, `If` | Rust `for`/`if` inside `view!`, stable keyed descriptions and plain custom component functions are demonstrated in the Lab and renamed consumer; no duplicate wrapper classes required | M7.3 |
@@ -52,9 +54,9 @@ wrapping a row of independent labels alone does not close that behavior.
 | `TextField`, `TextFieldOptions`, `TextEditor` | Single/multiline controls share TextBuffer; readonly/length/history policy, visual navigation and word/line selection implemented | M2.1–M2.3 |
 | `SearchField`, `SearchFieldOptions` | Integrated clear/cancel, committed query/submit hooks, scoped one-shot debounce and lifetime cancellation implemented | M2.4 |
 | `PasswordField`, `PasswordFieldOptions` | Explicit reveal/undo, readonly/grapheme limits, uncached sensitive painting and clipboard/AX restrictions implemented; actual native ownership transitions tested | M2.5 |
-| `NumericField`, `Stepper`, `NumericOptions`, `NumericStatus`, `NumericValidation` | Exact `Numeric<T>`/`Draft<T>`, `Validation`/`ValidationStatus`, precision/blur/submit/cancel and standalone repeating `stepper`, native direction availability/button links and automatic validation semantics implemented; checked `EditLocale` numeric grammar implemented for five profiles; shared typed-control expansion remains | M2.6, M6.1–M6.2, M6.6 |
+| `NumericField`, `Stepper`, `NumericOptions`, `NumericStatus`, `NumericValidation` | Exact `Numeric<T>`/`Draft<T>`, `Validation`/`ValidationStatus`, precision/blur/submit/cancel, repeating `stepper`, native direction availability/button links and validation semantics implemented; five checked `EditLocale` profiles and shared rejection/normalization/reentrancy lifecycle implemented | M2.6, M6.1–M6.2, M6.6 |
 | `MenuButton`, `MenuItem`, `MenuItemKind`, `Action` | `Menu`/`MenuAction` tree: separator/check/radio/submenu, shortcut hints, disabled navigation/typeahead; `MenuInfo`, idempotent native show/cancel, opener links and submenu hierarchy; legacy `Popup::menu` supported | M3.2, M5.3 |
-| `SelectionDropdown` | Dropdown uses stable option IDs with full menu navigation/check/radio/submenu support; combined native semantic audit remains | M3.2, M5.3 |
+| `SelectionDropdown` | Dropdown uses stable option IDs with full menu navigation/check/radio/submenu support and native control/popup links; actual interactive audit remains | M3.2, M5.3, M5.5 |
 | `SplitActionButton` | Retained `SplitAction`: selected leaf key path, primary invocation and unavailable-choice fallback; fixed `split_button` helper retained | M3.2 |
 | `OverlayPlacement`, `PopoverFocus`, `TooltipOptions`, `PopoverOptions` | `OverlayOptions`/`OverlayPlacement`/`OverlayFocus` and `TooltipOptions`: fitted/scrolled portals, nested focus return, explicit dismissal reasons, help and owner lifetimes | M3.3, M5.3 |
 | `SplitView`, `SplitViewOptions`, `SplitPane` | `Split` model and retained panes, draggable dividers, both axes/minima, collapse/restoration, keyboard/cursor/capture policy and native split semantics implemented | M3.1 |
@@ -65,11 +67,11 @@ wrapping a row of independent labels alone does not close that behavior.
 | `ComboBox`, `ComboBoxOptions`, `ComboBoxMode`, `ComboBoxFilter` | `ComboBox` owns independent query/choice, configured modes/filter/loading, keyboard/pointer acceptance and cancellation; virtual suggestions and native popup links replace the capped helper | M4.5 |
 | `TreeNode`, `TreeItem`, `TreeModel`, `TreeView`, `TreeViewOptions` | `TreeNode` input, `TreeItem`/`TreeRowInfo` metadata and `TreeOptions`; checked loading/navigation/selection plus logical AppKit outline hierarchy/actions, loading/error descriptions and lazy immutable row arrays; combined interactive audits remain | M4.3–M4.4, M5.1 |
 | `TableCell`, `TableSelection`, `TableSelectionMode`, `TableColumnWidth`, `TableColumn`, `SortOrder`, `SortDescriptor`, `TableModel`, `TableView`, `TableViewOptions` | `TableRow` keyed text and checked column geometry/order, multi-sort and row/cell selection; integrated pinned edits, validation/readonly/custom display and generation-checked commits; callback-free `TableSnapshot`/`TableColumnInfo`/`TableCellInfo`, lazy native cells/columns/headers and bounded logical actions; combined interactive audits remain | M4.6–M4.7, M5.2 |
-| `ColorPicker`, `ColorWell`, `ColorPickerOptions`, `ColorModel`, `HSV` | Shared RGB/HSV/hex draft, fields/sliders, retained hue intent, optional alpha, checkerboard, readonly, transactional/owned live-preview rollback, anchored well and lifecycle cleanup implemented; shared lifecycle audit remains | M6.5–M6.6 |
-| `Date`, `Time`, `LocalDateTime`, `DateTimeResolution`, `RepeatedTimePolicy`, `DateTimeValidation` | Jiff civil/instant/zoned values, strict civil consumption, checked Gregorian profiles, clock/bounds policies and explicit fold/zone decisions implemented; shared typed lifecycle remains | M6.1–M6.4, M6.6 |
+| `ColorPicker`, `ColorWell`, `ColorPickerOptions`, `ColorModel`, `HSV` | Shared RGB/HSV/hex draft, fields/sliders, retained hue intent, optional alpha, checkerboard, readonly, transactional/owned live-preview rollback, anchored well, shared draft lifecycle and cleanup implemented | M6.5–M6.6 |
+| `Date`, `Time`, `LocalDateTime`, `DateTimeResolution`, `RepeatedTimePolicy`, `DateTimeValidation` | Jiff civil/instant/zoned values, strict civil consumption, checked Gregorian profiles, clock/bounds policies, explicit fold/zone decisions and shared typed lifecycle implemented | M6.1–M6.4, M6.6 |
 | `DatePicker`, `DatePickerOptions` | ISO/localized drafts, inclusive bounds, pure disabled/custom validation, readonly/blur/submit policy, roving keyboard calendar, source synchronization and retained field identity implemented; interactive audit remains | M6.3 |
 | `TimePicker`, `TimePickerOptions`, `HourCycle` | Exact time draft, component steppers, 12/24-hour policy, optional seconds, locale profiles, bounds/custom validation and readonly/blur/callback policies implemented | M6.4 |
-| `DateTimePicker`, `DateTimePickerOptions`, `ZonedDateTimePickerOptions` | One civil draft, shared calendar/clock, exact day carry, joint civil/instant limits, validation and localized clock policies; instant-backed `ZonedPicker` adds explicit zone changes, gaps/folds and retained field identity; shared lifecycle audit remains | M6.4–M6.6 |
+| `DateTimePicker`, `DateTimePickerOptions`, `ZonedDateTimePickerOptions` | One civil draft, shared calendar/clock, exact day carry, joint civil/instant limits, validation and localized clock policies; instant-backed `ZonedPicker` adds explicit zone changes, gaps/folds, retained field identity and the shared draft lifecycle | M6.4–M6.6 |
 
 Color format/parse/HSV functions belong to M6.5. Numeric display/parse/configuration
 helpers belong to M2.6/M6.1–M6.2; exact integers must not pass through f64. Date/time
@@ -100,12 +102,12 @@ Every public C++ `View` modifier is listed, including those with existing Rust n
 
 | C++ types/family | Rust mapping / remaining work | Closure |
 | --- | --- | --- |
-| `LayoutOverride`, `InspectionOverlay`, `FlexLineInspection`, `SplitInspection`, `TabInspection`, `ScrollInspection`, `ListInspection`, `InspectionNode`, `Inspector` | `Inspection`/`Inspector` provide a mounted hierarchy and owned layout/focus/selection/validation/split/tab/scroll/collection diagnostics; partial `StyleOverride` patches, retained property drafts, resets, measurement feedback and clipped box/flex highlights are implemented. Full Lab and final visual evidence remain M7.3/M8 | M7.1–M7.2 |
+| `LayoutOverride`, `InspectionOverlay`, `FlexLineInspection`, `SplitInspection`, `TabInspection`, `ScrollInspection`, `ListInspection`, `InspectionNode`, `Inspector` | `Inspection`/`Inspector` provide a mounted hierarchy and owned layout/focus/selection/validation/split/tab/scroll/collection diagnostics; partial `StyleOverride` patches, retained drafts, resets, measurement feedback and clipped box/flex highlights implemented. Full Lab and CPU matrix pass; visible GPU audit remains | M7.1–M7.3, M8.2, M8.1 |
 | `Host` construction/options/theme/text-layout assignment/refresh | Rust host constructor, `set_theme`, `layout(..., Measure)` and refresh; native connection provided by window mounting | M1, M7.3 |
 | `Host` pointer/key/clipboard/editing/focus/cursor and text-input queries | Existing core dispatch and native adapter; input/geometry/secure/notification completion assigned above | M1.5, M2, M5 |
-| `Host` layout/scroll/list/tree/table/logical queries and actions | Snapshots/models exist; bounded logical semantics and full query/action behavior must be completed without forcing native types into the core | M1.4, M4, M5 |
+| `Host` layout/scroll/list/tree/table/logical queries and actions | Owned snapshots, bounded logical queries/actions, virtual realization and lazy native adapters implemented; actual interactive audit remains | M1.4, M4, M5.1–M5.4, M5.5 |
 | `Host` menu/popover/tooltip/alert presentation, scheduling and invalidation | Menus/popovers/tooltips/alerts have scoped lifetimes and dismissal/completion callbacks; native sheets share alert transactions; final idle/cancel regression evidence remains | M3.6, M8.4 |
-| `Host` inspection/picking/layout overrides/previews | Picking, hierarchy, property edits/reset and clipped diagnostic overlays implemented; full Lab/ergonomics and final preview evidence remain M7.3/M8.2 | M7, M8.2 |
+| `Host` inspection/picking/layout overrides/previews | Picking, hierarchy, property edits/reset, clipped diagnostic overlays, full Lab/custom components and the CPU preview matrix implemented and tested | M7, M8.2 |
 
 Run `python3 scripts/check_rust_inventory.py` after changing the reference or matrix.
 It verifies that exported type names and all `View` modifier names are represented;
