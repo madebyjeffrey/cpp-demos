@@ -975,6 +975,34 @@ M8.2 completion record:
   utterance still needs an actual speech recheck. M5.5 and M8.1 remain open for
   VoiceOver, real IME/display backing scales and visible Metal evidence.
 
+M8.4 resource evidence prepared; visible verification remains open:
+
+- `m8_resources` is a runnable terminal workload using real Skia layout/painting.
+  Two measured runs use 100,000 rows each for list/table/tree, 128 visits and
+  5,000/20,000 edits. Both peak at 29/38/47 mounted nodes, 512 paragraph and 128
+  image entries, and 100 undo entries. Explicit cache clearing returns entry
+  counts to zero. Peak process RSS was 285,376,512 / 285,425,664 bytes; these
+  observations are not universal byte budgets or timing test thresholds.
+- Four focused tests pass: real renderer/collection/edit churn, 300 editor
+  replacements plus actual mounted undo history and callback retirement,
+  repeated hidden/inactive/removed search/repeat/progress cancellation, and
+  paragraph ownership across cache clearing/live-layout release. The cancellation
+  test observes zero subsequent invalidations/callbacks after settling.
+- `Renderer::cache_stats()` and `clear_caches()` expose concise resource
+  diagnostics/release without exposing internal ownership. The hidden AppKit
+  lifecycle regression also passed, including idle notification coalescing and
+  unmounted native proxy/callback teardown.
+- The full headless validation entry point passed all nine checks. The final
+  workload counts actual mounted undo entries and verifies redo restores the
+  latest text; its focused test, rebuilt example and strict all-target Clippy
+  passed again after that refinement. Both reported measurements use this final
+  executable. Native skips in the headless run do not count as native passes.
+- The foreground desktop suite includes prepared hidden-subtree, inactive-window
+  and unmounted-view cases. Each requires delivered animated Metal frames first,
+  then no frames/deadlines/callbacks after settling. They compile but have not run
+  while the desktop is locked. M8.4 remains unchecked until that visible evidence
+  passes. The [resource report](rust-resources.md) records commands and limits.
+
 M8.3 completion record:
 
 - `python3 scripts/check_rust.py` is the documented local entry point. Headless

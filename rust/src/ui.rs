@@ -40,6 +40,12 @@ pub struct Renderer {
     text: RefCell<HashMap<TextKey, Shaped>>,
     images: RefCell<HashMap<u64, skia::Image>>,
 }
+/// Entries retained by this renderer; excludes live layouts and Skia's own caches.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RendererCacheStats {
+    pub paragraphs: usize,
+    pub images: usize,
+}
 impl Default for Renderer {
     fn default() -> Self {
         let mut fonts = FontCollection::new();
@@ -53,6 +59,19 @@ impl Default for Renderer {
     }
 }
 impl Renderer {
+    /// Paragraph/image caches retain at most 512/128 entries respectively.
+    pub fn cache_stats(&self) -> RendererCacheStats {
+        RendererCacheStats {
+            paragraphs: self.text.borrow().len(),
+            images: self.images.borrow().len(),
+        }
+    }
+    /// Release cached resources, for example after closing a large document.
+    /// Live host layouts keep their current paragraphs until relayout or drop.
+    pub fn clear_caches(&self) {
+        self.text.borrow_mut().clear();
+        self.images.borrow_mut().clear();
+    }
     pub fn with_font(bytes: &[u8]) -> Result<Self, Error> {
         let face = skia::FontMgr::new()
             .new_from_bytes(bytes, None)
@@ -943,6 +962,31 @@ fn draw_scrollbars(canvas: &skia::Canvas, clip: Rect, info: ScrollInfo, color: u
 #[cfg(test)]
 mod field_tests {
     use super::*;
+    #[test]
+    fn clearing_caches_releases_paragraphs_after_the_last_live_layout() {
+        let renderer = Renderer::default();
+        let style = TextStyle::default();
+        let held = Measure::text(&renderer, "Cached paragraph", style, 200.);
+        let weak = Rc::downgrade(&renderer.text.borrow().values().next().unwrap().paragraph);
+        assert_eq!(renderer.cache_stats().paragraphs, 1);
+        renderer.clear_caches();
+        assert_eq!(renderer.cache_stats(), RendererCacheStats::default());
+        assert!(
+            weak.upgrade().is_some(),
+            "a live layout owns its shaped paragraph"
+        );
+        let expected = held.size;
+        drop(held);
+        assert!(
+            weak.upgrade().is_none(),
+            "cache clearing must release its ownership"
+        );
+        let measured = Measure::text(&renderer, "Cached paragraph", style, 200.);
+        assert_eq!(
+            measured.size, expected,
+            "clearing must preserve shaping behavior"
+        );
+    }
     #[test]
     fn revealed_password_is_painted_without_entering_paragraph_cache() {
         let secret = "unique-password-49385";

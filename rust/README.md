@@ -25,6 +25,10 @@ headless suite. The [validation guide](../docs/rust-validation.md) covers first-
 setup, portable/native modes, reports and CI. Native and interactive release
 checks remain explicit; a headless pass does not substitute for them.
 
+`cargo run --example m8_resources --locked --offline` exercises large collections,
+editing and renderer caches in a terminal. The [resource report](../docs/rust-resources.md)
+records measured limits, ownership, cancellation checks and remaining native work.
+
 ## Source layout
 
 - `components/` is the portable reactive foundation; `macros/` implements its

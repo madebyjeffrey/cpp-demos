@@ -987,3 +987,6 @@ pub(crate) fn validate_style(s: Style) -> Result<(), Error> {
     }
     Ok(())
 }
+#[cfg(test)]
+#[path = "resource_tests.rs"]
+mod resource_tests;

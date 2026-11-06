@@ -1,4 +1,6 @@
 //! Main-thread native integration suite. Opt in with SCARS_WINDOW_DESKTOP_TESTS=1.
+#[path = "resources.rs"]
+mod resources;
 #[path = "support/mod.rs"]
 mod support;
 pub fn run() {
@@ -260,6 +262,7 @@ pub fn run() {
         .unwrap();
     support::run_for(&app, Duration::from_millis(100));
     assert!(frames.get() > paused);
+    resources::run(&app);
     window.hide().unwrap();
     assert!(!window.is_visible());
     window.show();

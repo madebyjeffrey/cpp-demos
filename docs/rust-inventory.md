@@ -29,7 +29,9 @@ The older UI engine and C++ `detail` namespace are excluded.
 | `HostOptions`, `Host` | Host refresh/layout/input/mount exist; relevant invalidation, cursor, scroll, text, selection, presentation, inspection and logical-query contracts are assigned across the checklist | M1.4–M1.5, M2, M3, M4, M5, M7 |
 
 Public Unicode/UTF conversion helpers map to `text`; SkParagraph construction to
-`Renderer`. `automatic`, `infinity`, `percent` and C++ length literals map to
+`Renderer`, with `RendererCacheStats`/`clear_caches` for resource diagnostics and
+explicit cache release (see [resource measurements](rust-resources.md)).
+`automatic`, `infinity`, `percent` and C++ length literals map to
 `Length::Auto`, `f64::INFINITY`, `percent` and ordinary numeric arguments.
 Rich inline text/boxes need a portable description and measurement interface;
 wrapping a row of independent labels alone does not close that behavior.

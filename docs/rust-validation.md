@@ -61,6 +61,11 @@ scales unverified. Those sessions, final visual/resource/example evidence and
 inventory sign-off remain separate [completion requirements](rust-completion-checklist.md).
 No script automatically checks off the completion report.
 
+The [resource report](rust-resources.md) documents the `m8_resources` terminal
+example, measured collection/editing sessions, cache ownership and the visible
+idle-frame cases included in the native desktop suite. Those visible cases remain
+unverified until that suite actually runs on an awake foreground desktop.
+
 ## CI
 
 [The workflow](../.github/workflows/rust.yml) runs the same entry point on Ubuntu
