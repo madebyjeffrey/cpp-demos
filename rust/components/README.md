@@ -1254,3 +1254,53 @@ checks are `cargo test -p scars-ui --test table_semantics`; native checks are
 The latter exercises a 100,000-row table, lazy allocation, shared identities, index
 changes, row/cell selection, custom controls, editing/errors and stale-object/resource
 cleanup. Combined notification and actual VoiceOver/IME audits remain M5.4/M5.5.
+
+## Completion M5 — control and presentation semantics
+
+Application composition supplies semantic state automatically. `Menu::button`,
+`numeric_field`, `value_field`, `stepper`, tabs, splits, color wells and alerts keep
+native details out of application code. `accessible_help` supplies instructions
+independent of a visual tooltip; `validation(model.validation())` attaches typed
+validation to an ordinary field. Both are supported by `view!`. Numeric/value fields
+attach validation themselves, and numeric steppers report their available directions.
+
+| Control | Native contract |
+| --- | --- |
+| Text field/editor | AXTextField/AXTextArea; validation message plus instructions in help; invalid/incomplete/out-of-range descriptions |
+| Toggle/check/radio/segment | Typed role/subrole and value/selection; exact boolean/tristate assignment; groups expose selected children |
+| Stepper/slider | Exact numeric value and bounds; advertised increment/decrement availability; stepper button links |
+| Tabs | AXTabGroup, tab-button subroles, selected tab/contents links and guarded selected-child/value setters |
+| Split | AXSplitGroup/AXSplitter, orientation, bounds, adjacent contents and adjustment/value/collapse actions |
+| Menus | AXMenuButton/AXMenu/AXMenuItem; expanded/checked state, shortcut help, linked opener and explicit submenu parentage |
+| Dialog/alert | Named dialog subrole and modal state; live default/cancel buttons and guarded confirm/cancel actions |
+| Popover/color well | Popover/color-well roles; color value, labeled channels and existing popup actions |
+
+Validation uses AppKit's standard help/value-description attributes; it does not
+invent a platform-specific invalid-state selector. Portable snapshots retain the
+full `Validation` status/message/dirty state. Typed value controls still follow their
+current explicit ASCII/ISO grammar; broader value policies/localization remain M6.
+
+`Host::set_selected`/`set_check_state` assign a control's value without synthesizing
+an unrelated button click. Readonly, disabled, hidden, modal and stale targets are
+guarded. A selected radio/tab cannot be cleared by assigning false. Active table
+text editors retain the native value setter and shared validation/input APIs.
+
+Menu show actions are idempotent. A menu opener remains readable and linked during
+its own menu while input focus stays scoped. Expanded submenu panels belong to their
+menu items, not to an unrelated overlay/group. Cancel closes the current submenu
+before the root menu, respects Escape policy and cannot dismiss an inactive owner.
+Native parent links use the same readable scope as child enumeration. Count/range
+queries for tabs, selected children, contents, splitters and links agree with their
+direct array getters.
+
+`cargo run --example m5_semantics` demonstrates ordinary project-settings code with
+validation, numeric fields, tabs, menus and an alert. `--semantics` prints portable
+metadata. Five focused core tests cover annotations, exact assignments/guards,
+selection, menu paths and cancellation scope/policy. Run native protocol/action tests
+with `SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test control_accessibility --locked --offline`.
+They cover real roles/subroles, value/selection setters, validation/help, bounds,
+stepper links, tabs/split contents, menu identity/hierarchy, dialogs and color wells.
+Combined notifications and actual interactive VoiceOver/IME sessions remain M5.4/M5.5.
+
+The native mappings follow Apple's [accessibility protocol](https://developer.apple.com/documentation/appkit/nsaccessibilityprotocol)
+and [role/subrole definitions](https://developer.apple.com/documentation/appkit/nsaccessibility-swift.struct/subrole/toggle).

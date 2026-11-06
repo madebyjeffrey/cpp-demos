@@ -394,10 +394,11 @@ fn expand(item: Item, root: &Tokens) -> Result<Tokens> {
                     "key" | "width" | "height" | "wrap" | "align" | "justify" | "bold"
                     | "foreground" | "background" | "enabled" | "visible" | "hidden"
                     | "position" | "left" | "right" | "top" | "bottom" | "z_index"
-                    | "accessible_label" | "tooltip" | "on_context" | "autofocus" | "padding"
-                    | "margin" | "basis" | "align_self" | "accent" | "scroll_axes"
-                    | "scrollbars" | "density" | "text_wrap" | "text_overflow" | "text_align"
-                    | "max_lines" | "label_style" | "uppercase" | "orientation" => quote!(#expr),
+                    | "accessible_label" | "accessible_help" | "validation" | "tooltip"
+                    | "on_context" | "autofocus" | "padding" | "margin" | "basis"
+                    | "align_self" | "accent" | "scroll_axes" | "scrollbars" | "density"
+                    | "text_wrap" | "text_overflow" | "text_align" | "max_lines"
+                    | "label_style" | "uppercase" | "orientation" => quote!(#expr),
                     "max_length" | "undo_enabled" | "history_limit" | "read_only"
                         if matches!(
                             kind.as_str(),

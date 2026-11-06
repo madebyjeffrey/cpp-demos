@@ -49,9 +49,11 @@ pub struct Node {
     pub field_action_width: f64,
     pub multiline: bool,
     pub menu_root: bool,
+    pub context_menu: bool,
+    pub menu: Option<crate::MenuInfo>,
     pub menu_item: Option<crate::MenuItemInfo>,
     pub menu_panel: bool,
-    pub(crate) menu_path: Vec<String>,
+    pub menu_path: Vec<String>,
     pub overlay: Option<crate::OverlayOptions>,
     pub overlay_owner: Option<NodeId>,
     pub overlay_point: Option<crate::Point>,
@@ -76,6 +78,8 @@ pub struct Node {
     pub tree_item: Option<crate::TreeItem>,
     pub label: String,
     pub help: String,
+    pub validation: Option<crate::Validation>,
+    pub color_well: Option<crate::Color>,
     pub focused: bool,
     pub pressed: bool,
     pub hovered: bool,
@@ -427,6 +431,20 @@ impl Host {
         let Some((d, value)) = target else {
             return Ok(false);
         };
+        if d.read_only
+            && matches!(
+                d.kind,
+                Kind::Toggle
+                    | Kind::CheckBox
+                    | Kind::Switch
+                    | Kind::Radio
+                    | Kind::Segment
+                    | Kind::Tab
+                    | Kind::SplitDivider
+            )
+        {
+            return Ok(false);
+        }
         if let Some(cell) = &d.table_cell {
             return self.table_select_cell(id, cell, crate::ListSelection::Replace);
         }
@@ -699,6 +717,12 @@ fn mount(
             .map_or(0., |v| v.0.style.width.resolve(100.).unwrap_or(0.) + 6.),
         multiline: d.multiline,
         menu_root: d.menu.is_some(),
+        context_menu: d.context_menu.is_some(),
+        menu: d
+            .menu_trigger
+            .as_ref()
+            .map(|m| m.info(true))
+            .or_else(|| d.menu.as_ref().map(|m| m.info())),
         menu_item: d.menu_item.clone(),
         menu_panel: d.menu_panel,
         menu_path: d.menu_path.clone(),
@@ -732,7 +756,12 @@ fn mount(
         combo_toggle: d.combo_action.is_some(),
         tree_model: d.tree.clone(),
         tree_item: d.tree_item.clone(),
-        help: d.tooltip.clone(),
+        help: d
+            .accessible_help
+            .clone()
+            .unwrap_or_else(|| d.tooltip.clone()),
+        validation: d.validation.clone(),
+        color_well: d.color_well,
         label: if d.accessible.is_empty() {
             d.text.clone()
         } else {

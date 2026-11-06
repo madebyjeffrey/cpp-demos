@@ -61,23 +61,27 @@ impl Popup {
         self.menu.toggle()
     }
     pub fn modal(&self, title: impl Into<String>, body: View) -> View {
+        let title = title.into();
         if !self.open.get() {
             return View::fragment(vec![]);
         }
         let close = self.clone();
         let button = self.clone();
-        self.attach(View::modal(
-            vec![
-                View::panel(vec![
-                    View::label(title).font_size(22.).bold(true),
-                    body,
-                    View::button("Done", move || button.dismiss()),
-                ])
-                .padding(24.)
-                .width(400),
-            ],
-            move || close.dismiss(),
-        ))
+        self.attach(
+            View::modal(
+                vec![
+                    View::panel(vec![
+                        View::label(&title).font_size(22.).bold(true),
+                        body,
+                        View::button("Done", move || button.dismiss()),
+                    ])
+                    .padding(24.)
+                    .width(400),
+                ],
+                move || close.dismiss(),
+            )
+            .accessible_label(title),
+        )
     }
     pub fn popover(&self, anchor: impl Into<String>, body: View) -> View {
         if !self.open.get() {
@@ -107,17 +111,14 @@ pub fn dropdown(
     key: impl Into<String>,
 ) -> (View, View) {
     let key = key.into();
-    let toggle = popup.clone();
     let selected_label = options
         .iter()
         .find(|o| o.id == selected.get())
         .map(|o| o.label.as_str())
         .unwrap_or("");
-    let button = View::button(
-        format!("{}: {} ▾", label.into(), selected_label),
-        move || toggle.toggle(),
-    )
-    .key(&key);
+    let button = popup
+        .menu
+        .button(format!("{}: {} ▾", label.into(), selected_label), &key);
     let items = options
         .into_iter()
         .map(|o| {
@@ -143,11 +144,8 @@ pub fn split_button(
     popup: &Popup,
     key: impl Into<String>,
 ) -> View {
-    let open = popup.clone();
     View::row(vec![
         View::button(label, action).grow(1.),
-        View::button("▾", move || open.toggle())
-            .key(key.into())
-            .width(36),
+        popup.menu.button("▾", key.into()).width(36),
     ])
 }

@@ -1306,6 +1306,9 @@ fn main() {
             .start_edit(ui::TableCell::new("0", "name"))
             .unwrap();
         let field: Retained<AnyObject> = msg_send![native, accessibilityFocusedUIElement];
+        let allowed: bool =
+            msg_send![&*field,isAccessibilitySelectorAllowed:objc2::sel!(setAccessibilityValue:)];
+        assert!(allowed, "table text editors retain the native value setter");
         let empty = NSString::from_str("");
         let _: () = msg_send![&*field,setAccessibilityValue:&*empty];
         let _: () = msg_send![native,doCommandBySelector:objc2::sel!(insertNewline:)];

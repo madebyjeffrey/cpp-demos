@@ -24,6 +24,7 @@ extern crate self as scars_ui;
 
 mod alert;
 mod collections;
+mod control_semantics;
 mod deadlines;
 mod draft;
 mod editing;
@@ -61,7 +62,7 @@ pub use geometry::*;
 pub use host::{Error, Host, Node, NodeId};
 pub use input::{Key, KeyEvent, Modifiers, Pointer, PointerKind};
 pub use inspector::{Inspection, Inspector};
-pub use menu::{Menu, MenuAction, MenuItemInfo, SplitAction};
+pub use menu::{Menu, MenuAction, MenuInfo, MenuItemInfo, SplitAction};
 pub use metrics::*;
 pub use overlay::{DismissReason, OverlayFocus, OverlayOptions, OverlayPlacement, overlay_bounds};
 pub use presentation::*;

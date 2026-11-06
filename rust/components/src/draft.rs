@@ -409,6 +409,8 @@ pub struct StepperInfo {
     pub value: String,
     pub min: String,
     pub max: String,
+    pub can_increment: bool,
+    pub can_decrement: bool,
 }
 #[derive(Clone)]
 pub(crate) struct StepperData {
@@ -444,6 +446,7 @@ impl crate::Host {
 impl View {
     pub fn stepper<T: Number>(label: impl Into<String>, number: &Numeric<T>) -> Self {
         let label = label.into();
+        let validation = number.validation();
         let down = number.clone();
         let up = number.clone();
         let mut view = Self::row(vec![
@@ -464,6 +467,7 @@ impl View {
         ])
         .gap(4.)
         .width(72)
+        .validation(validation)
         .shrink(0.);
         let (read, change) = (number.clone(), number.clone());
         let d = Rc::make_mut(&mut view.0);
@@ -475,6 +479,8 @@ impl View {
                 value: read.value.get().to_string(),
                 min: read.min.to_string(),
                 max: read.max.to_string(),
+                can_increment: read.can_step(true),
+                can_decrement: read.can_step(false),
             }),
             change: Rc::new(move |increase| change.step(increase)),
         });
@@ -489,6 +495,7 @@ impl View {
             Self::label(&label),
             Self::row(vec![
                 Self::text_field("ASCII number", number.draft.binding())
+                    .validation(number.validation())
                     .accessible_label(&label)
                     .read_only(number.read_only)
                     .grow(1.)

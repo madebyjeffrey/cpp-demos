@@ -2,6 +2,7 @@ use super::*;
 use crate::ui;
 mod accessibility;
 mod collection_accessibility;
+mod control_accessibility;
 mod input;
 mod row_array;
 mod table_accessibility;

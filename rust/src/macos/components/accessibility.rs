@@ -25,7 +25,7 @@ fn semantic(n: &Node) -> bool {
                 | Kind::Separator
         )
 }
-fn tab_group(n: &Node, nodes: &[Node]) -> Option<NodeId> {
+pub(super) fn tab_group(n: &Node, nodes: &[Node]) -> Option<NodeId> {
     let mut parent = n.parent;
     while let Some(id) = parent {
         let node = nodes.iter().find(|n| n.id == id)?;
@@ -36,7 +36,32 @@ fn tab_group(n: &Node, nodes: &[Node]) -> Option<NodeId> {
     }
     None
 }
+fn menu_scope(n: &Node, nodes: &[Node]) -> Option<NodeId> {
+    if n.menu_root {
+        return Some(n.id);
+    }
+    let mut parent = n.parent;
+    while let Some(id) = parent {
+        let p = nodes.iter().find(|n| n.id == id)?;
+        if p.menu_root {
+            return Some(id);
+        }
+        parent = p.parent;
+    }
+    None
+}
 fn parent(n: &Node, nodes: &[Node]) -> Option<NodeId> {
+    if n.menu_panel && !n.menu_path.is_empty() {
+        return nodes
+            .iter()
+            .find(|item| {
+                item.menu_item
+                    .as_ref()
+                    .is_some_and(|info| info.path == n.menu_path)
+                    && menu_scope(item, nodes) == menu_scope(n, nodes)
+            })
+            .map(|n| n.id);
+    }
     if let Some(key) = &n.combo_owner {
         return nodes
             .iter()
@@ -79,8 +104,13 @@ pub(super) fn list(
         .filter(|n| {
             semantic(n)
                 && !super::table_accessibility::scaffold(&nodes, n, parent_id)
-                && m.host.in_scope(n.id)
-                && parent(n, &nodes).filter(|id| m.host.in_scope(*id)) == parent_id
+                && super::control_accessibility::readable(m, n, &nodes)
+                && parent(n, &nodes).filter(|id| {
+                    nodes
+                        .iter()
+                        .find(|n| n.id == *id)
+                        .is_some_and(|n| super::control_accessibility::readable(m, n, &nodes))
+                }) == parent_id
         })
         .map(|n| any(element(m, n.id)))
         .collect();
@@ -170,7 +200,7 @@ fn role(kind: Kind) -> &'static NSString {
             Kind::CheckBox | Kind::Switch => NSAccessibilityCheckBoxRole,
             Kind::Radio | Kind::Segment | Kind::Tab => NSAccessibilityRadioButtonRole,
             Kind::Tabs => NSAccessibilityTabGroupRole,
-            Kind::RadioGroup => NSAccessibilityRadioGroupRole,
+            Kind::RadioGroup | Kind::Segmented => NSAccessibilityRadioGroupRole,
             Kind::Slider => NSAccessibilitySliderRole,
             Kind::Stepper => NSAccessibilityIncrementorRole,
             Kind::Split => NSAccessibilitySplitGroupRole,
@@ -185,7 +215,7 @@ fn role(kind: Kind) -> &'static NSString {
 }
 pub(super) struct ElementIvars {
     pub(super) owner: Weak<Mounted>,
-    id: NodeId,
+    pub(super) id: NodeId,
 }
 define_class!(
     // SAFETY: NSAccessibilityElement is subclassable; selectors match AppKit's protocol.
@@ -208,7 +238,11 @@ define_class!(
         #[unsafe(method_id(accessibilityRole))]
         fn role(&self) -> Option<Retained<NSString>> {
             self.node().map(|n| {
-                if n.table_root.is_some() {unsafe {NSAccessibilityTableRole.retain()}}
+                if n.color_well.is_some(){unsafe{NSAccessibilityColorWellRole.retain()}}
+                else if n.table_root.is_some() {unsafe {NSAccessibilityTableRole.retain()}}
+                else if n.menu.as_ref().is_some_and(|m|m.trigger){unsafe{NSAccessibilityMenuButtonRole.retain()}}
+                else if n.kind==Kind::Modal&&n.anchor.is_some()&&!n.menu_root&&n.combo_popup.is_none(){unsafe{NSAccessibilityPopoverRole.retain()}}
+                else if n.kind==Kind::TextField&&n.multiline{unsafe{NSAccessibilityTextAreaRole.retain()}}
                 else if n.combo.is_some() {unsafe {NSAccessibilityComboBoxRole.retain()}}
                 else if n.menu_item.is_some() { unsafe { NSAccessibilityMenuItemRole.retain() } }
                 else if n.menu_panel { unsafe { NSAccessibilityMenuRole.retain() } }
@@ -220,17 +254,18 @@ define_class!(
                 }
             })
         }
+        #[unsafe(method_id(accessibilityRoleDescription))] fn role_description(&self)->Option<Retained<NSString>>{self.accessibilityRole().and_then(|role|NSAccessibilityRoleDescription(&role,self.accessibilitySubrole().as_deref()))}
         #[unsafe(method_id(accessibilityLabel))]
         fn label(&self) -> Option<Retained<NSString>> {
             self.node().map(|n| ns(&n.label))
         }
         #[unsafe(method_id(accessibilityHelp))]
         fn help(&self) -> Option<Retained<NSString>> {
-            self.node().and_then(|n| n.menu_item.filter(|m| !m.shortcut.is_empty()).map(|m| ns(&m.shortcut)).or_else(||(!n.help.is_empty()).then(||ns(&n.help))))
+            self.node().and_then(|n|super::control_accessibility::help(&n))
         }
         #[unsafe(method(isAccessibilityExpanded))]
         fn expanded(&self) -> bool {
-            self.node().is_some_and(|n| n.combo.as_ref().is_some_and(|c|c.open) || n.menu_item.is_some_and(|m|m.expanded))
+            self.node().is_some_and(|n| n.menu.as_ref().is_some_and(|m|m.trigger&&m.expanded)||n.combo.as_ref().is_some_and(|c|c.open) || n.menu_item.is_some_and(|m|m.expanded))
         }
         #[unsafe(method_id(accessibilityIdentifier))]
         fn identifier(&self) -> Option<Retained<NSString>> {
@@ -248,6 +283,7 @@ define_class!(
                 if let Some(parent)=super::table_accessibility::editor_parent(m,n){return Ok(parent)}
                 let nodes = m.host.snapshot()?;
                 Ok(parent(n, &nodes)
+                    .filter(|id|nodes.iter().find(|n|n.id==*id).is_some_and(|n|super::control_accessibility::readable(m,n,&nodes)))
                     .map(|id|super::table_accessibility::logical(m,id,false).or_else(||super::collection_accessibility::logical(m,id)).unwrap_or_else(||any(element(m,id))))
                     .unwrap_or_else(|| any(s.native_view().retain())))
             })
@@ -280,7 +316,8 @@ define_class!(
         fn linked(&self)->Option<Retained<NSArray<AnyObject>>> {
             self.with(|m,_,n|{
                 let nodes=m.host.snapshot()?;
-                let linked:Vec<_>=if n.combo.is_some(){nodes.iter().filter(|p|p.kind!=Kind::Modal&&p.combo_owner.as_ref()==n.key.as_ref()).map(|p|any(element(m,p.id))).collect()}
+                let linked:Vec<_>=if let Some(info)=&n.menu{nodes.iter().filter(|p|p.menu.as_ref().is_some_and(|other|other.id==info.id&&other.trigger!=info.trigger)).map(|p|any(element(m,p.id))).collect()}
+                else if n.combo.is_some(){nodes.iter().filter(|p|p.kind!=Kind::Modal&&p.combo_owner.as_ref()==n.key.as_ref()).map(|p|any(element(m,p.id))).collect()}
                 else {n.combo_owner.as_ref().and_then(|key|nodes.iter().find(|p|p.key.as_ref()==Some(key)&&p.combo.is_some())).map(|p|vec![any(element(m,p.id))]).unwrap_or_default()};
                 Ok(NSArray::from_retained_slice(&linked))
             })
@@ -288,7 +325,7 @@ define_class!(
         #[unsafe(method_id(accessibilityTabs))]
         fn tabs(&self)->Option<Retained<NSArray<AnyObject>>>{self.tab_elements(1)}
         #[unsafe(method_id(accessibilitySelectedChildren))]
-        fn selected_children(&self)->Option<Retained<NSArray<AnyObject>>>{self.table_array("AXSelectedChildren",0,usize::MAX).or_else(||self.combo_selected()).or_else(||self.collection_selected(0,usize::MAX)).or_else(||self.tab_elements(0))}
+        fn selected_children(&self)->Option<Retained<NSArray<AnyObject>>>{self.table_array("AXSelectedChildren",0,usize::MAX).or_else(||self.combo_selected()).or_else(||self.collection_selected(0,usize::MAX)).or_else(||self.choices(true)).or_else(||self.tab_elements(0))}
         #[unsafe(method_id(accessibilityContents))]
         fn contents(&self)->Option<Retained<NSArray<AnyObject>>>{self.tab_elements(2)}
         #[unsafe(method_id(accessibilityRows))]
@@ -316,7 +353,7 @@ define_class!(
         }
         #[unsafe(method_id(accessibilitySubrole))]
         fn subrole(&self)->Option<Retained<NSString>>{
-            self.node().and_then(|n|unsafe{if n.kind==Kind::Tab {Some(NSAccessibilityTabButtonSubrole.retain())}else{match n.field_kind{
+            self.node().and_then(|n|unsafe{if n.kind==Kind::Tab {Some(NSAccessibilityTabButtonSubrole.retain())}else if n.kind==Kind::Toggle{Some(NSAccessibilityToggleSubrole.retain())}else if n.kind==Kind::Modal&&n.anchor.is_none()&&!n.menu_root{Some(NSAccessibilityDialogSubrole.retain())}else{match n.field_kind{
                 ui::TextFieldKind::Password=>Some(NSAccessibilitySecureTextFieldSubrole.retain()),
                 ui::TextFieldKind::Search=>Some(NSAccessibilitySearchFieldSubrole.retain()),
                 _=>None,
@@ -350,7 +387,9 @@ define_class!(
         #[unsafe(method_id(accessibilityValue))]
         fn value(&self)->Option<Retained<AnyObject>>{
             self.node().filter(|n|!n.secure).and_then(|n|{
+                if let Some(color)=n.color_well{return Some(any(ns(&color.to_string())))}
                 if n.kind==Kind::Tabs{return self.tab_elements(0).and_then(|tabs|tabs.into_iter().next())}
+                if matches!(n.kind,Kind::RadioGroup|Kind::Segmented){return self.choices(true).and_then(|a|a.into_iter().next())}
                 if let Some(checked)=n.menu_item.as_ref().and_then(|m|m.checked){return Some(any(NSNumber::new_bool(checked)))}
                 if let Some(stepper)=&n.stepper{return numeric(&stepper.value)}
                 match n.value{
@@ -365,22 +404,9 @@ define_class!(
         }
         #[unsafe(method(setAccessibilityValue:))]
         unsafe fn set_value(&self, value: Option<&AnyObject>) {
-            self.with(|m, _, n| {
-                if let Some(text) = value.and_then(|v| v.downcast_ref::<NSString>()) {
-                    m.host.set_text(n.id, &text.to_string())
-                } else if let Some(number) = value.and_then(|v| v.downcast_ref::<NSNumber>()) {
-                    if matches!(n.kind,Kind::Slider|Kind::SplitDivider) {
-                        m.host.set_number(n.id, number.doubleValue())
-                    } else if n.value.selected() != number.boolValue() {
-                        m.host.activate(n.id)
-                    } else {
-                        Ok(false)
-                    }
-                } else {
-                    Ok(false)
-                }
-            });
+            self.set_control_value(value);
         }
+
         #[unsafe(method(accessibilityOrientation))]
         fn orientation(&self)->NSAccessibilityOrientation{
             if self.node().is_some_and(|n|n.kind==Kind::Tabs){return NSAccessibilityOrientation::Horizontal;}
@@ -388,7 +414,7 @@ define_class!(
         }
         #[unsafe(method_id(accessibilityValueDescription))]
         fn value_description(&self)->Option<Retained<NSString>>{
-            self.node().filter(|n|n.kind==Kind::SplitDivider).and_then(|n|n.split).map(|s|ns(&match s.collapsed{ui::SplitPane::First=>"First pane collapsed".into(),ui::SplitPane::Second=>"Second pane collapsed".into(),ui::SplitPane::None=>format!("{:.0} points",if s.orientation==ui::Orientation::Horizontal{s.first.width}else{s.first.height})}))
+            self.node().and_then(|n|super::control_accessibility::description(&n))
         }
         #[unsafe(method_id(accessibilityPreviousContents))]
         fn previous_contents(&self)->Option<Retained<NSArray<AnyObject>>>{self.split_contents(true)}
@@ -399,7 +425,7 @@ define_class!(
             self.with(|m,_,n|Ok(if n.kind==Kind::Split{Some(NSArray::from_retained_slice(&m.host.snapshot()?.iter().filter(|child|child.parent==Some(n.id) && child.kind==Kind::SplitDivider && !child.hidden).map(|child|any(element(m,child.id))).collect::<Vec<_>>()))}else{None})).flatten()
         }
         #[unsafe(method(isAccessibilityModal))]
-        fn modal(&self) -> bool { self.node().is_some_and(|n| n.alert) }
+        fn modal(&self) -> bool { self.node().is_some_and(|n| n.kind==Kind::Modal&&!n.menu_root&&n.combo_popup.is_none()&&n.overlay.is_none_or(|o|o.focus==ui::OverlayFocus::Content)) }
         #[unsafe(method_id(accessibilityDefaultButton))]
         fn default_button(&self) -> Option<Retained<AnyObject>> { self.alert_button(ui::AlertActionRole::Default) }
         #[unsafe(method_id(accessibilityCancelButton))]
@@ -416,7 +442,7 @@ define_class!(
         }
         #[unsafe(method(accessibilityPerformPress))]
         fn press(&self) -> bool {
-            self.with(|m, _, n| m.host.activate(n.id)).unwrap_or(false)
+            self.with(|m, _, n| if n.menu.as_ref().is_some_and(|i|i.trigger){m.host.show_menu(n.id)}else{m.host.activate(n.id)}).unwrap_or(false)
         }
         #[unsafe(method(accessibilityPerformIncrement))]
         fn increment(&self) -> bool {
@@ -426,6 +452,14 @@ define_class!(
         fn decrement(&self) -> bool {
             self.adjust(-1.)
         }
+        #[unsafe(method(accessibilityPerformShowMenu))] fn show_menu(&self)->bool{self.with(|m,_,n|m.host.show_menu(n.id)).unwrap_or(false)}
+        #[unsafe(method(accessibilityPerformCancel))] fn cancel(&self)->bool{self.with(|m,_,n|m.host.cancel_presentation(n.id)).unwrap_or(false)}
+        #[unsafe(method(accessibilityPerformConfirm))] fn confirm(&self)->bool{self.confirm_control()}
+        #[unsafe(method(isAccessibilitySelected))] fn selected(&self)->bool{self.node().is_some_and(|n|n.menu_item.and_then(|i|i.checked).unwrap_or_else(||n.value.selected()))}
+        #[unsafe(method(setAccessibilitySelected:))] fn set_selected(&self,v:bool){self.with(|m,_,n|if matches!(n.kind,Kind::Tab|Kind::Radio|Kind::Segment){m.host.set_selected(n.id,v)}else{Ok(false)});}
+        #[unsafe(method(setAccessibilitySelectedChildren:))] fn set_selected_children(&self,v:Option<&NSArray<AnyObject>>){self.set_choice_children(v)}
+        #[unsafe(method_id(accessibilityIncrementButton))] fn increment_button(&self)->Option<Retained<AnyObject>>{self.step_button(true)}
+        #[unsafe(method_id(accessibilityDecrementButton))] fn decrement_button(&self)->Option<Retained<AnyObject>>{self.step_button(false)}
         #[unsafe(method_id(accessibilityPlaceholderValue))]
         fn placeholder(&self) -> Option<Retained<NSString>> {
             self.node()
@@ -522,6 +556,7 @@ define_class!(
                     b"setAccessibilitySelectedRows:"=>n.enabled&&n.tree_model.is_some(),
                     b"accessibilityPerformPress" => {
                         n.enabled
+                            && (!n.read_only||matches!(n.kind,Kind::Button|Kind::TextField))
                             && matches!(
                                 n.kind,
                                 Kind::Button
@@ -532,26 +567,17 @@ define_class!(
                                     | Kind::Segment
                                     | Kind::Switch
                                     | Kind::TextField
+                                    | Kind::SplitDivider
                             )
                     }
-                    b"setAccessibilityValue:" => {
-                        n.enabled
-                            && !n.read_only
-                            && matches!(
-                                n.kind,
-                                Kind::TextField
-                                    | Kind::Slider
-                                    | Kind::Toggle
-                                    | Kind::CheckBox
-                                    | Kind::Radio
-                                    | Kind::Segment
-                                    | Kind::Tab
-                                    | Kind::Switch
-                            )
-                    }
-                    b"accessibilityPerformIncrement" | b"accessibilityPerformDecrement" => {
-                        n.enabled && !n.read_only && n.kind == Kind::Slider
-                    }
+                    b"setAccessibilityValue:"=>super::control_accessibility::can_set(&n),
+                    b"accessibilityPerformIncrement"=>super::control_accessibility::can_adjust(&n,true),
+                    b"accessibilityPerformDecrement"=>super::control_accessibility::can_adjust(&n,false),
+                    b"accessibilityPerformShowMenu"=>n.enabled&&(n.context_menu||n.menu.as_ref().is_some_and(|m|m.trigger)||n.menu_item.as_ref().is_some_and(|m|m.submenu)),
+                    b"accessibilityPerformCancel"=>self.with(|m,_,node|Ok(super::control_accessibility::can_cancel(m,node))).unwrap_or(false),
+                    b"accessibilityPerformConfirm"=>n.enabled&&((n.alert&&self.accessibilityDefaultButton().is_some())||matches!(n.kind,Kind::Tab|Kind::Radio|Kind::Segment)),
+                    b"setAccessibilitySelectedChildren:"=>n.enabled&&!n.read_only&&matches!(n.kind,Kind::Tabs|Kind::RadioGroup|Kind::Segmented),
+                    b"setAccessibilitySelected:"=>n.enabled&&!n.read_only&&matches!(n.kind,Kind::Tab|Kind::Radio|Kind::Segment),
                     _ => true,
                 })
         }
@@ -561,6 +587,7 @@ define_class!(
         fn array_count(&self, attribute: &NSString) -> usize {
             let name=attribute.to_string();
             if let Some(count)=self.table_count(&name){return count}
+            if let Some(array)=self.control_array(&name){return array.len()}
             if matches!(name.as_str(), "AXChildren" | "AXRows") {
                 self.node().and_then(|n|n.collection).map_or_else(||self.accessibilityChildren().map_or(0,|v|v.len()),|m|m.len())
             } else if name=="AXSelectedRows"||name=="AXSelectedChildren" {self.node().and_then(|n|n.collection).map_or_else(||self.accessibilitySelectedChildren().map_or(0,|a|a.len()),|m|m.selection_count())}
@@ -577,7 +604,7 @@ define_class!(
             count: usize,
         ) -> Option<Retained<NSArray<AnyObject>>> {
             let name=attribute.to_string();
-            self.table_array(&name,index,count).or_else(||{if matches!(name.as_str(), "AXChildren" | "AXRows") {
+            self.table_array(&name,index,count).or_else(||self.control_range(&name,index,count)).or_else(||{if matches!(name.as_str(), "AXChildren" | "AXRows") {
                 self.row_array(index, count)
             } else if name=="AXSelectedRows"||name=="AXSelectedChildren" {self.collection_selected(index,count)}
             else if name=="AXVisibleRows" {self.rows_visible(index,count)}
@@ -660,11 +687,15 @@ impl Element {
     ) -> Option<T> {
         let m = self.ivars().owner.upgrade()?;
         m.run(|m, s| {
-            let node = m
-                .host
-                .snapshot()?
-                .into_iter()
-                .find(|n| n.id == self.ivars().id && semantic(n) && m.host.in_scope(n.id));
+            let nodes = m.host.snapshot()?;
+            let node = nodes
+                .iter()
+                .find(|n| {
+                    n.id == self.ivars().id
+                        && semantic(n)
+                        && super::control_accessibility::readable(m, n, &nodes)
+                })
+                .cloned();
             node.map(|n| f(m, s, &n)).transpose()
         })
         .flatten()
@@ -736,6 +767,9 @@ impl Element {
     }
     fn adjust(&self, delta: f64) -> bool {
         self.with(|m, _, n| {
+            if !super::control_accessibility::can_adjust(n, delta > 0.) {
+                return Ok(false);
+            }
             if n.kind == Kind::Stepper {
                 return m.host.step_control(n.id, delta > 0.);
             }

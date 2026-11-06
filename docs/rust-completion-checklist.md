@@ -465,7 +465,7 @@ Implement semantics alongside M1–M4; this milestone closes their combined audi
 
 - [x] **M5.1 Tree semantics:** hierarchy, disclosure level, expanded/loading state and expand/collapse actions for logical offscreen items, with correct parent and selection relationships.
 - [x] **M5.2 Table semantics:** columns, cells, headers, row/cell selection, editing and sort information; indexed queries must remain bounded and avoid creating the full table.
-- [ ] **M5.3 Control/presentation semantics:** correct menu, tab, split, alert, validation, help and value roles/states/actions, rather than exposing every composition merely as generic groups/buttons.
+- [x] **M5.3 Control/presentation semantics:** correct menu, tab, split, alert, validation, help and value roles/states/actions, rather than exposing every composition merely as generic groups/buttons.
 - [ ] **M5.4 Lifecycle/notifications:** stable logical identity, native focus/selection/value/layout notifications and coordinate conversion; retained objects become inert after removal, unmount or close, including nested presentations.
 - [ ] **M5.5 Interactive audit:** record actual VoiceOver and IME sessions covering navigation, editing, popup/sheet transitions, password reveal and candidate placement at both backing scales. Fix issues found; keep unavailable checks open.
 
@@ -495,7 +495,7 @@ Completion record:
   Dark/light previews inspected and native smoke passes. Combined notification and
   interactive VoiceOver/IME audits remain open under M5.4/M5.5.
 
-- M5.2: one AXTable exposes keyed rows/cells/columns, a header group, header links,
+- M5.2 (`2569c73`): one AXTable exposes keyed rows/cells/columns, a header group, header links,
   live indexes, row/cell selection, sort direction/precedence and validated editing.
   Ordinary child traversal and table-specific attributes share proxies. Resize and
   custom controls remain actionable; native focus/hit testing preserves custom
@@ -520,6 +520,34 @@ Completion record:
   the portable example; `m4_table` and `m4_table_edit` provide native demonstrations.
   Dark/light previews inspected and native example smoke passes. Actual interactive
   VoiceOver/IME and combined notifications remain M5.4/M5.5.
+
+- M5.3: fields/editors, toggles/checks/radios/segments, steppers/sliders, tabs,
+  splits, menus, dialogs/alerts, popovers and color wells expose their native
+  roles/subroles and current values/actions. Stepper button links and directional
+  availability, split bounds/adjacent contents, choice selection and alert
+  default/cancel semantics use guarded host actions. Readonly controls cannot
+  mutate through native press/value assignment; real table text editors retain
+  their native value setter and shared input/validation path.
+- `accessible_help` and `validation` work in builders/macros; numeric/value fields
+  attach validation automatically. Standard help/value descriptions carry validation
+  and instructions while snapshots preserve typed status/dirty/message metadata.
+  Color channels and civil fields have explicit labels; color wells carry their
+  value. Expanded submenu panels have their item as parent. Menu openers remain
+  readable/linked during their own menu; show is idempotent, cancellation closes
+  submenu levels first and respects active scope and Escape policy. Parent/child
+  enumeration uses consistent readable scope.
+- Evidence: five focused core semantic tests plus existing control/numeric/value/
+  menu/tab/split tests; dedicated AppKit tests verify roles/descriptions, exact
+  values, validation/help, choice setters, bounds/actions, menu hierarchy/owner
+  identity, dialog policies and color wells. Existing native component/tree/table
+  suites pass, including marked table edits and a regression asserting the editor's
+  value setter remains available. Native sheet action/input/ownership tests pass;
+  their foreground key-window audit was explicitly not run. Workspace tests,
+  strict Clippy, portable compilation, formatting and inventory mapping pass.
+  `m5_semantics` supplies concise settings composition and a `--semantics` dump;
+  dark/light previews inspected and native smoke passes. Count/range queries for
+  tabs, selected children and splitters match their direct getters in native tests.
+  Actual interactive/foreground and combined notification audits remain M5.4/M5.5/M8.
 
 ## M6 — Localization and complete value controls
 

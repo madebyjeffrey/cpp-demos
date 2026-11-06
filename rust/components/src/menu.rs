@@ -105,12 +105,28 @@ pub struct Menu {
     path: State<Vec<String>>,
     typing: Rc<RefCell<Typeahead>>,
 }
+/// Callback-free identity/state for native semantic relationships.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MenuInfo {
+    pub id: u64,
+    pub expanded: bool,
+    pub trigger: bool,
+    pub path: Vec<String>,
+}
 impl Default for Menu {
     fn default() -> Self {
         Self::new()
     }
 }
 impl Menu {
+    pub(crate) fn info(&self, trigger: bool) -> MenuInfo {
+        MenuInfo {
+            id: self.id,
+            expanded: self.open.get(),
+            trigger,
+            path: self.path.get(),
+        }
+    }
     pub fn new() -> Self {
         Self {
             open: State::new(false),
@@ -171,7 +187,9 @@ impl Menu {
     /// An anchored trigger with no application-side clone/callback plumbing.
     pub fn button(&self, label: impl Into<String>, anchor: impl Into<String>) -> View {
         let menu = self.clone();
-        View::button(label, move || menu.toggle()).key(anchor.into())
+        let mut button = View::button(label, move || menu.toggle()).key(anchor.into());
+        Rc::make_mut(&mut button.0).menu_trigger = Some(self.clone());
+        button
     }
     pub fn view(&self, anchor: impl Into<String>, items: Vec<MenuAction>) -> View {
         self.build(anchor.into(), items, None)
@@ -288,6 +306,11 @@ pub(crate) struct MenuData {
     items: Vec<MenuAction>,
     select: Option<Rc<dyn Fn(Vec<String>)>>,
 }
+impl MenuData {
+    pub(crate) fn info(&self) -> MenuInfo {
+        self.model.info(false)
+    }
+}
 fn find<'a>(items: &'a [MenuAction], path: &[String]) -> Option<&'a MenuAction> {
     let (id, rest) = path.split_first()?;
     let item = items.iter().find(|a| a.id == *id && a.selectable())?;
@@ -373,12 +396,9 @@ impl SplitAction {
         } else {
             View::button("No action", || {}).enabled(false)
         };
-        let toggle = self.menu.clone();
         let button = View::row(vec![
             primary.key("$primary").grow(1.),
-            View::button("▾", move || toggle.toggle())
-                .width(36)
-                .key(&key),
+            self.menu.button("▾", &key).width(36).key(&key),
         ]);
         let selected = self.selected.clone();
         let overlay = self.menu.build(
@@ -391,6 +411,89 @@ impl SplitAction {
 }
 
 impl Host {
+    /// Show a menu idempotently; never turn an already-open trigger into a close.
+    pub fn show_menu(&self, id: NodeId) -> Result<bool, Error> {
+        self.refresh()?;
+        let (node, trigger) = {
+            let m = self.0.mounted.borrow();
+            let Some(node) = m
+                .nodes
+                .iter()
+                .find(|n| n.id == id && n.enabled && !n.hidden && !n.layout_hidden)
+            else {
+                return Ok(false);
+            };
+            (
+                node.clone(),
+                m.descriptions.get(&id).and_then(|d| d.menu_trigger.clone()),
+            )
+        };
+        if let Some(menu) = trigger {
+            if let Some(active) = self.current_menu() {
+                return Ok(active.model.identity() == menu.identity());
+            }
+            if !self.in_scope(id) {
+                return Ok(false);
+            }
+            menu.show();
+            self.redraw();
+            return Ok(true);
+        }
+        if !self.in_scope(id) {
+            return Ok(false);
+        }
+        if node.menu_item.is_some_and(|m| m.submenu) {
+            self.activate(id)
+        } else {
+            self.show_context_menu(id, None)
+        }
+    }
+    /// Cancel only the current presentation. Nested dialogs cannot dismiss an owner.
+    pub fn cancel_presentation(&self, id: NodeId) -> Result<bool, Error> {
+        self.refresh()?;
+        let Some(scope) = self.active_modal() else {
+            return Ok(false);
+        };
+        let allowed = self.0.mounted.borrow().nodes.iter().any(|n| {
+            n.id == id
+                && n.enabled
+                && !n.hidden
+                && self.in_scope(id)
+                && (n.id == scope || n.menu_panel || n.menu_item.is_some())
+        });
+        if !allowed {
+            return Ok(false);
+        }
+        if let Some(menu) = self.current_menu() {
+            let path = menu.model.path.get();
+            if !path.is_empty() {
+                menu.model.path.set(path[..path.len() - 1].to_vec());
+                self.refresh()?;
+                if let Some(row) = self
+                    .menu_rows(path.len() - 1)
+                    .into_iter()
+                    .find(|n| n.menu_item.as_ref().is_some_and(|m| m.path == path))
+                {
+                    self.focus(row.id)?;
+                }
+                self.redraw();
+                return Ok(true);
+            }
+        }
+        let dismiss = self
+            .0
+            .mounted
+            .borrow()
+            .descriptions
+            .get(&scope)
+            .and_then(|d| d.overlay.as_ref())
+            .is_some_and(|o| o.options.dismiss_on_escape);
+        if dismiss {
+            self.dismiss_overlay(scope, crate::DismissReason::Escape)
+        } else {
+            Ok(false)
+        }
+    }
     fn current_menu(&self) -> Option<MenuData> {
         let id = self.active_modal()?;
         self.0.mounted.borrow().descriptions.get(&id)?.menu.clone()

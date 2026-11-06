@@ -140,6 +140,11 @@ selection and loading/failure descriptions, including offscreen rows. Run
 The native suite is `SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test tree_accessibility`.
 See the [tree semantic contracts](../rust/components/README.md#completion-m5--tree-semantics).
 
+`cargo run --example m5_semantics` is a compact settings example combining tabs,
+menus, validated fields and an alert. Numeric/value fields expose validation
+without extra wiring; ordinary fields accept `validation:` and `accessible_help:`.
+`--semantics` prints metadata. See the [control semantic contracts](../rust/components/README.md#completion-m5--control-and-presentation-semantics).
+
 `view!` supports ordinary expressions, `if`/`else`, keyed `for` loops, custom
 functions returning `View`, and `embed(view)` for an already-built value. Unknown
 properties fail compilation. Use stable keys for reordered items; unkeyed identity

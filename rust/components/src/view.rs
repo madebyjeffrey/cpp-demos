@@ -133,6 +133,7 @@ pub(crate) struct Description {
     pub overlay_parent: bool,
     pub context_menu: Option<crate::Menu>,
     pub menu: Option<crate::menu::MenuData>,
+    pub menu_trigger: Option<crate::Menu>,
     pub menu_item: Option<crate::MenuItemInfo>,
     pub menu_panel: bool,
     pub menu_path: Vec<String>,
@@ -151,6 +152,9 @@ pub(crate) struct Description {
     pub tree_action: Option<crate::collections::TreeAction>,
     pub collection_row: Option<(crate::ListModel, String, u64, u64)>,
     pub tooltip: String,
+    pub accessible_help: Option<String>,
+    pub validation: Option<crate::Validation>,
+    pub color_well: Option<crate::Color>,
     pub tooltip_options: crate::TooltipOptions,
     pub tooltip_close: Option<crate::overlay::DismissCallback>,
     pub rich: Option<Vec<crate::rich_text::Run>>,
@@ -196,6 +200,7 @@ impl View {
             overlay_parent: false,
             context_menu: None,
             menu: None,
+            menu_trigger: None,
             menu_item: None,
             menu_panel: false,
             menu_path: vec![],
@@ -214,6 +219,9 @@ impl View {
             tree_action: None,
             collection_row: None,
             tooltip: String::new(),
+            accessible_help: None,
+            validation: None,
+            color_well: None,
             tooltip_options: Default::default(),
             tooltip_close: None,
             rich: None,
@@ -281,6 +289,16 @@ impl View {
     }
     pub fn tooltip(mut self, text: impl Into<String>) -> Self {
         Rc::make_mut(&mut self.0).tooltip = text.into();
+        self
+    }
+    /// Assistive instructions independent of the visual tooltip.
+    pub fn accessible_help(mut self, text: impl Into<String>) -> Self {
+        Rc::make_mut(&mut self.0).accessible_help = Some(text.into());
+        self
+    }
+    /// Expose model validation on the control without changing its visual layout.
+    pub fn validation(mut self, value: crate::Validation) -> Self {
+        Rc::make_mut(&mut self.0).validation = Some(value);
         self
     }
     pub fn on_context(mut self, action: impl Fn() + 'static) -> Self {

@@ -43,14 +43,18 @@ pub fn value_field<T: Clone + PartialEq + 'static>(
     label: impl Into<String>,
     draft: &Draft<T>,
 ) -> View {
+    let label = label.into();
     let commit = draft.clone();
     let apply = draft.clone();
     let cancel = draft.clone();
     let mut children = vec![
-        View::label(label),
-        View::text_field("", draft.binding()).on_submit(move || {
-            commit.commit();
-        }),
+        View::label(&label),
+        View::text_field("", draft.binding())
+            .accessible_label(label)
+            .validation(draft.validation())
+            .on_submit(move || {
+                commit.commit();
+            }),
         View::row(vec![
             View::button("Apply", move || {
                 apply.commit();
@@ -100,7 +104,9 @@ impl ColorPicker {
             );
             children.push(View::row(vec![
                 View::label(label).width(48),
-                View::slider(binding, 0., 255., 1.).grow(1.),
+                View::slider(binding, 0., 255., 1.)
+                    .accessible_label(label)
+                    .grow(1.),
             ]));
         }
         children.push(value_field("sRGB · #RRGGBBAA", &self.draft));
@@ -108,12 +114,13 @@ impl ColorPicker {
     }
     pub fn well(&self, popup: &crate::Popup, key: &str) -> (View, View) {
         let open = popup.clone();
-        (
-            View::button(self.value.get().to_string(), move || open.show())
-                .key(key)
-                .background(self.value.get().0),
-            popup.modal("Color", self.view()),
-        )
+        let color = self.value.get();
+        let mut button = View::button(color.to_string(), move || open.show())
+            .key(key)
+            .background(color.0)
+            .accessible_label("Color");
+        std::rc::Rc::make_mut(&mut button.0).color_well = Some(color);
+        (button, popup.modal("Color", self.view()))
     }
 }
 #[derive(Clone)]
@@ -174,6 +181,7 @@ impl DatePicker {
                     View::button(number.to_string(), move || value.set(date))
                         .width(crate::percent(100. / 7.))
                         .bold(date == self.value.get())
+                        .accessible_label(date.to_string())
                         .tooltip(date.to_string()),
                 );
             }
