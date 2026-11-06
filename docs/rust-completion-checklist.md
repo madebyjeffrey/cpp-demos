@@ -590,6 +590,16 @@ Run examples with `cargo run --example NAME --locked --offline` from `rust/`.
 The sheet foreground harness is `SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test sheets --locked --offline -- --foreground`.
 Protocol composition tests and synthetic raster scales do not close this audit.
 
+User-assisted session, 2026-11-06: macOS 27.2, PA278CV at actual backing scale 1,
+Canadian keyboard layout (system reads). The user reports the `m5_semantics`
+settings navigation/focus-return check passed, but flagged verbose application
+information: “collapsed” on Options and “selected collapsed tab 1 of 2.” Options
+is a menu opener and legitimately has expansion state. Tabs must not expose it.
+The native selector check reproduced that defect. A separate hidden-window test
+also reproduced redundant initial text-selection and focus notifications on entry.
+Both fixes pass the hidden native regression; actual speech recheck remains pending. Other matrix
+sessions, composing IME candidate placement and actual scale 2 remain open.
+
 ## M6 — Localization and complete value controls
 
 - [x] **M6.1 Editable format policy:** specify supported locale/grammar combinations, display/edit round trips and unsupported-format behavior. Preserve an explicit ASCII/ISO mode; do not silently guess ambiguous grouping or dates.

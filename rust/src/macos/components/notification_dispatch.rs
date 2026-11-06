@@ -294,10 +294,11 @@ impl Mounted {
         }
         unsafe {
             if let Some(current) = &text {
-                if old.text.as_ref().is_none_or(|old| {
-                    old.id != current.id
-                        || old.selection != current.selection
-                        || old.marked != current.marked
+                // Focus announces the field and its initial value/selection. Only
+                // subsequent changes within that same field need a selection post.
+                if old.text.as_ref().is_some_and(|old| {
+                    old.id == current.id
+                        && (old.selection != current.selection || old.marked != current.marked)
                 }) {
                     let object = accessibility::element(self, current.id);
                     self.post_notification(&object, NSAccessibilitySelectedTextChangedNotification);

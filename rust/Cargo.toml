@@ -102,3 +102,8 @@ harness = false
 name = "localized_values"
 path = "tests/localized_values.rs"
 harness = false
+
+[[test]]
+name = "accessibility_focus"
+path = "tests/accessibility_focus.rs"
+harness = false
