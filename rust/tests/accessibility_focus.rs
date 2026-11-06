@@ -111,13 +111,23 @@ fn main() {
         }
     }
     unsafe {
-        let tab = find(native, "First").unwrap();
-        let expanded: bool =
-            msg_send![&*tab,isAccessibilitySelectorAllowed:objc2::sel!(isAccessibilityExpanded)];
-        assert!(
-            !expanded,
-            "a tab must not expose a collapsed/expanded state"
-        );
+        let first = find(native, "First").unwrap();
+        let second = find(native, "Second").unwrap();
+        for tab in [&first, &second] {
+            let expanded: bool = msg_send![&**tab,isAccessibilitySelectorAllowed:objc2::sel!(isAccessibilityExpanded)];
+            assert!(
+                !expanded,
+                "selected and unselected tabs must omit expansion state"
+            );
+        }
+        let changed: bool = msg_send![&*second, accessibilityPerformPress];
+        assert!(changed);
+        for (tab, expected) in [(&first, false), (&second, true)] {
+            let selected: bool = msg_send![&**tab, isAccessibilitySelected];
+            assert_eq!(selected, expected);
+            let expanded: bool = msg_send![&**tab,isAccessibilitySelectorAllowed:objc2::sel!(isAccessibilityExpanded)];
+            assert!(!expanded, "switching tabs must not add expansion state");
+        }
         let menu = find(native, "Options").unwrap();
         let expanded: bool =
             msg_send![&*menu,isAccessibilitySelectorAllowed:objc2::sel!(isAccessibilityExpanded)];

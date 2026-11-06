@@ -605,6 +605,10 @@ Follow-up: the running `m5_semantics` process was confirmed to have started befo
 regression passed again. Speech from that restarted process is still awaiting the
 user's report; the earlier utterance is not evidence against the rebuilt version.
 
+The hidden native regression also checks both selected and unselected tabs before
+and after a tab switch: selection updates while the expansion selector remains
+unavailable. This protocol evidence does not substitute for the speech recheck.
+
 ## M6 — Localization and complete value controls
 
 - [x] **M6.1 Editable format policy:** specify supported locale/grammar combinations, display/edit round trips and unsupported-format behavior. Preserve an explicit ASCII/ISO mode; do not silently guess ambiguous grouping or dates.
