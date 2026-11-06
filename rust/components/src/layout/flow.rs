@@ -173,7 +173,7 @@ impl Tree<'_> {
         let mut paragraph = self.layouts[&n.id].clone();
         let mut natural;
         let mut baseline = s.padding.top;
-        if n.kind == Kind::Tabs {
+        if matches!(n.kind, Kind::Tabs | Kind::PageStack) {
             natural = self.reflow_tabs(i, inner, inner_height, nodes)?;
             baseline = s.padding.top;
         } else if n.kind == Kind::Split {

@@ -137,28 +137,6 @@ impl Default for Popup {
     }
 }
 
-pub fn wizard(step: &State<usize>, pages: Vec<View>) -> View {
-    let count = pages.len();
-    let current = step.get().min(count.saturating_sub(1));
-    let back = step.clone();
-    let next = step.clone();
-    let content = pages
-        .into_iter()
-        .nth(current)
-        .unwrap_or_else(|| View::label("No steps"));
-    View::column(vec![
-        View::label(format!("Step {} of {}", current + 1, count)),
-        content.grow(1.),
-        View::row(vec![
-            View::button("Back", move || back.update(|n| *n = n.saturating_sub(1)))
-                .enabled(current > 0),
-            View::button("Next", move || {
-                next.update(|n| *n = (*n + 1).min(count.saturating_sub(1)))
-            })
-            .enabled(current + 1 < count),
-        ]),
-    ])
-}
 pub fn split_button(
     label: impl Into<String>,
     action: impl Fn() + 'static,

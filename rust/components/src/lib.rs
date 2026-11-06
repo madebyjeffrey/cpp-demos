@@ -47,6 +47,7 @@ mod text_buffer;
 mod tooltip;
 mod values;
 mod view;
+mod wizard;
 
 pub use collections::*;
 pub use draft::{
@@ -73,3 +74,7 @@ pub use text_buffer::{Selection, TextBuffer, TextCommand, TextOptions};
 pub use tooltip::{TooltipOptions, TooltipPresentation};
 pub use values::*;
 pub use view::{CheckState, Kind, OptionItem, Value, View};
+pub use wizard::{
+    Wizard, WizardChange, WizardInfo, WizardIssue, WizardOptions, WizardStep, WizardStepInfo,
+    wizard, wizard_navigation, wizard_view,
+};

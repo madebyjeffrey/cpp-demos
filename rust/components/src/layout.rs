@@ -356,6 +356,8 @@ fn container(kind: Kind) -> bool {
             | Kind::Row
             | Kind::Stepper
             | Kind::Tabs
+            | Kind::PageStack
+            | Kind::Wizard
             | Kind::TabPanel
             | Kind::Split
             | Kind::Block
@@ -462,7 +464,7 @@ impl Tree<'_> {
                 self.measure_node(child, Size::new(inner, 24.), text, nodes)?;
             }
         }
-        let mut size = if n.kind == Kind::Tabs {
+        let mut size = if matches!(n.kind, Kind::Tabs | Kind::PageStack) {
             self.measure_tabs(i, Size::new(inner, available.height), text, nodes)?
         } else if n.kind == Kind::Split {
             self.measure_split(i, Size::new(inner, f64::INFINITY), text, nodes)?
@@ -731,7 +733,7 @@ impl Tree<'_> {
             return self.arrange_popover(i, bounds, nodes);
         }
         let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
-        if n.kind == Kind::Tabs {
+        if matches!(n.kind, Kind::Tabs | Kind::PageStack) {
             self.arrange_tabs(i, content, nodes)?;
         } else if n.kind == Kind::Split {
             self.arrange_split(i, content, nodes)?;

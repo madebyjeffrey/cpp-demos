@@ -33,7 +33,7 @@ overall goal complete while an in-scope item remains open.
 | State and descriptions | Reactive bindings, keys, macro conditions/repetition, host identity and inventory mapping | Ergonomic coverage of remaining component behaviors |
 | Layout and basic controls | Inventory, constrained layout, rich text, style coverage and two-axis scrolling verified | Final cross-component visual/semantic audit in M5/M8 |
 | Editing | Shared buffer, visual navigation/gestures, search/password/numeric policies and held steppers | Localization/value-control expansion in M6; final interactive IME audit in M5 |
-| Presentation | Retained splits, hierarchical menus/split actions, configured portals/help, nested focus scopes and retained tab pages | Wizard policy and presentation transactions |
+| Presentation | Retained splits, hierarchical menus/split actions, configured portals/help, nested focus scopes, retained tabs and validated wizard flows | Alert and sheet completion transactions |
 | Collections | Fixed-height virtualization, keyed selection, basic trees/tables, cell conflict checks | Lazy tree lifecycle, cell/column interactions, richer selection and semantics |
 | Values and tooling | Typed drafts, sRGB/hex, calendar, ISO/zoned editing, picking/width overrides | Complete value-control policies and inspector/Lab coverage |
 | Verification | Core/CPU tests and native input/accessibility protocol tests | Interactive audits, final visible GPU/full-screen runs and repeatable checks |
@@ -175,7 +175,7 @@ Completion record:
 - [x] **M3.2 Menus and split actions:** separators, checked/radio items, nested submenus, shortcut labels, disabled-item navigation, typeahead and complete open/close/activation behavior; a split action can retain its chosen primary action.
 - [x] **M3.3 Overlay policy:** configurable placement, sizing, viewport fitting, focus preservation and dismissal callbacks for popovers/tooltips/context menus, including nested scopes and owner removal.
 - [x] **M3.4 Tabs:** stable page identity, enabled tabs, keyboard navigation and restoration of editor history, selection, scroll and focus after switching pages. Application model state alone does not satisfy this item.
-- [ ] **M3.5 Wizards:** stable step IDs, validation that can block navigation, back/review policy, finish/cancel/change callbacks and valid behavior for empty/changed step sets.
+- [x] **M3.5 Wizards:** stable step IDs, validation that can block navigation, back/review policy, finish/cancel/change callbacks and valid behavior for empty/changed step sets.
 - [ ] **M3.6 Alerts and sheets:** an explicit result/completion transaction with default/cancel/destructive actions; exactly-once completion through action, Escape, dismiss, close and destruction. Demonstrate native parent-sheet isolation and focus restoration.
 
 Evidence: extend the workspace example with a nested menu, retained tab editor and
@@ -253,7 +253,24 @@ Completion record (in progress):
   Control-Tab pass. Workspace tests, strict Clippy and portable compilation pass;
   dark/light `m3_tabs` previews inspected and native smoke passes. Final interactive
   auditing remains M5.
-- M3.5–M3.6 remain open.
+- M3.5: `Wizard`/`WizardStep` provide stable-ID flow definitions, pure reactive
+  validation, guarded Next/Finish and independent Back/review/final-validation
+  policies. Finish/cancel/change callbacks run outside host borrows and only accepted
+  binding transitions report changes; normalized/rejected writes and reentrancy are
+  covered. `set_steps` validates atomically; empty/unknown/removed/current IDs have
+  defined fallback behavior without render-time source mutation.
+- `wizard_view` supplies retained page bodies and `wizard_navigation` supplies only
+  controls. The shared page stack preserves history, selection, scroll and focus
+  without tab-strip shortcuts. Navigation commits preedit and rechecks validation;
+  old action elements become inert after step changes, and captured tokens recheck
+  nonreactive/live binding state. Cancel does not require forward validity; the
+  application owns completion presentation and form reset/discard.
+- Evidence: nine focused portable model/input/lifetime tests plus the existing tab
+  regression suite; native validation feedback, enabled/stale actions, IME commit,
+  accepted-change and finish/cancel callbacks pass. Workspace tests, strict Clippy,
+  portable compilation, dark/light inspected `m3_wizard` previews and native smoke
+  pass. Final interactive auditing remains M5.
+- M3.6 remains open.
 
 
 ## M4 — Collections and structured editing

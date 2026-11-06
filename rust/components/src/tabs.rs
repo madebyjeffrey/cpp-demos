@@ -56,9 +56,19 @@ impl Tabs {
         Rc::make_mut(&mut view.0).tabs = Some(TabsData {
             selection: self.selection.clone(),
             pages,
+            header: true,
         });
         view
     }
+}
+pub(crate) fn page_stack(selection: Binding<String>, pages: Vec<Tab>) -> View {
+    let mut view = View::new(Kind::PageStack, String::new(), vec![]).gap(0.);
+    Rc::make_mut(&mut view.0).tabs = Some(TabsData {
+        selection,
+        pages,
+        header: false,
+    });
+    view
 }
 pub fn tab_view(model: &Tabs, pages: Vec<Tab>) -> View {
     model.view(pages)
@@ -89,6 +99,7 @@ pub struct TabsInfo {
 pub(crate) struct TabsData {
     pub selection: Binding<String>,
     pub pages: Vec<Tab>,
+    pub header: bool,
 }
 impl TabsData {
     pub fn info(&self) -> TabsInfo {
@@ -127,6 +138,7 @@ impl TabsData {
         let headers = self
             .pages
             .iter()
+            .filter(|_| self.header)
             .map(|p| {
                 let selected = info.selected.as_ref() == Some(&p.id);
                 let mut header = View::new(Kind::Tab, p.label.clone(), vec![])
@@ -145,6 +157,9 @@ impl TabsData {
             .scrollbars(false)
             .key("$strip")
             .shrink(0.);
+        if !self.header {
+            strip = strip.hidden(true).height(0);
+        }
         Rc::make_mut(&mut strip.0).tab_strip = true;
         let mut children = vec![strip];
         for page in &self.pages {
@@ -177,7 +192,7 @@ impl Host {
         let m = self.0.mounted.borrow();
         for _ in 0..m.nodes.len() {
             let n = m.nodes.iter().find(|n| n.id == id)?;
-            if n.kind == Kind::Tabs {
+            if matches!(n.kind, Kind::Tabs | Kind::PageStack) {
                 return Some(id);
             }
             if n.kind == Kind::Modal {
@@ -203,7 +218,18 @@ impl Host {
         let m = self.0.mounted.borrow();
         let mut cache = self.0.tabs.borrow_mut();
         for (root, runtime) in cache.iter_mut() {
-            runtime.had_focus = focus.is_some_and(|id| Self::within(&m.nodes, id, *root));
+            let owner = m
+                .nodes
+                .iter()
+                .find(|n| n.id == *root && n.kind == Kind::PageStack)
+                .and_then(|n| n.parent)
+                .filter(|id| {
+                    m.nodes
+                        .iter()
+                        .any(|n| n.id == *id && n.kind == Kind::Wizard)
+                })
+                .unwrap_or(*root);
+            runtime.had_focus = focus.is_some_and(|id| Self::within(&m.nodes, id, owner));
         }
         let Some(mut id) = focus else { return };
         for _ in 0..m.nodes.len() {
@@ -230,6 +256,16 @@ impl Host {
         let Some(owner) = self.tab_owner(id) else {
             return Ok(false);
         };
+        if !self
+            .0
+            .mounted
+            .borrow()
+            .nodes
+            .iter()
+            .any(|n| n.id == owner && n.kind == Kind::Tabs)
+        {
+            return Ok(false);
+        }
         let valid = || {
             let m = self.0.mounted.borrow();
             m.nodes.iter().any(|n| {
@@ -283,6 +319,8 @@ impl Host {
             .iter()
             .find(|n| {
                 n.kind == Kind::Tab
+                    && !n.hidden
+                    && !n.layout_hidden
                     && n.tab_id.as_ref() == Some(selected)
                     && Self::within(nodes, n.id, root)
             })
@@ -322,6 +360,30 @@ impl Host {
                     })
                     .map(|n| n.id)
             })
+            .or_else(|| {
+                let wizard = group.parent.filter(|id| {
+                    m.nodes
+                        .iter()
+                        .any(|n| n.id == *id && n.kind == Kind::Wizard)
+                })?;
+                let actions = m
+                    .nodes
+                    .iter()
+                    .find(|n| n.parent == Some(wizard) && n.key.as_deref() == Some("$actions"))?;
+                m.nodes
+                    .iter()
+                    .find(|n| {
+                        n.parent == Some(actions.id)
+                            && n.enabled
+                            && !n.hidden
+                            && !n.layout_hidden
+                            && m.descriptions[&n.id]
+                                .wizard_action
+                                .as_ref()
+                                .is_some_and(|a| a.is_advance())
+                    })
+                    .map(|n| n.id)
+            })
     }
     /// Focus the active page's last control, falling back to its first control.
     pub fn focus_tab_page(&self, id: NodeId) -> Result<bool, Error> {
@@ -341,6 +403,16 @@ impl Host {
         let Some(root) = self.tab_owner(focused) else {
             return Ok(None);
         };
+        if self
+            .0
+            .mounted
+            .borrow()
+            .nodes
+            .iter()
+            .any(|n| n.id == root && n.kind == Kind::PageStack)
+        {
+            return Ok(None);
+        }
         if event.key == Key::Tab
             && !event.modifiers.control
             && !event.modifiers.shift
@@ -407,7 +479,10 @@ impl Host {
     }
     pub(crate) fn reconcile_tabs(&self) -> Result<(), Error> {
         let nodes = self.0.mounted.borrow().nodes.clone();
-        let groups: Vec<_> = nodes.iter().filter(|n| n.kind == Kind::Tabs).collect();
+        let groups: Vec<_> = nodes
+            .iter()
+            .filter(|n| matches!(n.kind, Kind::Tabs | Kind::PageStack))
+            .collect();
         for group in groups.iter().rev() {
             let info = group.tabs.as_ref().unwrap();
             if group.hidden

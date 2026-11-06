@@ -84,6 +84,10 @@ See the [overlay contracts](../rust/components/README.md#completion-m3--overlay-
 visited controls and their editor/scroll/focus state; `Tab::lazy` defers heavier pages.
 See the [tab contracts](../rust/components/README.md#completion-m3--retained-tabs).
 
+`cargo run --example m3_wizard` demonstrates validated setup/review navigation.
+`Wizard` owns step policy and callbacks; `wizard_view(&model, pages)` retains page
+content. See the [wizard contracts](../rust/components/README.md#completion-m3--validated-wizards).
+
 `view!` supports ordinary expressions, `if`/`else`, keyed `for` loops, custom
 functions returning `View`, and `embed(view)` for an already-built value. Unknown
 properties fail compilation. Use stable keys for reordered items; unkeyed identity

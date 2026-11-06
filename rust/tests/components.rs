@@ -6,7 +6,7 @@ fn main() {
         return;
     }
     use foundation::{NSArray, NSRange, NSString};
-    use objc2::{msg_send, rc::Retained, runtime::AnyObject};
+    use objc2::{Message, msg_send, rc::Retained, runtime::AnyObject};
     use scars_window::{
         ui::{self, State, view},
         *,
@@ -639,6 +639,138 @@ fn main() {
         window.clear_view();
         let pressed: bool = msg_send![&*beta, accessibilityPerformPress];
         assert!(!pressed);
+    }
+    // Wizard actions validate live data after native IME commit; old Next
+    // elements must not become Finish actions after a step transition.
+    fn find_label(object: &AnyObject, label: &str) -> Option<Retained<AnyObject>> {
+        unsafe {
+            let current: Option<Retained<NSString>> = msg_send![object, accessibilityLabel];
+            if current.is_some_and(|s| s.to_string() == label) {
+                return Some(object.retain());
+            }
+            let children: Option<Retained<NSArray<AnyObject>>> =
+                msg_send![object, accessibilityChildren];
+            children.and_then(|nodes| nodes.iter().find_map(|n| find_label(&n, label)))
+        }
+    }
+    let wizard_name = State::new(String::new());
+    let finished = State::new(0);
+    let cancelled = State::new(0);
+    let changes = State::new(Vec::new());
+    let done = State::new(false);
+    let setup = ui::Wizard::new(
+        "identity",
+        vec![
+            ui::WizardStep::new("identity", "Identity").validate({
+                let name = wizard_name.clone();
+                move || {
+                    if name.get().is_empty() {
+                        Err("A name is required.".into())
+                    } else {
+                        Ok(())
+                    }
+                }
+            }),
+            ui::WizardStep::new("review", "Review"),
+        ],
+    )
+    .unwrap()
+    .on_finish({
+        let finished = finished.clone();
+        let done = done.clone();
+        move || {
+            finished.update(|n| *n += 1);
+            done.set(true);
+        }
+    })
+    .on_cancel(cancelled.action(|s| s.update(|n| *n += 1)))
+    .on_change(changes.handler(|s, c: ui::WizardChange| s.update(|v| v.push(c))));
+    let wizard_host = window
+        .set_view({
+            let setup = setup.clone();
+            let name = wizard_name.clone();
+            let done = done.clone();
+            move || {
+                if done.get() {
+                    ui::View::label("Created")
+                } else {
+                    setup.view(vec![
+                        (
+                            "identity",
+                            ui::View::text_field("Project name", name.binding()).key("wizard-name"),
+                        ),
+                        ("review", ui::View::label("Review project")),
+                    ])
+                }
+            }
+        })
+        .unwrap();
+    wizard_host.set_active(true);
+    unsafe {
+        let next = find_label(native, "Next").unwrap();
+        let enabled: bool = msg_send![&*next, isAccessibilityEnabled];
+        assert!(!enabled);
+        let pressed: bool = msg_send![&*next, accessibilityPerformPress];
+        assert!(!pressed);
+        assert_eq!(setup.current(), Some("identity".into()));
+        assert!(find_label(native, "Wizard validation: A name is required.").is_some());
+        let field = find_label(native, "Project name").unwrap();
+        let name = NSString::from_str("Kestrel");
+        let _: () = msg_send![&*field,setAccessibilityValue:&*name];
+        let field_id = wizard_host
+            .snapshot()
+            .unwrap()
+            .into_iter()
+            .find(|n| n.key.as_deref() == Some("wizard-name"))
+            .unwrap()
+            .id;
+        wizard_host.focus(field_id).unwrap();
+        wizard_host
+            .select_text(
+                field_id,
+                ui::Selection {
+                    anchor: 7,
+                    caret: 7,
+                },
+            )
+            .unwrap();
+        let marked = NSString::from_str("!");
+        let _: () = msg_send![native,setMarkedText:&*marked,selectedRange:NSRange::new(1,0),replacementRange:NSRange::new(isize::MAX as usize,0)];
+        let next = find_label(native, "Next").unwrap();
+        let pressed: bool = msg_send![&*next, accessibilityPerformPress];
+        assert!(pressed);
+        assert_eq!(wizard_name.get(), "Kestrel!");
+        assert_eq!(setup.current(), Some("review".into()));
+        let finish = find_label(native, "Finish").unwrap();
+        let pressed: bool = msg_send![&*next, accessibilityPerformPress];
+        assert!(!pressed);
+        assert_eq!(finished.get(), 0);
+        assert_eq!(
+            changes.get(),
+            vec![ui::WizardChange {
+                from: "identity".into(),
+                to: "review".into()
+            }]
+        );
+        let pressed: bool = msg_send![&*finish, accessibilityPerformPress];
+        assert!(pressed);
+        assert_eq!(finished.get(), 1);
+        assert!(find_label(native, "Created").is_some());
+        let pressed: bool = msg_send![&*finish, accessibilityPerformPress];
+        assert!(!pressed);
+        wizard_name.set(String::new());
+        window
+            .set_view({
+                let setup = setup.clone();
+                move || setup.navigation()
+            })
+            .unwrap();
+        assert!(setup.go_to("identity"));
+        let cancel = find_label(native, "Cancel").unwrap();
+        let pressed: bool = msg_send![&*cancel, accessibilityPerformPress];
+        assert!(pressed);
+        assert_eq!(cancelled.get(), 1);
+        window.clear_view();
     }
     let list = ui::ListModel::new(
         (0..100_000)

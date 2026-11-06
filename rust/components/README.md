@@ -187,11 +187,10 @@ content is mounted. Put overlays after their anchors in the same layer.
 while the overlay lives in the root layer. Menus support enabled actions, arrows,
 Tab and activation. `on_context` handles a secondary click; `tooltip` displays
 help after a configurable one-shot deadline. `tabs` retains visited keyed pages;
-`wizard` adds
-step navigation; `split_button` combines a primary action with a menu anchor.
-`split_view` uses a dedicated adjustable divider and retained panes. The remaining
-wizard and alert compositions have further policy/transaction work tracked in the
-completion checklist.
+`wizard` adapts positional steps, while `Wizard` provides validated stable-ID
+navigation; `split_button` combines a primary action with a menu anchor.
+`split_view` uses a dedicated adjustable divider and retained panes. Alert completion
+transactions remain tracked in the completion checklist.
 
 For an actual macOS sheet, attach components with `Dialog::set_view` and use the
 existing `show_modal`/`dismiss` lifetime interface. `Popup::modal` is an in-window
@@ -592,3 +591,63 @@ application callbacks. External selection changes cancel inactive preedit. Selec
 setters may reject/normalize requests; the displayed selection follows the accepted
 value. macOS exposes tab-group/radio-tab roles, selected children, page contents,
 values and disabled actions. Final interactive VoiceOver/IME auditing remains M5.
+
+
+## Completion M3 — validated wizards
+
+`cargo run --example m3_wizard` demonstrates a complete setup/review flow. Create
+state and the model outside builders, then describe page content by stable ID:
+
+```rust
+let name = State::new(String::new());
+let checked_name = name.clone();
+let setup = Wizard::new("name", vec![
+    WizardStep::new("name", "Identity").validate(move || {
+        if checked_name.get().trim().is_empty() { Err("Enter a name.".into()) }
+        else { Ok(()) }
+    }),
+    WizardStep::new("review", "Review"),
+])?.on_finish(|| println!("Submitted"));
+// In the builder:
+view! { wizard_view(&setup, vec![
+    ("name", view! { text_field("Name", bind: name); }),
+    ("review", View::label(format!("Create {}", name.get()))),
+], grow: 1); }
+```
+
+`next`, `back`, `go_to`, `finish` and `cancel` work independently of a window.
+`info` exposes requested/effective selection, index, step metadata, validation
+issue and available actions. `Wizard::bound` accepts an application binding;
+`on_change` reports its actual accepted from/to IDs, including normalized values.
+Rejected writes and no-ops emit no change. Reentrant navigation from a callback is
+ignored. Finish/cancel callbacks leave form data, reset and presentation lifetime
+to the application; register a Finish handler to enable the final action.
+
+Validators are pure and reactive `Result<(), String>` queries. State writes are
+rejected, including outside a host; dependencies still subscribe the outer builder.
+Forward navigation validates the current step. Finish validates all steps by default
+and identifies the first invalid one. `WizardOptions` independently controls Back,
+direct review of earlier steps, final validation scope, step/status visibility and
+accessible action labels. Direct forward skipping is unavailable. Back/review and
+Cancel remain independent of forward validation. Options return an error for blank
+action labels.
+
+`set_steps` atomically replaces definitions after validating unique nonempty IDs.
+Reorder/title changes preserve the selected ID and retained page controls. Missing
+selection falls back to the first step without writing during rendering. Empty sets
+have no current step and disabled navigation, with a valid "No steps" presentation.
+Body descriptions for removed steps are ignored; omitted bodies are empty. Duplicate
+or empty body IDs fail host construction. `navigation()`/`wizard_navigation(&setup)`
+provide controls alone for application-arranged content.
+
+`view`/`wizard_view` retain visited page controls using the same page machinery as
+tabs, without exposing a tab strip or Control-Tab bypass. Editor history/selection,
+scroll and focus survive Back/review; inactive work and overlays cancel normally.
+Explicit navigation commits current preedit before rechecking availability/validation.
+Old Next/Back elements become inert across step/definition changes; captured actions
+also check live step identity and validation when bindings are not reactive. Cancel
+uses normal button editing-commit behavior; applications own discarding form data.
+The legacy `wizard(&index_state, pages)` helper remains available, including empty
+page lists, but positional identity is intended for fixed step sets. Native protocol
+checks cover validation feedback, enabled actions, IME commit, callbacks and stale
+accessibility objects. Interactive VoiceOver/IME auditing remains M5.

@@ -69,6 +69,7 @@ pub struct Node {
     pub stepper: Option<crate::StepperInfo>,
     pub split: Option<crate::SplitInfo>,
     pub tabs: Option<crate::TabsInfo>,
+    pub wizard: Option<crate::WizardInfo>,
     pub tab_id: Option<String>,
     pub tab_strip: bool,
     pub(crate) split_options: Option<crate::SplitOptions>,
@@ -255,8 +256,16 @@ impl Host {
         {
             let m = self.0.mounted.borrow();
             let mut cache = self.0.tabs.borrow_mut();
-            cache.retain(|id, _| m.nodes.iter().any(|n| n.id == *id && n.kind == Kind::Tabs));
-            for n in m.nodes.iter().filter(|n| n.kind == Kind::Tabs) {
+            cache.retain(|id, _| {
+                m.nodes
+                    .iter()
+                    .any(|n| n.id == *id && matches!(n.kind, Kind::Tabs | Kind::PageStack))
+            });
+            for n in m
+                .nodes
+                .iter()
+                .filter(|n| matches!(n.kind, Kind::Tabs | Kind::PageStack))
+            {
                 let runtime = cache.entry(n.id).or_default();
                 runtime
                     .pages
@@ -383,6 +392,9 @@ impl Host {
         let Some((d, value)) = target else {
             return Ok(false);
         };
+        if let Some(action) = &d.wizard_action {
+            return self.wizard_action(id, action);
+        }
         if d.kind == Kind::Tab {
             return self.select_tab(id, d.tab_id.as_deref().unwrap());
         }
@@ -625,6 +637,7 @@ fn mount(
         stepper,
         split: None,
         tabs,
+        wizard: d.wizard.as_ref().map(|w| w.info.clone()),
         tab_id: d.tab_id.clone(),
         tab_strip: d.tab_strip,
         split_ratio,
@@ -654,6 +667,9 @@ fn mount(
     Ok(())
 }
 pub(crate) fn validate(d: &Description) -> Result<(), Error> {
+    if let Some(wizard) = &d.wizard {
+        wizard.validate()?;
+    }
     if let Some(tabs) = &d.tabs {
         tabs.validate()?;
     }

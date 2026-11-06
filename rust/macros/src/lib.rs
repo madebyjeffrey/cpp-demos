@@ -226,6 +226,24 @@ fn expand(item: Item, root: &Tokens) -> Result<Tokens> {
                         let value = one(&mut positional)?;
                         quote!(#value)
                     }
+                    "wizard_view" => {
+                        if positional.len() != 2 {
+                            return Err(syn::Error::new(
+                                name.span(),
+                                "wizard_view needs a model and page descriptions",
+                            ));
+                        }
+                        quote!(#root::wizard_view(#(#positional),*))
+                    }
+                    "wizard_navigation" => {
+                        if positional.len() != 1 {
+                            return Err(syn::Error::new(
+                                name.span(),
+                                "wizard_navigation needs a model",
+                            ));
+                        }
+                        quote!(#root::wizard_navigation(#(#positional),*))
+                    }
                     "tab_view" => {
                         if positional.len() != 2 {
                             return Err(syn::Error::new(

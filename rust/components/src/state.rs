@@ -65,11 +65,28 @@ impl Drop for Tracking {
         });
     }
 }
-fn check_write() {
+pub(crate) fn check_write() {
     assert!(
         TRACKING.with(|t| t.borrow().is_empty()),
-        "State cannot change during view construction"
+        "State cannot change during view construction or a read-only query"
     );
+}
+
+/// Run pure user queries while preserving dependency tracking in outer builders.
+pub(crate) fn read_only<T>(query: impl FnOnce() -> T) -> T {
+    let tracking = Tracking::begin();
+    let result = query();
+    let deps = tracking.finish();
+    TRACKING.with(|stack| {
+        if let Some(parent) = stack.borrow_mut().last_mut() {
+            for dep in deps {
+                if !parent.iter().any(|p| Rc::ptr_eq(p, &dep)) {
+                    parent.push(dep);
+                }
+            }
+        }
+    });
+    result
 }
 
 struct CellState<T> {
