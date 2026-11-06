@@ -403,7 +403,7 @@ impl Host {
         if i.focus.is_some_and(|id| {
             !m.nodes
                 .iter()
-                .any(|n| n.id == id && n.enabled && !n.hidden && !n.layout_hidden)
+                .any(|n| n.id == id && n.focus_enabled() && !n.hidden && !n.layout_hidden)
         }) {
             i.focus = None;
         }

@@ -82,7 +82,7 @@ pub fn value_field<T: Clone + PartialEq + 'static>(
 ) -> View {
     localized_value_field(label, draft, &EditLocale::ASCII)
 }
-fn localized_value_field<T: Clone + PartialEq + 'static>(
+pub(crate) fn localized_value_field<T: Clone + PartialEq + 'static>(
     label: impl Into<String>,
     draft: &Draft<T>,
     locale: &EditLocale,
@@ -165,110 +165,6 @@ impl ColorPicker {
             .accessible_label("Color");
         std::rc::Rc::make_mut(&mut button.0).color_well = Some(color);
         (button, popup.modal("Color", self.view()))
-    }
-}
-#[derive(Clone)]
-pub struct DatePicker {
-    value: Binding<Date>,
-    locale: EditLocale,
-    pub draft: Draft<Date>,
-    month: State<Date>,
-}
-impl DatePicker {
-    pub fn new(value: Binding<Date>) -> Self {
-        Self {
-            month: State::new(value.get().first_of_month()),
-            draft: Draft::new(value.clone(), parse_date, |v| v.to_string()),
-            value,
-            locale: EditLocale::ASCII,
-        }
-    }
-    /// Configure editing/calendar text before mounting. ASCII/ISO remains explicit.
-    pub fn locale(mut self, locale: EditLocale) -> Self {
-        let (parse, format) = (locale.clone(), locale.clone());
-        self.draft = Draft::new(
-            self.value.clone(),
-            move |s| parse.date_input(s),
-            move |v| format.date(*v),
-        );
-        self.locale = locale;
-        self
-    }
-    pub fn view(&self) -> View {
-        let month = self.month.get();
-        let prev = self.month.clone();
-        let next = self.month.clone();
-        let mut header = vec![
-            View::button(if self.locale.rtl() { "›" } else { "‹" }, move || {
-                if let Ok(date) = prev.get().checked_add(jiff::Span::new().months(-1)) {
-                    prev.set(date);
-                }
-            })
-            .width(36)
-            .accessible_label(self.locale.action(ActionLabel::PreviousMonth)),
-            View::label(self.locale.month(month)).grow(1.).min_width(0.),
-            View::button(if self.locale.rtl() { "‹" } else { "›" }, move || {
-                if let Ok(date) = next.get().checked_add(jiff::Span::new().months(1)) {
-                    next.set(date);
-                }
-            })
-            .width(36)
-            .accessible_label(self.locale.action(ActionLabel::NextMonth)),
-        ];
-        if self.locale.rtl() {
-            header.reverse();
-        }
-        let mut children = vec![View::row(header)];
-        let weekdays = self.locale.weekdays();
-        let mut labels = (0..7)
-            .map(|i| {
-                View::label(weekdays[(i + self.locale.week_start() as usize) % 7])
-                    .grow(1.)
-                    .basis(0)
-                    .min_width(0.)
-                    .text_align(crate::Align::Center)
-            })
-            .collect::<Vec<_>>();
-        if self.locale.rtl() {
-            labels.reverse();
-        }
-        children.push(View::row(labels).gap(4.));
-        let offset = (month.weekday().to_monday_zero_offset() - self.locale.week_start() + 7) % 7;
-        for week in 0..6 {
-            let mut cells = Vec::new();
-            for day in 0..7 {
-                let number = week * 7 + day - offset + 1;
-                if number < 1 || number > month.days_in_month() {
-                    cells.push(View::label("").grow(1.).basis(0).min_width(0.));
-                    continue;
-                }
-                let date = Date::new(month.year(), month.month(), number).unwrap();
-                let value = self.value.clone();
-                cells.push(
-                    View::button(self.locale.day(number), move || value.set(date))
-                        .grow(1.)
-                        .basis(0)
-                        .min_width(0.)
-                        .enabled(self.locale.date_supported(date))
-                        .bold(date == self.value.get())
-                        .accessible_label(self.locale.date(date))
-                        .tooltip(self.locale.date(date)),
-                );
-            }
-            if self.locale.rtl() {
-                cells.reverse();
-            }
-            children.push(View::row(cells).gap(4.));
-            if (week + 1) * 7 - offset >= month.days_in_month() {
-                break;
-            }
-        }
-        children.push(localized_value_field(
-            self.locale.date_hint(),
-            &self.draft,
-            &self.locale,
-        ));
-        View::column(children)
     }
 }
 pub fn time_draft(value: Binding<Time>) -> Draft<Time> {

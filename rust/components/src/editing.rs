@@ -223,6 +223,9 @@ impl Host {
         let Some(input) = self.text_input()?.filter(|i| i.active) else {
             return Ok(false);
         };
+        if command == TextCommand::Enter && input.marked.is_some() {
+            return self.unmark_text(true);
+        }
         if command == TextCommand::Enter && input.multiline {
             return self.insert_text("\n", None);
         }

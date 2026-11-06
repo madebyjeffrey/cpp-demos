@@ -20,7 +20,9 @@ Date/time validity and named-zone resolution use Jiff. Zone gaps/overlaps reject
 default; choosing earlier/later is explicit. Invalid edits preserve both the draft
 and committed value. Apply/Enter validates; Revert restores the model. Numeric
 incomplete/invalid/out-of-range classification and readonly/blur policy already
-exist; unifying those policies for every typed value is M6.6.
+exist. Date editors now provide bounds, disabled/custom validation, readonly/blur/
+submit/cancel policy and a noncommitting keyboard cursor. Unifying those policies
+for every typed value remains M6.6.
 
 Integer parse/format/step never passes through floating point. Decimal precision is
 an explicit display option; an untouched rounded display cannot overwrite the exact

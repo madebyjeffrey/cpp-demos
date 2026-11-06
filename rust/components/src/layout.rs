@@ -254,6 +254,17 @@ impl Host {
         if let Some((id, rect)) = reveal_caret {
             self.reveal_rect(id, rect);
         }
+        let calendar_reveal = self
+            .0
+            .interaction
+            .borrow_mut()
+            .pending_calendar_reveal
+            .take();
+        if let Some(id) =
+            calendar_reveal.filter(|id| self.focused() == Some(*id) && self.in_scope(*id))
+        {
+            self.reveal(id);
+        }
         self.update_drag_deadline(std::time::Instant::now());
         self.reconcile_menu()?;
         self.reconcile_tabs()?;

@@ -340,7 +340,7 @@ define_class!(
         #[unsafe(method_id(accessibilityTabs))]
         fn tabs(&self)->Option<Retained<NSArray<AnyObject>>>{self.tab_elements(1)}
         #[unsafe(method_id(accessibilitySelectedChildren))]
-        fn selected_children(&self)->Option<Retained<NSArray<AnyObject>>>{self.table_array("AXSelectedChildren",0,usize::MAX).or_else(||self.combo_selected()).or_else(||self.collection_selected(0,usize::MAX)).or_else(||self.choices(true)).or_else(||self.tab_elements(0))}
+        fn selected_children(&self)->Option<Retained<NSArray<AnyObject>>>{self.table_array("AXSelectedChildren",0,usize::MAX).or_else(||self.calendar_selected()).or_else(||self.combo_selected()).or_else(||self.collection_selected(0,usize::MAX)).or_else(||self.choices(true)).or_else(||self.tab_elements(0))}
         #[unsafe(method_id(accessibilityContents))]
         fn contents(&self)->Option<Retained<NSArray<AnyObject>>>{self.tab_elements(2)}
         #[unsafe(method_id(accessibilityRows))]
@@ -471,7 +471,7 @@ define_class!(
         #[unsafe(method(accessibilityPerformShowMenu))] fn show_menu(&self)->bool{self.with(|m,_,n|m.host.show_menu(n.id)).unwrap_or(false)}
         #[unsafe(method(accessibilityPerformCancel))] fn cancel(&self)->bool{self.with(|m,_,n|m.host.cancel_presentation(n.id)).unwrap_or(false)}
         #[unsafe(method(accessibilityPerformConfirm))] fn confirm(&self)->bool{self.confirm_control()}
-        #[unsafe(method(isAccessibilitySelected))] fn selected(&self)->bool{self.node().is_some_and(|n|n.menu_item.and_then(|i|i.checked).unwrap_or_else(||n.value.selected()))}
+        #[unsafe(method(isAccessibilitySelected))] fn selected(&self)->bool{self.node().is_some_and(|n|n.calendar_day.map(|d|d.selected).or_else(||n.menu_item.and_then(|i|i.checked)).unwrap_or_else(||n.value.selected()))}
         #[unsafe(method(setAccessibilitySelected:))] fn set_selected(&self,v:bool){self.with(|m,_,n|if matches!(n.kind,Kind::Tab|Kind::Radio|Kind::Segment){m.host.set_selected(n.id,v)}else{Ok(false)});}
         #[unsafe(method(setAccessibilitySelectedChildren:))] fn set_selected_children(&self,v:Option<&NSArray<AnyObject>>){self.set_choice_children(v)}
         #[unsafe(method_id(accessibilityIncrementButton))] fn increment_button(&self)->Option<Retained<AnyObject>>{self.step_button(true)}
@@ -633,6 +633,24 @@ define_class!(
     }
 );
 impl Element {
+    fn calendar_selected(&self) -> Option<Retained<NSArray<AnyObject>>> {
+        self.with(|m, _, n| {
+            if n.calendar.is_none() {
+                return Ok(None);
+            }
+            let nodes = m.host.snapshot()?;
+            let selected = nodes
+                .iter()
+                .filter(|p| {
+                    p.calendar_day.is_some_and(|d| d.selected)
+                        && super::table_accessibility::within(&nodes, p.id, n.id)
+                })
+                .map(|p| any(element(m, p.id)))
+                .collect::<Vec<_>>();
+            Ok(Some(NSArray::from_retained_slice(&selected)))
+        })
+        .flatten()
+    }
     fn combo_selected(&self) -> Option<Retained<NSArray<AnyObject>>> {
         self.with(|m, _, n| {
             if n.combo.is_none() && n.combo_popup.is_none() {

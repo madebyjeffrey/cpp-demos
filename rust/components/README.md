@@ -1393,4 +1393,54 @@ its initial page. Six portable tests cover precision, grammar, stepping, externa
 changes, date order, calendar labels/actions and narrow geometry. Run the native
 text/AX transport checks with
 `SCARS_WINDOW_DESKTOP_TESTS=1 cargo test -p scars-window --test localized_values --locked --offline`.
-Actual VoiceOver/IME sessions remain M5.5; complete date policies remain M6.3.
+Actual VoiceOver/IME sessions remain M5.5; date-policy evidence follows below.
+
+## M6.3 — date control policies
+
+```rust
+let picker = DatePicker::new(value.binding())
+    .bounds(min, max)
+    .disabled_dates(|date| date.weekday().to_monday_zero_offset() >= 5)
+    .validate(|date| validate_booking_date(date))
+    .on_submit(saved.action(|s| s.set(true)));
+```
+
+Bounds are inclusive. ASCII/ISO supports Jiff's full date range; localized profiles
+support years 0001–9999. Invalid committed values remain visible and invalid rather
+than being silently clamped. Invalid/incomplete/out-of-range drafts retain the
+committed value. Validators and disabled-date predicates are read-only queries;
+reactive reads track dependencies, while writes are rejected. Custom errors belong
+to the application. Configure locale, bounds and predicates before mounting; changing
+those builders restores the committed draft. Readonly/blur flags can vary per view.
+
+`commit_on_blur(true)` is the default. Apply/Enter commits and calls `on_submit`
+only on success; blur commits without submitting. Choosing a day commits directly.
+Revert/Escape restores the model/draft/cursor. `read_only(true)` disables editing,
+Apply/Revert buttons and day activation while allowing calendar inspection/navigation.
+`on_validation` runs outside state borrows and suppresses recursive notifications.
+Callbacks may publish newer authoritative values. Native day actions recheck owner,
+mount, enabled state and modal scope after callbacks, so removed/replaced controls
+cannot finish a stale commit. Rejected custom setters preserve the draft.
+
+The calendar has one roving day stop, alongside its month buttons and text controls.
+Arrows move one day horizontally or one week vertically; horizontal movement follows
+RTL direction. Page Up/Down moves a month, Shift moves a year, Home/End selects the
+week endpoints, and Command/Control-Home/End selects month endpoints. Movement never
+commits; Enter/Space chooses the focused day. Unavailable days within bounds remain
+inspectable but cannot be activated. Month buttons stop at bounds. Focus reveal runs
+after layout; later manual scrolling does not repeatedly snap back.
+
+External value changes synchronize the draft, visible month and calendar focus.
+The text editor keeps its identity when the number of calendar rows changes.
+State-backed bindings automatically carry revisions, preventing stale A→B→A drafts;
+custom providers can attach the same signal with `Binding::with_revision`.
+A revision must describe accepted-value changes and be a read-only query.
+Composition confirmation commits preedit before a later Enter submits the value.
+
+`cargo run --example m6_date` demonstrates these policies. Eight portable tests cover
+rules, navigation/leaps/extremes, blur/readonly/callbacks, source revisions, replacement,
+editor identity and constrained scrolling. Hidden-window native tests verify actual
+AX selected children/day state, unavailable focus, retained field identity, native
+text/IME transport and inert stale objects. The hidden `accessibility_focus` test
+also checks meaningful expansion attributes and nonduplicated text-focus posts.
+Interactive VoiceOver/IME and visible GPU checks remain explicit in M5.5/M8.

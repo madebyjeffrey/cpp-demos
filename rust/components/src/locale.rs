@@ -16,6 +16,11 @@ struct Localized {
     plus: (String, String),
 }
 #[derive(Clone, Copy)]
+pub(crate) enum DateProblem {
+    Unavailable,
+    UnsupportedYear,
+}
+#[derive(Clone, Copy)]
 pub(crate) enum ActionLabel {
     Apply,
     Revert,
@@ -274,6 +279,27 @@ impl EditLocale {
             Some(Profile::Fr) => "Date invalide",
             Some(Profile::Ar) => "تاريخ غير صالح",
             _ => "Invalid date",
+        }
+    }
+    pub(crate) fn date_problem(&self, problem: DateProblem) -> &'static str {
+        match (self.profile(), problem) {
+            (Some(Profile::De), DateProblem::Unavailable) => "Dieses Datum ist nicht verfügbar",
+            (Some(Profile::Fr), DateProblem::Unavailable) => "Cette date n’est pas disponible",
+            (Some(Profile::Ar), DateProblem::Unavailable) => "هذا التاريخ غير متاح",
+            (_, DateProblem::Unavailable) => "This date is unavailable",
+            (Some(Profile::De), _) => "Dieses Jahr wird vom Datumsformat nicht unterstützt",
+            (Some(Profile::Fr), _) => "Cette année n’est pas prise en charge par ce format",
+            (Some(Profile::Ar), _) => "السنة غير مدعومة بهذا التنسيق",
+            _ => "This year is unsupported by the date format",
+        }
+    }
+    pub(crate) fn date_range_error(&self, min: Date, max: Date) -> String {
+        let (min, max) = (self.date(min), self.date(max));
+        match self.profile() {
+            Some(Profile::De) => format!("Datum von {min} bis {max} eingeben"),
+            Some(Profile::Fr) => format!("Saisissez une date du {min} au {max}"),
+            Some(Profile::Ar) => format!("أدخل تاريخًا من {min} إلى {max}"),
+            _ => format!("Enter a date from {min} to {max}"),
         }
     }
     pub(crate) fn date_hint(&self) -> &'static str {

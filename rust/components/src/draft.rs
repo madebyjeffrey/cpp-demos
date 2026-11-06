@@ -1,7 +1,7 @@
 //! Explicit draft/commit values. Numbers default to ASCII; checked locale profiles are opt-in.
 use crate::locale::ActionLabel;
 use crate::{Binding, EditLocale, Repeat, State, View};
-use std::{fmt::Display, rc::Rc, str::FromStr};
+use std::{cell::Cell, fmt::Display, rc::Rc, str::FromStr};
 type Parse<T> = Rc<dyn Fn(&str) -> Result<T, String>>;
 type ModelStatus<T> = Rc<dyn Fn(&T) -> Validation>;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -21,6 +21,7 @@ pub struct Validation {
 struct Edit<T> {
     text: String,
     base: T,
+    revision: Option<u64>,
 }
 #[derive(Clone)]
 pub struct Draft<T> {
@@ -31,6 +32,7 @@ pub struct Draft<T> {
     classify: Rc<dyn Fn(&str) -> ValidationStatus>,
     model_status: Option<ModelStatus<T>>,
     notify: Option<Rc<dyn Fn(Validation)>>,
+    notifying: Rc<Cell<bool>>,
     read_only: bool,
 }
 impl<T: Clone + PartialEq + 'static> Draft<T> {
@@ -41,11 +43,16 @@ impl<T: Clone + PartialEq + 'static> Draft<T> {
     ) -> Self {
         let base = value.get();
         let text = format(&base);
+        let revision = value.revision();
         let parse: Parse<T> = Rc::new(parse);
         let classify = parse.clone();
         Self {
             value,
-            edit: State::new(Edit { text, base }),
+            edit: State::new(Edit {
+                text,
+                base,
+                revision,
+            }),
             parse,
             format: Rc::new(format),
             classify: Rc::new(move |text| {
@@ -57,8 +64,32 @@ impl<T: Clone + PartialEq + 'static> Draft<T> {
             }),
             model_status: None,
             notify: None,
+            notifying: Rc::new(Cell::new(false)),
             read_only: false,
         }
+    }
+    pub fn read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
+    }
+    pub fn on_validation(mut self, callback: impl Fn(Validation) + 'static) -> Self {
+        self.notify = Some(Rc::new(callback));
+        self
+    }
+    pub(crate) fn classifiers(
+        mut self,
+        classify: impl Fn(&str) -> ValidationStatus + 'static,
+        model: impl Fn(&T) -> Validation + 'static,
+    ) -> Self {
+        self.classify = Rc::new(classify);
+        self.model_status = Some(Rc::new(model));
+        self
+    }
+    pub(crate) fn reconfigured(&self, mut draft: Self) -> Self {
+        draft.notify = self.notify.clone();
+        draft.notifying = self.notifying.clone();
+        draft.read_only = self.read_only;
+        draft
     }
     pub fn binding(&self) -> Binding<String> {
         let read = self.clone();
@@ -67,7 +98,10 @@ impl<T: Clone + PartialEq + 'static> Draft<T> {
             move || {
                 let e = read.edit.get();
                 let current = read.value.get();
-                if current != e.base || (read.format)(&current) != (read.format)(&e.base) {
+                if read.value.revision() != e.revision
+                    || current != e.base
+                    || (read.format)(&current) != (read.format)(&e.base)
+                {
                     (read.format)(&current)
                 } else {
                     e.text
@@ -78,7 +112,12 @@ impl<T: Clone + PartialEq + 'static> Draft<T> {
                     return;
                 }
                 let base = write.value.get();
-                write.edit.set(Edit { text, base });
+                let revision = write.value.revision();
+                write.edit.set(Edit {
+                    text,
+                    base,
+                    revision,
+                });
                 write.notify();
             },
         )
@@ -115,6 +154,16 @@ impl<T: Clone + PartialEq + 'static> Draft<T> {
     }
     fn notify(&self) {
         if let Some(callback) = &self.notify {
+            if self.notifying.replace(true) {
+                return;
+            }
+            struct Reset<'a>(&'a Cell<bool>);
+            impl Drop for Reset<'_> {
+                fn drop(&mut self) {
+                    self.0.set(false);
+                }
+            }
+            let _reset = Reset(&self.notifying);
             callback(self.validation());
         }
     }
@@ -151,6 +200,7 @@ impl<T: Clone + PartialEq + 'static> Draft<T> {
         let base = self.value.get();
         self.edit.set(Edit {
             text: (self.format)(&base),
+            revision: self.value.revision(),
             base,
         });
         self.notify();

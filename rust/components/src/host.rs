@@ -76,6 +76,8 @@ pub struct Node {
     pub combo_toggle: bool,
     pub tree_model: Option<crate::TreeModel>,
     pub tree_item: Option<crate::TreeItem>,
+    pub calendar: Option<crate::CalendarInfo>,
+    pub calendar_day: Option<crate::CalendarDay>,
     pub label: String,
     pub help: String,
     pub validation: Option<crate::Validation>,
@@ -98,6 +100,9 @@ pub struct Node {
     pub image: Option<(Bitmap, ContentMode)>,
 }
 impl Node {
+    pub(crate) fn focus_enabled(&self) -> bool {
+        self.enabled || self.calendar_day.is_some_and(|d| d.navigable)
+    }
     pub fn edit_bounds(&self) -> Rect {
         self.bounds.inset(crate::Insets {
             top: 6.,
@@ -352,7 +357,7 @@ impl Host {
             if i.focus.is_some_and(|id| {
                 !mounted.nodes.iter().any(|n| {
                     n.id == id
-                        && n.enabled
+                        && n.focus_enabled()
                         && !n.hidden
                         && !n.layout_hidden
                         && (focusable(n.kind) || n.kind == Kind::Scroll)
@@ -371,6 +376,7 @@ impl Host {
         }
         self.retire_table_edits(&old);
         self.restore_collection_focus(prior_focus, &old);
+        self.restore_calendar_focus(prior_focus, &old);
         drop(old);
         self.reconcile_capture();
         self.reconcile_fields();
@@ -431,6 +437,9 @@ impl Host {
         let Some((d, value)) = target else {
             return Ok(false);
         };
+        if let Some(day) = d.calendar_day {
+            return self.activate_calendar_day(id, day.date);
+        }
         if d.read_only
             && matches!(
                 d.kind,
@@ -756,6 +765,11 @@ fn mount(
         combo_toggle: d.combo_action.is_some(),
         tree_model: d.tree.clone(),
         tree_item: d.tree_item.clone(),
+        calendar: d.calendar.as_ref().map(crate::DatePicker::calendar),
+        calendar_day: d.calendar_day.map(|mut day| {
+            day.navigable &= enabled;
+            day
+        }),
         help: d
             .accessible_help
             .clone()

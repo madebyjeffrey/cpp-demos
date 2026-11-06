@@ -131,6 +131,7 @@ impl Notifications {
             s.max.hash(&mut h)
         }
         n.color_well.map(|c| c.0).hash(&mut h);
+        n.calendar_day.map(|d| d.selected).hash(&mut h);
         if let Some(c) = &n.combo {
             c.query.hash(&mut h);
             c.selection.hash(&mut h);
@@ -239,6 +240,14 @@ impl Notifications {
                         identity: self.hash(n.id),
                         version: self.hash(choices),
                     });
+                }
+                if let Some(calendar) = n.calendar {
+                    attrs.selection = Some(Selection {
+                        kind: 2,
+                        identity: self.hash(n.id),
+                        version: self.hash(calendar.selected.to_string()),
+                    });
+                    attrs.content = Some((self.hash(n.id), self.hash(calendar.month.to_string())));
                 }
                 if let Some(c) = &n.combo {
                     attrs.selection = Some(Selection {

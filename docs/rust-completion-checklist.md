@@ -597,21 +597,22 @@ information: “collapsed” on Options and “selected collapsed tab 1 of 2.”
 is a menu opener and legitimately has expansion state. Tabs must not expose it.
 The native selector check reproduced that defect. A separate hidden-window test
 also reproduced redundant initial text-selection and focus notifications on entry.
-Both fixes pass the hidden native regression; actual speech recheck remains pending. Other matrix
+Both fixes pass the hidden native regression (`29362a5`); actual speech recheck remains pending. Other matrix
 sessions, composing IME candidate placement and actual scale 2 remain open.
 
 ## M6 — Localization and complete value controls
 
 - [x] **M6.1 Editable format policy:** specify supported locale/grammar combinations, display/edit round trips and unsupported-format behavior. Preserve an explicit ASCII/ISO mode; do not silently guess ambiguous grouping or dates.
 - [x] **M6.2 Number/date localization:** integrate the chosen Rust services with representative decimal-comma, grouped and non-Latin-digit cases; localized labels/formatting must match the advertised editable grammar and retain exact integers.
-- [ ] **M6.3 Date control:** bounds, disabled dates, custom validation, readonly/blur/submit policy, calendar keyboard navigation and synchronization after external value changes. The narrow calendar grid overflow was corrected in M6.2.
+- [x] **M6.3 Date control:** bounds, disabled dates, custom validation, readonly/blur/submit policy, calendar keyboard navigation and synchronization after external value changes. The narrow calendar grid overflow was corrected in M6.2.
 - [ ] **M6.4 Time and datetime controls:** dedicated hour/minute/second interactions, 12/24-hour policy, step sizes, optional seconds, local/instant bounds and combined validation; verify DST gaps/overlaps and named-zone changes without corrupting drafts.
 - [ ] **M6.5 Color control:** HSV as well as RGB, optional alpha, readonly and explicit transactional/live-preview behavior; cancel restores the source color, including through a color-well popup.
 - [ ] **M6.6 Shared draft lifecycle:** consistent apply/blur/cancel, dirty/incomplete/invalid/out-of-range reporting, external-change handling and callbacks across all typed value controls.
 
 Evidence: extend the value lab; round-trip, calendar-boundary, exact-value,
 validation/transaction and timezone tests. Main implementation:
-[values](../rust/components/src/values.rs), [drafts](../rust/components/src/draft.rs),
+[values](../rust/components/src/values.rs), [date control](../rust/components/src/date.rs),
+[drafts](../rust/components/src/draft.rs),
 [Unicode/localization services](../rust/components/src/text.rs).
 
 Completion record:
@@ -649,6 +650,28 @@ Completion record:
   inventory mapping and portable Linux compilation pass. `m6_locales` provides the
   concise runnable lab; all five pages inspected in dark/light, native smoke passes.
   Interactive VoiceOver/IME and final visible GPU evidence remain M5.5/M8.
+
+M6.3 completion record:
+
+- `DatePicker` adds inclusive bounds, pure disabled-date/custom validators, readonly,
+  blur/submit/cancel callbacks and one roving calendar cursor. Arrows, month/year
+  paging and week/month endpoints inspect dates without committing; unavailable days
+  within bounds remain readable/focusable, while activation is guarded. Header
+  navigation respects bounds. Valid choices, Apply, Enter and blur share the draft.
+- External values synchronize month/draft/focus without clamping committed data.
+  Stable internal keys preserve the field through row-count changes. State-backed
+  and explicitly revisioned custom bindings prevent stale A→B→A drafts. Calendar
+  focus reveal runs after layout and settles after manual scrolling. Validation
+  callbacks may supersede actions; mount/model/scope are rechecked before committing.
+- Eight focused core tests and hidden native date/focus tests pass. These cover
+  Gregorian boundaries, readonly/blur, callback purity/removal/replacement, rejected
+  setters, source revisions, retained fields, scrolling, AX selected children,
+  unavailable focus, native text transport and composition-before-submission.
+  Workspace tests, strict Clippy, portable Linux compilation, formatting and
+  inventory mapping pass.
+  `m6_date` is the runnable example; dark/light previews inspected. Foreground
+  suites are left for the dedicated desktop audit while user-assisted VoiceOver
+  testing is in progress. No unavailable interactive evidence is counted as a pass.
 
 ## M7 — Developer tools and application ergonomics
 

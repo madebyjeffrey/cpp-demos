@@ -107,3 +107,8 @@ harness = false
 name = "accessibility_focus"
 path = "tests/accessibility_focus.rs"
 harness = false
+
+[[test]]
+name = "date_picker"
+path = "tests/date_picker.rs"
+harness = false

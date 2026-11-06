@@ -251,7 +251,12 @@ impl<T: 'static> State<T> {
     {
         let read = self.clone();
         let write = self.clone();
-        Binding::new(move || read.get(), move |value| write.set(value))
+        let revision = self.clone();
+        Binding {
+            read: Rc::new(move || read.get()),
+            write: Rc::new(move |value| write.set(value)),
+            revision: Some(Rc::new(move || revision.version())),
+        }
     }
     /// Capture a state handle in a callback that receives an event value.
     pub fn handler<A: 'static>(&self, action: impl Fn(&Self, A) + 'static) -> impl Fn(A) + 'static {
@@ -270,12 +275,14 @@ impl<T: 'static> State<T> {
 pub struct Binding<T> {
     read: Rc<dyn Fn() -> T>,
     write: Rc<dyn Fn(T)>,
+    revision: Option<Rc<dyn Fn() -> u64>>,
 }
 impl<T> Clone for Binding<T> {
     fn clone(&self) -> Self {
         Self {
             read: self.read.clone(),
             write: self.write.clone(),
+            revision: self.revision.clone(),
         }
     }
 }
@@ -287,7 +294,17 @@ impl<T> Binding<T> {
         Self {
             read: Rc::new(read),
             write: Rc::new(write),
+            revision: None,
         }
+    }
+    /// Attach a read-only accepted-value revision for a custom provider. State
+    /// bindings supply this automatically; revisions also detect unobserved A→B→A changes.
+    pub fn with_revision(mut self, revision: impl Fn() -> u64 + 'static) -> Self {
+        self.revision = Some(Rc::new(revision));
+        self
+    }
+    pub(crate) fn revision(&self) -> Option<u64> {
+        self.revision.as_ref().map(|f| f())
     }
     pub fn get(&self) -> T {
         (self.read)()

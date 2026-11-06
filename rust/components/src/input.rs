@@ -66,6 +66,7 @@ pub(crate) struct Interaction {
     pub tooltip_hover: Option<NodeId>,
     pub pointer: Point,
     pub pending_table_tab: Option<bool>,
+    pub pending_calendar_reveal: Option<NodeId>,
     pub pending_row: Option<(NodeId, String)>,
 }
 impl Default for Interaction {
@@ -88,6 +89,7 @@ impl Default for Interaction {
             tooltip_hover: None,
             pointer: Point::default(),
             pending_table_tab: None,
+            pending_calendar_reveal: None,
             pending_row: None,
         }
     }
@@ -144,7 +146,7 @@ impl Host {
                     })
                     .is_some_and(|owner| Self::within(nodes, id, owner.id)))
     }
-    fn reveal(&self, id: NodeId) {
+    pub(crate) fn reveal(&self, id: NodeId) {
         let bounds = self
             .0
             .mounted
@@ -257,7 +259,7 @@ impl Host {
         self.refresh()?;
         if !self.0.mounted.borrow().nodes.iter().any(|n| {
             n.id == id
-                && n.enabled
+                && n.focus_enabled()
                 && !n.hidden
                 && !n.layout_hidden
                 && (focusable(n.kind) || n.kind == Kind::Scroll)
@@ -293,6 +295,18 @@ impl Host {
         if previous != Some(id) && self.0.interaction.borrow().active {
             self.blur_action(previous);
         }
+        self.remember_calendar_focus(id);
+        if previous != Some(id)
+            && self
+                .0
+                .mounted
+                .borrow()
+                .nodes
+                .iter()
+                .any(|n| n.id == id && n.calendar_day.is_some())
+        {
+            self.0.interaction.borrow_mut().pending_calendar_reveal = Some(id);
+        }
         self.remember_table_focus(id);
         self.remember_collection_focus(id);
         self.remember_tab_focus(Some(id));
@@ -324,7 +338,7 @@ impl Host {
         let ids: Vec<_> = nodes
             .iter()
             .filter(|n| {
-                n.enabled
+                n.focus_enabled()
                     && !n.hidden
                     && !n.layout_hidden
                     && focusable(n.kind)
@@ -345,6 +359,9 @@ impl Host {
                     })
                 {
                     return false;
+                }
+                if let Some(day) = n.calendar_day {
+                    return day.current;
                 }
                 if let Some(stop) = self.table_tab_stop(n, &nodes) {
                     return stop;
@@ -754,6 +771,9 @@ impl Host {
                 }
                 return self.finish_table_edit(id, false, None);
             }
+        }
+        if let Some(handled) = self.calendar_key(id, event)? {
+            return Ok(handled);
         }
         if let Some(handled) = self.table_header_key(id, event)? {
             return Ok(handled);
