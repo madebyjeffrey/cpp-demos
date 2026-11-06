@@ -205,14 +205,17 @@ combo box and a selected-cell editor. Click headers to sort; arrows/Home/End/Pag
 keys move through a collection. The test fixture keeps fewer than 50 mounted nodes
 while selecting and revealing the last of 100,000 rows.
 
-`ListModel` stores keyed `ListItem` rows and selection. `view()` realizes the viewport
-plus two rows of overscan; `view_with` customizes each realized row. Fixed positive
-row heights make indexed geometry deterministic. `set_items` validates unique keys
-before replacing data; selection follows keys through sorting/reordering and is
-pruned on removal. Configure `.multiple()` before sharing a model; Shift/Command
-activation adds/removes an individual selection. Models and mutations stay on the
-owning thread, outside builders. Row descriptions should keep durable edit state
-outside the virtual viewport.
+`ListModel` stores keyed `ListItem` rows, selection, a range anchor and a logical
+cursor. `view()` realizes the viewport plus configurable overscan; `view_with`
+customizes each realized row. Fixed positive row heights make indexed geometry
+predictable. `set_items` validates unique keys before replacement, retains selected
+keys/cursor/anchor through reordering, and prunes removed or disabled selections.
+Configure `.multiple()` or `ListOptions::selection`; shared clones see option changes.
+Shift extends a range; Command toggles one row; Command-Shift adds a range. Arrows
+skip disabled rows, Home/End jump to enabled edges and Page keys use viewport rows.
+Return/double-click activate through `on_activate`; ordinary selection does not.
+Models and mutations stay outside builders. Active row edit retention is tracked
+separately in M4.2; durable application values should live outside the viewport.
 
 `TreeModel` flattens expanded branches. Applications fetch lazy children and call
 `set_tree`; `toggle` changes expansion. `TableModel` adds keyed cell drafts and
@@ -720,3 +723,64 @@ accessibility roles, marked text, isolation, focus restoration and closure paths
 window to become key and verifies that background completion preserves it. This
 foreground check is explicit and is not counted when unavailable. Interactive
 VoiceOver/IME and visible GPU auditing remain in M5/M8.
+
+
+## Completion M4 — list interaction
+
+`cargo run --example m4_list` demonstrates 100,000 rows, multiple selection,
+activation, replacement/reversal and overscan configuration. It supports `--light`,
+`--render file.png` and `--smoke`.
+
+```rust
+use scars_ui::{ListItem, ListModel, ListSelection};
+let list = ListModel::new(vec![
+    ListItem::new("one", "First document"),
+    ListItem::new("two", "Second document"),
+], 32.).multiple().on_activate(|key| println!("Open {key}"));
+list.select("one", false);
+list.select_with("two", ListSelection::Range);
+let view = list.view();
+```
+
+`ListSelection::{Replace, Toggle, Range, AddRange, Focus}` makes programmatic
+selection explicit. `select(key, extend)` remains a compatibility shorthand:
+`false` replaces, `true` toggles additively. Single-selection mode turns selection
+operations into replacement; `Focus` only moves the cursor. `selected()` returns a
+snapshot; `is_selected` and `selection_count` query without cloning the set.
+`clear_selection` keeps the cursor/anchor; `select_all` selects enabled rows in
+multiple mode. A range follows the anchor's logical key through reordered data and
+skips disabled rows. Toggle/replacement establish a new anchor; ranges preserve it.
+Changing to single mode keeps the selected cursor, otherwise one existing selection.
+Removed/disabled cursors fall back to a nearby enabled item when data is replaced.
+Validation failure leaves data, tokens and selection intact.
+
+`ListOptions` configures selection mode, preferred `visible_rows` (five by default),
+`overscan_rows` (two) and positive `typeahead_timeout` (one second). `options` and
+`set_options` validate before applying. Preferred height is rows × row height;
+ordinary height/grow modifiers and viewport constraints still apply. `visible_range`
+returns the realized range including overscan. Realization is bounded by viewport
+rows plus twice the configured overscan, clamped to the data extent.
+
+A list has one row Tab stop. Arrows/Home/End/Page reveal logical targets; Command
+or Control movement preserves selection, Shift extends it and Command/Control-Shift
+adds a range. Command/Control-A selects all enabled rows. Space selects the focused
+row (Command/Control-Space toggles); Return invokes activation once per key press.
+Double-click activates after selection. Disabled rows cannot select or activate.
+Activation callbacks run outside model/host borrows and may replace the data;
+recursive activation is ignored. Right-click preserves an existing selection or
+selects an unselected target before its context action.
+
+Printable native keys use Unicode lowercase prefix typeahead, skipping disabled
+rows, cycling on a repeated prefix and resetting after the configured timeout.
+`Host::collection_text`/`collection_text_at` expose the same behavior to portable
+adapters and deterministic tests. Embedded editors retain their ordinary text
+input. Navigation uses `select_collection_item_with` to select/reveal/focus;
+`select_collection_item` retains the boolean compatibility shorthand. Reordering
+keeps focused logical keys visible. Wheel scrolling can unrealize the focused row
+without snapping back: focus remains in the collection and the next navigation
+reveals its logical target. Active embedded editor retention remains M4.2.
+
+Seven focused portable tests cover selection, pointer/keyboard routing, typeahead,
+reordering, callback replacement and bounded 100,000-row realization. Native tests
+cover Shift-arrow skipping, typeahead, activation, Select All, indexed offscreen
+proxies and proxy identity after reordering. Final interactive auditing remains M5.

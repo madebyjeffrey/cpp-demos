@@ -772,12 +772,15 @@ fn main() {
         assert_eq!(cancelled.get(), 1);
         window.clear_view();
     }
+    let activated_rows = State::new(Vec::<String>::new());
     let list = ui::ListModel::new(
         (0..100_000)
-            .map(|i| ui::ListItem::new(i.to_string(), format!("Row {i}")))
+            .map(|i| ui::ListItem::new(i.to_string(), format!("Row {i}")).enabled(i != 2))
             .collect(),
         32.,
-    );
+    )
+    .multiple()
+    .on_activate(activated_rows.handler(|s, key| s.update(|v| v.push(key))));
     let list_host = window
         .set_view({
             let list = list.clone();
@@ -799,6 +802,34 @@ fn main() {
         assert!(pressed);
         assert!(list.selected().contains("99999"));
         assert!(list_host.snapshot().unwrap().len() < 100);
+        let list_id = list_host.snapshot().unwrap()[0].id;
+        list_host.select_collection_item(list_id, 1, false).unwrap();
+        let send = |text: &str, flags: app_kit::NSEventModifierFlags, code: u16| {
+            let characters = NSString::from_str(text);
+            let event=app_kit::NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(app_kit::NSEventType::KeyDown,foundation::NSPoint::ZERO,flags,0.,window.native_window().windowNumber(),None,&characters,&characters,false,code).unwrap();
+            let _: () = msg_send![native,keyDown:&*event];
+        };
+        send("", app_kit::NSEventModifierFlags::Shift, 125);
+        assert_eq!(
+            list.selected(),
+            ["1".to_owned(), "3".to_owned()].into_iter().collect()
+        );
+        send("Row 99999", app_kit::NSEventModifierFlags::empty(), 11);
+        assert_eq!(list.cursor().as_deref(), Some("99999"));
+        send("", app_kit::NSEventModifierFlags::empty(), 36);
+        assert_eq!(activated_rows.get(), ["99999"]);
+        let _: () = msg_send![native,doCommandBySelector:objc2::sel!(selectAll:)];
+        assert_eq!(list.selection_count(), 99_999);
+        assert!(list_host.snapshot().unwrap().len() < 100);
+        let mut rows = (0..list.len())
+            .map(|i| list.item(i).unwrap())
+            .collect::<Vec<_>>();
+        rows.reverse();
+        list.set_items(rows).unwrap();
+        let label: Retained<NSString> = msg_send![&*row, accessibilityLabel];
+        assert_eq!(label.to_string(), "Row 99999");
+        let index: isize = msg_send![&*row, accessibilityIndex];
+        assert_eq!(index, 0);
         window.clear_view();
         let pressed: bool = msg_send![&*row, accessibilityPerformPress];
         assert!(!pressed);

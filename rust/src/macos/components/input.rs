@@ -196,6 +196,18 @@ impl TextInputClient for Client {
     }
 }
 fn command(host: &ui::Host, selector: &str) -> std::result::Result<bool, ui::Error> {
+    if selector == "selectAll:" {
+        return host.key(ui::KeyEvent {
+            key: ui::Key::A,
+            down: true,
+            repeat: false,
+            modifiers: ui::Modifiers {
+                command: true,
+                ..Default::default()
+            },
+        });
+    }
+
     if matches!(selector, "copy:" | "cut:") {
         if let Some(value) = host.selected_text()? {
             unsafe {
@@ -352,7 +364,7 @@ pub(super) fn event(m: &Mounted, event: &Event) -> std::result::Result<bool, ui:
                         | Key::Backspace
                         | Key::DeleteForward
                 )
-                && m.host.menu_text(&k.text)?
+                && (m.host.menu_text(&k.text)? || m.host.collection_text(&k.text)?)
             {
                 return Ok(true);
             }

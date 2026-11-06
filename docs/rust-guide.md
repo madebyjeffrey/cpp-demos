@@ -94,6 +94,11 @@ content. See the [wizard contracts](../rust/components/README.md#completion-m3--
 Use `view_with_surface` when component actions need window context. See the
 [alert contracts](../rust/components/README.md#completion-m3--alert-transactions-and-native-sheets).
 
+`cargo run --example m4_list` demonstrates keyed list selection, navigation,
+typeahead, activation and configurable overscan across 100,000 rows. `ListOptions`
+sets realization policy and `select_with` makes range/additive operations explicit.
+See the [list contracts](../rust/components/README.md#completion-m4--list-interaction).
+
 `view!` supports ordinary expressions, `if`/`else`, keyed `for` loops, custom
 functions returning `View`, and `embed(view)` for an already-built value. Unknown
 properties fail compilation. Use stable keys for reordered items; unkeyed identity

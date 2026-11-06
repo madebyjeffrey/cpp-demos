@@ -76,7 +76,7 @@ define_class!(
         }
         #[unsafe(method(isAccessibilitySelected))]
         fn selected(&self) -> bool {
-            self.with(|_, _, _, model, item| model.selected().contains(&item.key))
+            self.with(|_, _, _, model, item| model.is_selected(&item.key))
                 .unwrap_or(false)
         }
         #[unsafe(method_id(accessibilityParent))]

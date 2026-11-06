@@ -34,7 +34,7 @@ overall goal complete while an in-scope item remains open.
 | Layout and basic controls | Inventory, constrained layout, rich text, style coverage and two-axis scrolling verified | Final cross-component visual/semantic audit in M5/M8 |
 | Editing | Shared buffer, visual navigation/gestures, search/password/numeric policies and held steppers | Localization/value-control expansion in M6; final interactive IME audit in M5 |
 | Presentation | Retained splits/tabs/wizards, hierarchical menus, configured portals, transactional alerts and native sheets | Final interactive and visible desktop audits in M5/M8 |
-| Collections | Fixed-height virtualization, keyed selection, basic trees/tables, cell conflict checks | Lazy tree lifecycle, cell/column interactions, richer selection and semantics |
+| Collections | Configurable list realization, keyed anchor/range/additive selection, activation/typeahead, basic trees/tables | Virtual edit retention, lazy tree lifecycle, cell/column interactions and final semantics |
 | Values and tooling | Typed drafts, sRGB/hex, calendar, ISO/zoned editing, picking/width overrides | Complete value-control policies and inspector/Lab coverage |
 | Verification | Core/CPU tests and native input/accessibility protocol tests | Interactive audits, final visible GPU/full-screen runs and repeatable checks |
 
@@ -297,7 +297,7 @@ Completion record:
 
 ## M4 — Collections and structured editing
 
-- [ ] **M4.1 List interaction:** anchor/range and additive selection, disabled-row skipping, activation/typeahead, configurable overscan and keyboard reveal while logical keys survive sorting and replacement.
+- [x] **M4.1 List interaction:** anchor/range and additive selection, disabled-row skipping, activation/typeahead, configurable overscan and keyboard reveal while logical keys survive sorting and replacement.
 - [ ] **M4.2 Virtual edit lifetime:** bounded realization/retention on large data; retain or explicitly pin active row edits through scrolling, and make removed/reinserted item lifetimes distinct.
 - [ ] **M4.3 Tree model:** integrated lazy loading with expandable/loading/error metadata and safe model replacement; validate keys across collapsed branches and do not silently discard expansion errors.
 - [ ] **M4.4 Tree interaction:** left/right expand/collapse and parent/child navigation, activation, selection and focus retention when branches change or disappear.
@@ -309,7 +309,26 @@ Evidence: evolve the large collection example rather than building a second engi
 selection, loading, reordering, edit-retention/conflict and bounded-resource tests.
 Main implementation: [collections](../rust/components/src/collections.rs).
 
-Completion record: pending.
+Completion record (in progress):
+
+- M4.1: `ListOptions`/`ListSelection` cover configurable overscan/preferred rows,
+  replace/toggle/range/add-range/focus-only operations, a stable anchor and cursor,
+  select-all/clear, disabled-row skipping and activation callbacks. Shared model
+  options replace the previous configure-before-cloning restriction. Atomic item
+  validation preserves keys/tokens/selection; reordering restores logical focus.
+- Lists have one row Tab stop, viewport-sized Page navigation, keyboard reveal,
+  Unicode lowercase prefix typeahead with cycling/timeout and Return/double-click
+  activation. Native printable keys and Select All use the same core behavior.
+  Manual wheel scrolling does not snap to an unrealized focused row; subsequent
+  keyboard navigation reveals its logical target. Selection queries avoid cloning
+  the full selected set during per-row rendering/accessibility.
+- Evidence: seven focused portable interaction/model/resource tests plus existing
+  collection/tab regressions; native Shift-arrow disabled skipping, typeahead,
+  activation, Select All and retained indexed proxies through sorting pass.
+  Workspace tests, strict Clippy and portable compilation pass. `m4_list` provides
+  a 100,000-row example; inspected dark/light previews and native smoke pass.
+  Active row editor retention/lifetime separation remains M4.2; M5/M8 interactive
+  and visible desktop audits remain open.
 
 ## M5 — Accessibility semantics and native behavior
 

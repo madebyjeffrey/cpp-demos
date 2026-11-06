@@ -234,6 +234,7 @@ impl Host {
         }
         self.0.observer.epoch.set(epoch);
         // User getters and destructors never run under a mounted-tree borrow.
+        let prior_focus = self.focused();
         let old = self.0.mounted.replace(next);
         if let Some(id) = {
             let m = self.0.mounted.borrow();
@@ -336,6 +337,7 @@ impl Host {
                 i.pressed = None;
             }
         }
+        self.restore_collection_focus(prior_focus, &old);
         drop(old);
         self.reconcile_capture();
         self.reconcile_fields();
@@ -396,6 +398,25 @@ impl Host {
         };
         if let Some((alert, action)) = &d.alert_action {
             return self.alert_action(id, alert, action);
+        }
+        if let Some((model, key, token, _)) = &d.collection_row {
+            if model.item_token(key) != Some(*token) {
+                return Ok(false);
+            }
+            let parent = self
+                .snapshot()?
+                .iter()
+                .find(|n| n.id == id)
+                .and_then(|n| n.parent);
+            return if let Some(parent) = parent {
+                self.select_collection_item_with(
+                    parent,
+                    model.index_of(key).unwrap(),
+                    crate::ListSelection::Replace,
+                )
+            } else {
+                Ok(false)
+            };
         }
         if let Some(action) = &d.wizard_action {
             return self.wizard_action(id, action);

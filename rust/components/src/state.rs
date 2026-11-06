@@ -126,6 +126,9 @@ impl<T: 'static> State<T> {
     where
         T: Clone,
     {
+        self.with(Clone::clone)
+    }
+    pub(crate) fn with<R>(&self, read: impl FnOnce(&T) -> R) -> R {
         TRACKING.with(|tracking| {
             if let Some(deps) = tracking.borrow_mut().last_mut() {
                 let cell: Rc<dyn Dependency> = self.0.clone();
@@ -134,7 +137,7 @@ impl<T: 'static> State<T> {
                 }
             }
         });
-        self.0.value.borrow().clone()
+        read(&self.0.value.borrow())
     }
     /// Publish a changed value. Equal writes do not invalidate hosts.
     pub fn set(&self, value: T)
