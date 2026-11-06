@@ -60,6 +60,8 @@ pub struct Node {
     pub(crate) scroll_axes: crate::ScrollAxes,
     pub(crate) scrollbars: bool,
     pub collection: Option<crate::ListModel>,
+    pub table_editor: Option<crate::TableEdit>,
+    pub table_edit_error: Option<String>,
     pub table_model: Option<crate::TableModel>,
     pub table_order: Vec<String>,
     pub table_cell: Option<crate::TableCell>,
@@ -145,6 +147,19 @@ pub(crate) struct Inner {
 }
 impl Drop for Inner {
     fn drop(&mut self) {
+        let models = self
+            .mounted
+            .get_mut()
+            .nodes
+            .iter()
+            .filter_map(|n| n.table_model.clone())
+            .collect::<Vec<_>>();
+        for model in models {
+            crate::state::cleanup(move || {
+                model.cancel_edit();
+            });
+        }
+
         for scope in self.scopes.get_mut().drain(..).rev() {
             if !scope.closed.replace(true) {
                 (scope.data.close)(crate::DismissReason::Unmounted);
@@ -349,6 +364,7 @@ impl Host {
                 i.pressed = None;
             }
         }
+        self.retire_table_edits(&old);
         self.restore_collection_focus(prior_focus, &old);
         drop(old);
         self.reconcile_capture();
@@ -693,6 +709,12 @@ fn mount(
         scroll_axes: d.scroll_axes,
         scrollbars: d.scrollbars,
         collection: d.collection.clone(),
+        table_editor: d.table_editor.clone(),
+        table_edit_error: d
+            .table_editor
+            .as_ref()
+            .and_then(|e| e.info())
+            .and_then(|i| i.error),
         table_order: d
             .table
             .as_ref()

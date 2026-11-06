@@ -7,7 +7,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     rc::Rc,
 };
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TableCell {
     pub row: String,
     pub column: String,
@@ -65,6 +65,7 @@ pub struct TableColumn {
     pub resizable: bool,
     pub sortable: bool,
     pub alignment: Align,
+    pub(super) policy: Rc<super::table_edit::CellPolicy>,
 }
 impl TableColumn {
     pub fn new(id: impl Into<String>, title: impl Into<String>) -> Self {
@@ -77,6 +78,7 @@ impl TableColumn {
             resizable: true,
             sortable: true,
             alignment: Align::Start,
+            policy: Rc::new(Default::default()),
         }
     }
     pub fn width(mut self, width: f64) -> Self {
@@ -149,6 +151,7 @@ impl Default for TableOptions {
 pub(super) struct Column {
     pub value: TableColumn,
     pub token: u64,
+    pub policy_version: u64,
 }
 #[derive(Clone, Default, PartialEq)]
 struct Cells {
@@ -159,14 +162,18 @@ struct Cells {
 type SortHandler = Rc<dyn Fn(Vec<SortDescriptor>)>;
 pub(super) struct TableData {
     pub list: ListModel,
-    source: State<Rc<Vec<TableRow>>>,
-    index: RefCell<HashMap<String, usize>>,
+    pub source: State<Rc<Vec<TableRow>>>,
+    pub index: RefCell<HashMap<String, usize>>,
     pub columns: State<Rc<Vec<Column>>>,
     options: State<TableOptions>,
     sort: State<Vec<SortDescriptor>>,
     cells: State<Cells>,
     on_sort: RefCell<Option<SortHandler>>,
     notifying: Cell<bool>,
+    pub active: State<Option<Rc<super::table_edit::EditSession>>>,
+    pub versions: RefCell<HashMap<TableCell, u64>>,
+    pub last_edit_error: State<Option<String>>,
+    pub on_commit: RefCell<Option<super::table_edit::CommitHandler>>,
 }
 #[derive(Clone)]
 pub struct TableModel(pub(super) Rc<TableData>);
@@ -176,8 +183,10 @@ pub struct CellEdit {
     pub column: String,
     pub original: String,
     pub text: String,
-    row_token: u64,
-    column_token: u64,
+    pub(super) row_token: u64,
+    pub(super) column_token: u64,
+    pub(super) policy_token: u64,
+    pub(super) value_token: u64,
 }
 impl TableModel {
     /// Positional convenience for simple string tables; columns get `column-N` IDs.
@@ -185,7 +194,7 @@ impl TableModel {
         let columns: Vec<_> = headers
             .into_iter()
             .enumerate()
-            .map(|(i, title)| TableColumn::new(format!("column-{i}"), title))
+            .map(|(i, title)| TableColumn::new(format!("column-{i}"), title).editable(true))
             .collect();
         let rows = rows
             .into_iter()
@@ -239,6 +248,7 @@ impl TableModel {
                     .map(|value| Column {
                         value,
                         token: super::list::next_token(),
+                        policy_version: super::list::next_token(),
                     })
                     .collect(),
             )),
@@ -247,6 +257,10 @@ impl TableModel {
             cells: State::new(Cells::default()),
             on_sort: RefCell::new(None),
             notifying: Cell::new(false),
+            active: State::new(None),
+            versions: RefCell::new(HashMap::new()),
+            last_edit_error: State::new(None),
+            on_commit: RefCell::new(None),
         }));
         model.publish()?;
         Ok(model)
@@ -293,9 +307,40 @@ impl TableModel {
         let index = *self.0.index.borrow().get(row)?;
         Some(source[index].cells.get(column).cloned().unwrap_or_default())
     }
+    /// Apply authoritative data without emitting a user commit callback.
+    pub fn set_text(
+        &self,
+        row: &str,
+        column: &str,
+        text: impl Into<String>,
+    ) -> Result<bool, Error> {
+        let current = self
+            .text(row, column)
+            .ok_or_else(|| Error("Table row or column was removed".into()))?;
+        let text = text.into();
+        if current == text {
+            return Ok(false);
+        }
+        let mut rows = (*self.0.source.get()).clone();
+        let index = *self.0.index.borrow().get(row).unwrap();
+        rows[index].cells.insert(column.into(), text);
+        self.set_rows(rows)?;
+        Ok(true)
+    }
+    pub fn reveal_row(&self, key: &str) -> bool {
+        let Some(index) = self.row_index(key) else {
+            return false;
+        };
+        self.0.list.reveal(index);
+        true
+    }
+    pub fn realized_row_count(&self) -> usize {
+        self.0.list.realized_indices().len()
+    }
     pub fn set_rows(&self, rows: Vec<TableRow>) -> Result<(), Error> {
         validate_rows(&rows, self.options().row_height)?;
         crate::state::batch(|| {
+            self.update_versions(&rows);
             self.0.source.set(Rc::new(rows));
             self.publish()
         })
@@ -311,7 +356,15 @@ impl TableModel {
                     .iter()
                     .find(|c| c.value.id == value.id)
                     .map_or_else(super::list::next_token, |c| c.token);
-                Column { value, token }
+                let policy_version = old
+                    .iter()
+                    .find(|c| c.value.id == value.id && c.value.policy == value.policy)
+                    .map_or_else(super::list::next_token, |c| c.policy_version);
+                Column {
+                    value,
+                    token,
+                    policy_version,
+                }
             })
             .collect();
         let sort: Vec<_> = self
@@ -333,7 +386,12 @@ impl TableModel {
         crate::state::batch(|| {
             self.0.columns.set(Rc::new(columns));
             self.0.sort.set(sort);
-            if changed { self.publish() } else { Ok(()) }
+            if changed {
+                self.publish()
+            } else {
+                self.reconcile_edit();
+                Ok(())
+            }
         })
     }
     pub fn widths(&self) -> Vec<TableColumnWidth> {
@@ -540,6 +598,7 @@ impl TableModel {
             .collect();
         self.0.list.set_items(rows)?;
         self.prune_cells();
+        self.reconcile_edit();
         Ok(())
     }
     fn enabled(&self, cell: &TableCell) -> bool {
@@ -729,7 +788,15 @@ impl TableModel {
         self.edit_cell(&TableCell::new(key, &self.columns().get(column)?.id))
     }
     pub fn edit_cell(&self, cell: &TableCell) -> Option<CellEdit> {
-        if !self.enabled(cell) {
+        crate::state::check_write();
+        if !self.enabled(cell)
+            || !self
+                .0
+                .columns
+                .get()
+                .iter()
+                .any(|c| c.value.id == cell.column && c.value.policy.editable)
+        {
             return None;
         }
         let text = self.text(&cell.row, &cell.column)?;
@@ -740,21 +807,18 @@ impl TableModel {
             text,
             row_token: self.row_token(&cell.row)?,
             column_token: self.column_token(&cell.column)?,
+            policy_token: self
+                .0
+                .columns
+                .get()
+                .iter()
+                .find(|c| c.value.id == cell.column)?
+                .policy_version,
+            value_token: self.value_token(cell),
         })
     }
     pub fn commit(&self, edit: CellEdit) -> Result<(), Error> {
-        if self.row_token(&edit.row) != Some(edit.row_token)
-            || self.column_token(&edit.column) != Some(edit.column_token)
-        {
-            return Err(Error("Row or column was removed/replaced".into()));
-        }
-        if self.text(&edit.row, &edit.column).as_ref() != Some(&edit.original) {
-            return Err(Error("Cell changed while editing".into()));
-        }
-        let mut source = (*self.0.source.get()).clone();
-        let index = *self.0.index.borrow().get(&edit.row).unwrap();
-        source[index].cells.insert(edit.column, edit.text);
-        self.set_rows(source)
+        self.commit_checked(edit)
     }
 }
 fn validate_rows(rows: &[TableRow], height: f64) -> Result<(), Error> {

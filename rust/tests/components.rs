@@ -1215,6 +1215,141 @@ fn main() {
         assert_eq!(table.columns()[1].width, width + 8.);
     }
     window.clear_view();
+    let editable = ui::TableModel::with_columns(
+        vec![
+            ui::TableColumn::new("name", "Name")
+                .editable(true)
+                .validate(|_, s| {
+                    if s.trim().is_empty() {
+                        Err(ui::Error("Name required".into()))
+                    } else {
+                        Ok(())
+                    }
+                }),
+            ui::TableColumn::new("state", "State"),
+        ],
+        (0..1000)
+            .map(|i| {
+                ui::TableRow::new(i.to_string())
+                    .cell("name", format!("Name {i}"))
+                    .cell("state", "Ready")
+            })
+            .collect(),
+    )
+    .unwrap();
+    let commit_count = ui::State::new(0usize);
+    let editable = editable.on_commit(commit_count.handler(|s, _| s.update(|n| *n += 1)));
+    let edit_host = window
+        .set_view({
+            let table = editable.clone();
+            move || table.view()
+        })
+        .unwrap();
+    let first = editable
+        .start_edit(ui::TableCell::new("0", "name"))
+        .unwrap();
+    unsafe {
+        let field: Retained<AnyObject> = msg_send![native, accessibilityFocusedUIElement];
+        let label: Retained<NSString> = msg_send![&*field, accessibilityLabel];
+        assert_eq!(label.to_string(), "Name editor");
+        let _: () = msg_send![native,doCommandBySelector:objc2::sel!(selectAll:)];
+        let marked = NSString::from_str("日本");
+        let _: () = msg_send![native,setMarkedText:&*marked,selectedRange:NSRange::new(2,0),replacementRange:NSRange::new(isize::MAX as usize,0)];
+        let parent = edit_host
+            .snapshot()
+            .unwrap()
+            .iter()
+            .find(|n| n.table_model.is_some())
+            .unwrap()
+            .id;
+        let id = edit_host.focused();
+        edit_host
+            .scroll_to(parent, ui::Point { x: 0., y: 3800. })
+            .unwrap();
+        let _: Option<Retained<AnyObject>> = msg_send![native, accessibilityFocusedUIElement];
+        assert!(edit_host.text_input().unwrap().unwrap().marked.is_some());
+        editable.move_column("name", 1).unwrap();
+        editable
+            .set_sort(vec![ui::SortDescriptor::new(
+                "name",
+                ui::SortOrder::Descending,
+            )])
+            .unwrap();
+        let _: Option<Retained<AnyObject>> = msg_send![native, accessibilityFocusedUIElement];
+        assert_eq!(edit_host.focused(), id);
+        assert!(edit_host.text_input().unwrap().unwrap().marked.is_some());
+        let chars = NSString::from_str("\r");
+        let repeat=app_kit::NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(app_kit::NSEventType::KeyDown,foundation::NSPoint::ZERO,app_kit::NSEventModifierFlags::empty(),0.,window.native_window().windowNumber(),None,&chars,&chars,true,36).unwrap();
+        let _: () = msg_send![native,keyDown:&*repeat];
+        assert!(first.is_current());
+        assert_eq!(commit_count.get(), 0);
+        let _: () = msg_send![native,doCommandBySelector:objc2::sel!(insertNewline:)];
+        assert!(first.is_current());
+        assert!(edit_host.text_input().unwrap().unwrap().marked.is_none());
+        assert_eq!(commit_count.get(), 0);
+        let _: () = msg_send![native,doCommandBySelector:objc2::sel!(insertNewline:)];
+        assert!(!first.is_current());
+        assert_eq!(editable.text("0", "name").as_deref(), Some("日本"));
+        assert_eq!(commit_count.get(), 1);
+        let stale: bool = msg_send![&*field, isAccessibilityElement];
+        assert!(!stale);
+        let second = editable
+            .start_edit(ui::TableCell::new("0", "name"))
+            .unwrap();
+        let field: Retained<AnyObject> = msg_send![native, accessibilityFocusedUIElement];
+        let empty = NSString::from_str("");
+        let _: () = msg_send![&*field,setAccessibilityValue:&*empty];
+        let _: () = msg_send![native,doCommandBySelector:objc2::sel!(insertNewline:)];
+        assert!(second.is_current());
+        assert_eq!(editable.edit_error().as_deref(), Some("Name required"));
+        let _: () = msg_send![native,doCommandBySelector:objc2::sel!(cancelOperation:)];
+        assert!(!second.is_current());
+        let stale: bool = msg_send![&*field, isAccessibilityElement];
+        assert!(!stale);
+        let third = editable
+            .start_edit(ui::TableCell::new("0", "name"))
+            .unwrap();
+        let field: Retained<AnyObject> = msg_send![native, accessibilityFocusedUIElement];
+        window.clear_view();
+        assert!(!third.is_current());
+        assert!(editable.active_edit().is_none());
+        let stale: bool = msg_send![&*field, isAccessibilityElement];
+        assert!(!stale);
+        assert!(edit_host.text_input().unwrap().is_none());
+    }
+    let multiline = ui::TableModel::with_columns(
+        vec![
+            ui::TableColumn::new("notes", "Notes")
+                .editable(true)
+                .multiline(true),
+        ],
+        vec![ui::TableRow::new("0").cell("notes", "One")],
+    )
+    .unwrap();
+    window
+        .set_view({
+            let table = multiline.clone();
+            move || table.view()
+        })
+        .unwrap();
+    unsafe {
+        for flags in [
+            app_kit::NSEventModifierFlags::Command,
+            app_kit::NSEventModifierFlags::Control,
+        ] {
+            let edit = multiline
+                .start_edit(ui::TableCell::new("0", "notes"))
+                .unwrap();
+            let _: Option<Retained<AnyObject>> = msg_send![native, accessibilityFocusedUIElement];
+            let _: () = msg_send![native,doCommandBySelector:objc2::sel!(insertNewline:)];
+            assert!(edit.is_current());
+            let chars = NSString::from_str("\r");
+            let event=app_kit::NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(app_kit::NSEventType::KeyDown,foundation::NSPoint::ZERO,flags,0.,window.native_window().windowNumber(),None,&chars,&chars,false,36).unwrap();
+            let _: () = msg_send![native,keyDown:&*event];
+            assert!(!edit.is_current());
+        }
+    }
+    window.clear_view();
     window.show();
     app.quit_after(std::time::Duration::from_millis(200));
     app.run().unwrap();

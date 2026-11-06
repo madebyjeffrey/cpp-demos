@@ -132,24 +132,30 @@ impl TextInputClient for Client {
             .unwrap_or(0)
     }
     fn intercept_key(&self, key: &KeyEvent) -> bool {
-        // AppKit command selectors omit the repeat flag; retain it for combo acceptance.
-        if key.down && key.repeat && key.key == Key::Enter {
+        // Keep repeat/Command-Return policy before AppKit reduces keys to text selectors.
+        if key.down
+            && key.key == Key::Enter
+            && (key.repeat || key.modifiers.command || key.modifiers.control)
+        {
             let handled = self
                 .owner
                 .upgrade()
                 .and_then(|m| {
                     m.run(|m, _| {
-                        let combo = m
-                            .host
-                            .snapshot()?
-                            .iter()
-                            .any(|n| Some(n.id) == m.host.focused() && n.combo.is_some());
-                        if combo {
+                        let intercept = m.host.snapshot()?.iter().any(|n| {
+                            Some(n.id) == m.host.focused()
+                                && (n.table_editor.is_some() || n.combo.is_some() && key.repeat)
+                        });
+                        if intercept {
                             m.host.key(ui::KeyEvent {
                                 key: ui::Key::Enter,
                                 down: true,
-                                repeat: true,
-                                modifiers: Default::default(),
+                                repeat: key.repeat,
+                                modifiers: ui::Modifiers {
+                                    command: key.modifiers.command,
+                                    control: key.modifiers.control,
+                                    ..Default::default()
+                                },
                             })
                         } else {
                             Ok(false)

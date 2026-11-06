@@ -64,6 +64,21 @@ impl Host {
         let Some(model) = self.list(parent) else {
             return Ok(false);
         };
+        if let Some(table) = self.table(parent) {
+            let column = if table.options().selection_mode == crate::TableSelectionMode::Cells {
+                table.cursor().map(|c| c.column)
+            } else {
+                table
+                    .columns()
+                    .iter()
+                    .find(|c| c.policy.editable)
+                    .map(|c| c.id.clone())
+            };
+            if let Some(column) = column {
+                return self.start_table_cell_edit(parent, crate::TableCell::new(key, column));
+            }
+            return Ok(false);
+        }
         Ok(if let Some(tree) = self.tree(parent) {
             tree.ui_activate(key)
         } else {

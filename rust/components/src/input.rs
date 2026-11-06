@@ -65,6 +65,7 @@ pub(crate) struct Interaction {
     pub swallow_up: bool,
     pub tooltip_hover: Option<NodeId>,
     pub pointer: Point,
+    pub pending_table_tab: Option<bool>,
     pub pending_row: Option<(NodeId, String)>,
 }
 impl Default for Interaction {
@@ -86,6 +87,7 @@ impl Default for Interaction {
             swallow_up: false,
             tooltip_hover: None,
             pointer: Point::default(),
+            pending_table_tab: None,
             pending_row: None,
         }
     }
@@ -235,6 +237,7 @@ impl Host {
             i.pressed = None;
             i.scroll_drag = None;
             i.table_drag = None;
+            i.pending_table_tab = None;
             i.split_drag = None;
             i.drag_tick = None;
             i.repeat = None;
@@ -268,6 +271,7 @@ impl Host {
         {
             state.revealed = false;
         }
+        self.0.interaction.borrow_mut().pending_table_tab = None;
         self.0.interaction.borrow_mut().pending_row = None;
         let previous = self.0.interaction.borrow_mut().focus.replace(id);
         if previous != Some(id) {
@@ -302,6 +306,7 @@ impl Host {
         let mut i = self.0.interaction.borrow_mut();
         let previous = i.focus.take().filter(|_| i.active);
         i.pending_row = None;
+        i.pending_table_tab = None;
         i.pressed = None;
         i.scroll_drag = None;
         i.table_drag = None;
@@ -422,7 +427,7 @@ impl Host {
         if self.menu_pointer(event)? {
             return Ok(true);
         }
-        if self.table_pointer(event)? {
+        if self.table_pointer(event, clicks)? {
             return Ok(true);
         }
         if self.split_pointer(event, clicks)? {
@@ -697,6 +702,26 @@ impl Host {
                 Ok(true)
             };
         }
+        if event.key == Key::Tab
+            && !event.modifiers.control
+            && self.focused().is_some_and(|id| {
+                self.0
+                    .mounted
+                    .borrow()
+                    .descriptions
+                    .get(&id)
+                    .is_some_and(|d| d.table_editor.is_some())
+            })
+        {
+            return self.text_command(
+                if event.modifiers.shift {
+                    TextCommand::BackTab
+                } else {
+                    TextCommand::Tab
+                },
+                false,
+            );
+        }
         if let Some(handled) = self.tab_key(event)? {
             return Ok(handled);
         }
@@ -719,6 +744,17 @@ impl Host {
             .find(|n| n.id == id)
             .cloned();
         let Some(node) = node else { return Ok(false) };
+        if node.table_editor.is_some() && event.key == Key::Enter {
+            if event.repeat {
+                return Ok(true);
+            }
+            if event.modifiers.command || event.modifiers.control {
+                if self.text_input()?.is_some_and(|i| i.marked.is_some()) {
+                    return self.unmark_text(true);
+                }
+                return self.finish_table_edit(id, false, None);
+            }
+        }
         if let Some(handled) = self.table_header_key(id, event)? {
             return Ok(handled);
         }

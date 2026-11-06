@@ -34,7 +34,7 @@ overall goal complete while an in-scope item remains open.
 | Layout and basic controls | Inventory, constrained layout, rich text, style coverage and two-axis scrolling verified | Final cross-component visual/semantic audit in M5/M8 |
 | Editing | Shared buffer, visual navigation/gestures, search/password/numeric policies and held steppers | Localization/value-control expansion in M6; final interactive IME audit in M5 |
 | Presentation | Retained splits/tabs/wizards, hierarchical menus, configured portals, transactional alerts and native sheets | Final interactive and visible desktop audits in M5/M8 |
-| Collections | Configurable lists, bounded pinned edits, distinct row lifetimes and interactive lazy/deferred trees and virtual combo boxes; keyed table columns/sort/selection | Integrated table editing and final semantics |
+| Collections | Virtual lists, lazy trees, combo boxes and keyed tables with retained validated edits | Combined native semantics and interactive audits |
 | Values and tooling | Typed drafts, sRGB/hex, calendar, ISO/zoned editing, picking/width overrides | Complete value-control policies and inspector/Lab coverage |
 | Verification | Core/CPU tests and native input/accessibility protocol tests | Interactive audits, final visible GPU/full-screen runs and repeatable checks |
 
@@ -303,7 +303,7 @@ Completion record:
 - [x] **M4.4 Tree interaction:** left/right expand/collapse and parent/child navigation, activation, selection and focus retention when branches change or disappear.
 - [x] **M4.5 Combo box:** separate query and selection, selection/free-text modes, filtering, loading/empty states, keyboard highlight/accept/cancel and accessible popup relationships; replace the fixed suggestion cap with bounded realization where needed.
 - [x] **M4.6 Table model and columns:** keyed columns, width bounds, resize/reorder, sort descriptors and row/cell selection modes. Keep selection attached to logical keys rather than indices.
-- [ ] **M4.7 Table editing:** integrated cell activation/edit/commit/cancel, validation and readonly/custom content policies; preserve drafts through scrolling and reject stale commits after row/column/model changes.
+- [x] **M4.7 Table editing:** integrated cell activation/edit/commit/cancel, validation and readonly/custom content policies; preserve drafts through scrolling and reject stale commits after row/column/model changes.
 
 Evidence: evolve the large collection example rather than building a second engine;
 selection, loading, reordering, edit-retention/conflict and bounded-resource tests.
@@ -409,7 +409,7 @@ Completion record (in progress):
   objects. `m4_combo` supplies the runnable example; dark/light open-popup previews
   inspected and native smoke passes. Actual VoiceOver/IME auditing remains M5/M8.
 
-- M4.6: `TableRow` stores text by column ID; checked `TableColumn`/`TableOptions`
+- M4.6 (`26cae99`): `TableRow` stores text by column ID; checked `TableColumn`/`TableOptions`
   define width bounds, resizable/sortable/alignment and realization/selection policy.
   Width snapshots, resize and reorder preserve surviving column/row lifetimes.
   Width-only changes do not rebuild or sort the dataset. Multi-column descriptors
@@ -431,7 +431,33 @@ Completion record (in progress):
   pass. Native component tests cover header sorting, actual key-driven cell movement,
   retained/replaced focus and resize commands. `m4_table` supplies the runnable
   example; dark/light previews inspected and native smoke passes. Integrated editing
-  remains M4.7; complete native table semantics/interactive audits remain M5/M8.
+  is covered below; complete native table semantics/interactive audits remain M5/M8.
+
+- M4.7: column editing is opt-in, with multiline/length policy, pure validation and
+  custom display builders. Return/double-click activates; composition commits before
+  submission, repeated Return does not submit, and Command/Control-Return saves
+  multiline content. Escape cancels; Tab saves and traverses. Errors keep drafts
+  visible with outline/help and table error text. Blur retains the draft; activating
+  another editable cell validates the existing one before changing editors.
+- One owned row pin preserves the shared buffer, undo, selection and preedit through
+  scrolling/sort/order changes. Weak `TableEdit` handles and fresh editor IDs prevent
+  stale actions. Row/column/policy generations and per-cell value versions reject
+  stale/equal-text ABA commits without blocking unrelated cell changes. Structural
+  retirement, disable, model replacement, unmount and native detach release the edit,
+  including when an old Host is retained. Commit callbacks run after publication and
+  pin release and may start the next edit.
+- `set_text` applies authoritative data without a user commit event and exposes active
+  conflicts; `reveal_row`/`realized_row_count` avoid application-side list wiring.
+  `m4_table_edit` demonstrates 100,000 rows, validation, multiline and readonly custom
+  display, retained scrolling and remote conflicts (`--invalid` previews validation).
+- Evidence: seven focused editing tests plus existing table/collection regressions,
+  covering versions/validation, purity, pointer/keyboard/Tab, Unicode length, disabled
+  and replaced data/policies/models, reentrant commit and bounded retained editing.
+  Workspace tests, strict Clippy and portable compilation pass. Native tests preserve
+  marked text through scroll/sort/reorder, separate composition from commit, reject
+  repeated Return/stale objects and cover validation/cancel, actual Command/Control-
+  Return and detach with a retained host. Dark/light and invalid previews inspected;
+  native smoke passes. Full table semantics and actual VoiceOver/IME audits remain M5.
 
 ## M5 — Accessibility semantics and native behavior
 

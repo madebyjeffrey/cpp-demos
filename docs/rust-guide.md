@@ -125,6 +125,12 @@ Construct `TableColumn`s and keyed `TableRow::cell` values, then embed `table.vi
 Header drag/keyboard controls and shared scrolling preserve logical cell identity.
 See the [table contracts](../rust/components/README.md#completion-m4--keyed-tables-and-columns).
 
+`cargo run --example m4_table_edit` adds integrated editing with `.editable(true)`,
+pure validators, multiline text and readonly custom display. The model owns the
+active draft and pin; use `on_commit` for application updates. Add `--invalid` to
+preview validation, or use the example's conflict button to simulate remote data.
+See the [table editing contracts](../rust/components/README.md#completion-m4--integrated-table-editing).
+
 `view!` supports ordinary expressions, `if`/`else`, keyed `for` loops, custom
 functions returning `View`, and `embed(view)` for an already-built value. Unknown
 properties fail compilation. Use stable keys for reordered items; unkeyed identity

@@ -19,6 +19,7 @@ impl Measure for Metrics {
 fn columns() -> Vec<TableColumn> {
     vec![
         TableColumn::new("name", "Name")
+            .editable(true)
             .width(180.)
             .limits(80., 320.),
         TableColumn::new("team", "Team")

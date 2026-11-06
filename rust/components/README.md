@@ -1072,7 +1072,7 @@ inside a horizontal scroller. Cell IDs include column lifetimes, preserving surv
 controls across reordering while retiring removed/reinserted columns even with equal
 text. `begin_edit(row, visual_column_index)` and `edit_cell(&TableCell)` return an
 external keyed `CellEdit`; `commit` checks row/column lifetimes and original value.
-Integrated editor activation, drafts/validation/readonly/custom content remain M4.7.
+Integrated editing is described below.
 Full native table/column/cell semantics and interactive audits remain M5.
 
 `TableModel::new(headers, Vec<ListItem>)` remains a positional convenience with
@@ -1085,3 +1085,72 @@ resize/reorder and multi-sort (`--light`, `--render file.png`, `--smoke`). Eight
 tests cover validation, key/lifetime retention, sort stability, rectangle selection,
 geometry, keyboard/pointer capture and bounded realization. Native tests cover
 header sorting, cell navigation, retained/replaced focus and resize commands.
+
+
+## Completion M4 — integrated table editing
+
+```rust
+let table = TableModel::with_columns(
+    vec![TableColumn::new("name", "Name").editable(true).validate(|_, text| {
+        if text.trim().is_empty() { Err(Error("A name is required".into())) } else { Ok(()) }
+    })],
+    vec![TableRow::new("one").cell("name", "Notes")],
+)?.on_commit(|event| println!("Saved {:?}: {}", event.cell, event.text));
+// embed(table.view());
+```
+
+Columns created with `TableColumn::new` are readonly until `.editable(true)`.
+`is_editable` queries that policy; `table.is_editable(&cell)` also checks the live row.
+The legacy positional `TableModel::new` enables editing for its generated columns.
+`multiline(true)` and `max_length(n)` configure the standard shared text editor.
+Length counts extended grapheme clusters; programmatic drafts also validate length
+and supported line/control characters at commit.
+
+Return/double-click activates an editable cell. In row-selection mode Return chooses
+the first editable column. Return saves single-line text; multiline Return inserts
+a line break and Command/Control-Return saves. Marked text commits before a later
+submission; repeated Return never submits. Escape cancels composition first, then
+the edit. Tab/Shift-Tab save and continue ordinary traversal. Failed validation keeps
+the draft and editor, with a red outline, tooltip/help and visible table error text.
+
+Blur preserves the draft and does not autosave. Activating another editable cell
+first tries to commit the existing edit; failure restores its selection/focus.
+Readonly targets do not commit it. Applications can call `start_edit(TableCell)`
+and use the returned weak `TableEdit`: `info`, `set_text`, `focus`, `commit`, `cancel`
+and `is_current`. `active_edit`, `commit_edit`, `cancel_edit` and `edit_error` provide
+model-level equivalents. There is one active editor and one owned row pin.
+
+The pin retains the host buffer, undo, selection and preedit through scrolling,
+sorting and column reordering; no manual application-side pin wiring is needed.
+`reveal_row` and `realized_row_count` support navigation/status without exposing the
+internal list. A new session gets a fresh editor identity, even for the same cell.
+Retired weak handles return no info/false and cannot change a later edit.
+
+`validate` is a pure callback returning `Result<(), Error>`; validation panics or
+state writes become commit errors. Row, column and editing-policy lifetimes plus
+per-cell value versions gate commits. A value that changes and returns to the old
+text still conflicts; unrelated cell updates remain valid. Equal-text duplicate
+commits also retire the snapshot. External value conflicts retain the draft until
+Cancel/reopen. Removed/disabled rows, removed/reinserted columns and policy changes
+retire the editor. Unmount or whole mounted-model replacement cancels it; native
+detach also cancels when the old Host is retained.
+
+`set_text(row, column, text)` applies authoritative data without a user commit callback,
+including readonly cells; active conflicts are reported. `on_commit(TableCommit)`
+runs after data publication, editor retirement and pin release. It can update data
+or start the next edit; `on_commit_with_model` supplies weak model context.
+
+`content(|cell, text| View)` supplies a pure custom display builder. Editing uses the
+standard text field when opted in. Custom content remains readonly by default;
+embedded controls retain their ordinary input behavior and Tab stops. Rendering,
+column alignment and width constraints still apply to the cell container.
+
+`cargo run --example m4_table_edit` demonstrates 100,000 rows, validation, multiline
+text, readonly custom content, scrolling and simulated remote conflicts. Supports
+`--light`, `--render file.png`, `--smoke` and `--invalid` for a validation preview.
+Seven focused tests cover activation/validation/cancel, versions and ABA conflicts,
+100,000-row retention of history/preedit, row/column/policy/model lifetimes, reentrant
+commit/unmount, Unicode length and multiline/Tab behavior. Native protocol tests
+cover retained preedit, repeated Return, validation/cancel, real Command/Control-Return
+and native detach with a retained host. Full native table semantics and actual
+interactive VoiceOver/IME auditing remain M5.

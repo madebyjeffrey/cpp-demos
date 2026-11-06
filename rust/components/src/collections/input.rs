@@ -23,6 +23,9 @@ impl Host {
         let id = self.focused()?;
         let m = self.0.mounted.borrow();
         let n = m.nodes.iter().find(|n| n.id == id)?;
+        if n.table_editor.is_some() {
+            return None;
+        }
         let parent = if n.table_cell.is_some() {
             drop(m);
             return self
@@ -157,6 +160,32 @@ impl Host {
             .descriptions
             .get(&prior)
             .and_then(|d| d.table_cell.as_ref());
+        if old
+            .descriptions
+            .get(&prior)
+            .is_some_and(|d| d.table_editor.is_some())
+            && self.focused() == Some(prior)
+            && self
+                .0
+                .mounted
+                .borrow()
+                .descriptions
+                .get(&prior)
+                .and_then(|d| d.table_editor.as_ref())
+                .is_some_and(|e| e.is_current())
+        {
+            let changed = model.revision() != revision
+                || old.nodes.iter().find(|n| n.id == parent).is_some_and(|n| {
+                    n.table_order
+                        != self
+                            .table(parent)
+                            .map_or(vec![], |t| t.columns().into_iter().map(|c| c.id).collect())
+                });
+            if changed && let Some(editor) = self.0.editors.borrow_mut().get_mut(&prior) {
+                editor.reveal = true;
+            }
+            return;
+        }
         if let Some(table) = self.table(parent) {
             let cell_mode = table.options().selection_mode == crate::TableSelectionMode::Cells;
             let columns_changed = old.nodes.iter().find(|n| n.id == parent).is_some_and(|n| {

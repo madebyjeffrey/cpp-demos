@@ -38,6 +38,9 @@ impl Host {
     pub(crate) fn table_focus_owner(&self, id: NodeId) -> Option<NodeId> {
         let m = self.0.mounted.borrow();
         let n = m.nodes.iter().find(|n| n.id == id)?;
+        if m.descriptions.get(&id)?.table_editor.is_some() {
+            return None;
+        }
         if let Some(action) = m.descriptions.get(&id)?.table_cell.as_ref()
             && action.model.options().selection_mode == TableSelectionMode::Rows
         {
@@ -55,10 +58,18 @@ impl Host {
                 .parent
                 .and_then(|p| m.descriptions.get(&p))
                 .and_then(|d| d.table.as_ref())
-            && model.options().selection_mode == TableSelectionMode::Cells
+            && (model.options().selection_mode == TableSelectionMode::Cells
+                || model
+                    .active_edit()
+                    .and_then(|e| e.info())
+                    .is_some_and(|i| Some(&i.cell.row) == n.key.as_ref()))
         {
             let column = model
-                .cursor()
+                .active_edit()
+                .and_then(|e| e.info())
+                .filter(|i| Some(&i.cell.row) == n.key.as_ref())
+                .map(|i| i.cell)
+                .or_else(|| model.cursor())
                 .map(|c| c.column)
                 .or_else(|| model.columns().first().map(|c| c.id.clone()))?;
             return m
@@ -89,9 +100,15 @@ impl Host {
         }
     }
     pub(crate) fn table_tab_stop(&self, n: &Node, nodes: &[Node]) -> Option<bool> {
+        if n.table_editor.is_some() {
+            return Some(true);
+        }
         if n.table_cell.is_some() {
             let m = self.0.mounted.borrow();
             let action = m.descriptions[&n.id].table_cell.as_ref()?;
+            if action.model.active_edit().is_some() {
+                return Some(false);
+            }
             if action.model.options().selection_mode == TableSelectionMode::Rows {
                 return Some(false);
             }
@@ -310,7 +327,7 @@ impl Host {
                 n.id == d.id && n.enabled && !n.hidden && !n.layout_hidden && self.in_scope(n.id)
             })
     }
-    pub(crate) fn table_pointer(&self, event: crate::Pointer) -> Result<bool, Error> {
+    pub(crate) fn table_pointer(&self, event: crate::Pointer, clicks: u32) -> Result<bool, Error> {
         use crate::PointerKind::*;
         let drag = self.0.interaction.borrow_mut().table_drag.take();
         if let Some(mut d) = drag {
@@ -402,14 +419,16 @@ impl Host {
                 .borrow()
                 .descriptions
                 .get(&id)
+                .filter(|d| d.table_editor.is_none())
                 .and_then(|d| d.table_cell.clone());
             if let Some(action) = action {
                 self.0.interaction.borrow_mut().pressed = None;
-                return self.table_select_cell(
-                    id,
-                    &action,
-                    super::input::selection(event.modifiers),
-                );
+                let selected =
+                    self.table_select_cell(id, &action, super::input::selection(event.modifiers))?;
+                if selected && clicks >= 2 {
+                    return self.start_table_cell_edit(id, action.cell);
+                }
+                return Ok(selected);
             }
         }
         if event.kind != Down || event.button != 0 {

@@ -211,6 +211,9 @@ impl Host {
             .map(|i| i.text[i.selection.range()].to_owned()))
     }
     pub fn text_command(&self, command: TextCommand, extend: bool) -> Result<bool, Error> {
+        if let Some(handled) = self.table_edit_command(command, extend)? {
+            return Ok(handled);
+        }
         if let Some(handled) = self.combo_command(command, extend)? {
             return Ok(handled);
         }

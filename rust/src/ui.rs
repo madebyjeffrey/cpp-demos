@@ -403,7 +403,7 @@ impl Renderer {
                 bg = bg.or(Some(theme.panel));
             }
             match n.kind {
-                Kind::Button if n.table_cell.is_some() => {
+                Kind::Button | Kind::CollectionRow if n.table_cell.is_some() => {
                     bg = bg.or_else(|| (n.value.selected() || n.pressed).then_some(theme.selected));
                 }
                 Kind::Button if n.menu_item.is_some() => {
@@ -442,6 +442,7 @@ impl Renderer {
                     b.inset(0.5),
                     n.style.radius,
                     match n.alert_role {
+                        _ if n.table_edit_error.is_some() => 0xffff6868,
                         Some(AlertActionRole::Default) => n.accent,
                         Some(AlertActionRole::Destructive) => 0xffe85555,
                         _ => theme.border,

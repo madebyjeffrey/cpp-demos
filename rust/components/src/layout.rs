@@ -279,7 +279,12 @@ impl Host {
                 self.focus(id)?;
             }
         }
+        let tab = self.0.interaction.borrow_mut().pending_table_tab.take();
         self.focus_pending_row()?;
+        self.focus_requested_table_editor()?;
+        if let Some(back) = tab {
+            self.focus_next(back)?;
+        }
         let inspector = self.inspector();
         if let Some(selected) = inspector.selected.get() {
             let node = self

@@ -118,6 +118,7 @@ impl Mounted {
     fn deactivate(&self) {
         self.alive.set(false);
         self.host.dismiss_overlays(ui::DismissReason::Unmounted);
+        self.host.cancel_table_edits();
         let _ = self.host.unmark_text(false);
         self.host.blur();
         self.host.set_active(false);
