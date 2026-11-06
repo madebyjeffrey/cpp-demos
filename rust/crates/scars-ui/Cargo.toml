@@ -7,7 +7,7 @@ publish = false
 description = "Portable reactive component foundation for SCARS"
 
 [dependencies]
-scars-ui-macros = { path = "../macros" }
+scars-ui-macros = { path = "../scars-ui-macros" }
 icu_segmenter = "2.4"
 icu_decimal = { version = "2.4", features = ["alloc"] }
 icu_locale_core = "2.4"

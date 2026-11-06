@@ -46,7 +46,7 @@ The main reference is the [current C++ public inventory](../scars/src/scars.cppm
 including options and modifiers, not only control names. The
 [original migration sequence](rust-components-feasibility.md#suggested-migration-sequence-and-exit-criteria)
 defines the intended evidence. Existing Rust contracts are in the
-[component README](../rust/components/README.md).
+[component README](../rust/crates/scars-ui/README.md).
 
 ## M1 — Inventory, layout and scrolling
 
@@ -58,8 +58,8 @@ defines the intended evidence. Existing Rust contracts are in the
 
 Evidence: extend the layout/scroll examples; deterministic geometry, edge propagation
 and cancellation tests; dark/light constrained previews. Likely changes:
-[geometry/layout](../rust/components/src/layout.rs),
-[input](../rust/components/src/input.rs), [native adapter](../rust/src/macos/components/input.rs).
+[geometry/layout](../rust/crates/scars-ui/src/layout.rs),
+[input](../rust/crates/scars-ui/src/input.rs), [native adapter](../rust/crates/scars-window/src/macos/components/input.rs).
 
 Completion record:
 
@@ -105,7 +105,7 @@ Completion record:
 
 Evidence: extend the editor example; Unicode/visual navigation and IME/history tests;
 native clipboard/candidate-geometry checks. Main implementation:
-[editing](../rust/components/src/editing.rs), [drafts](../rust/components/src/draft.rs).
+[editing](../rust/crates/scars-ui/src/editing.rs), [drafts](../rust/crates/scars-ui/src/draft.rs).
 
 Completion record:
 
@@ -184,7 +184,7 @@ Completion record:
 
 Evidence: extend the workspace example with a nested menu, retained tab editor and
 confirmation sheet; focused interaction/lifecycle tests. Main implementation:
-[presentation](../rust/components/src/presentation.rs), [native mounting](../rust/src/macos/components/mod.rs).
+[presentation](../rust/crates/scars-ui/src/presentation.rs), [native mounting](../rust/crates/scars-window/src/macos/components/mod.rs).
 
 Completion record:
 
@@ -311,7 +311,7 @@ Completion record:
 
 Evidence: evolve the large collection example rather than building a second engine;
 selection, loading, reordering, edit-retention/conflict and bounded-resource tests.
-Main implementation: [collections](../rust/components/src/collections.rs).
+Main implementation: [collections](../rust/crates/scars-ui/src/collections.rs).
 
 Completion record (in progress):
 
@@ -474,8 +474,8 @@ Implement semantics alongside M1–M4; this milestone closes their combined audi
 - [ ] **M5.5 Interactive audit:** record actual VoiceOver and IME sessions covering navigation, editing, popup/sheet transitions, password reveal and candidate placement at both backing scales. Fix issues found; keep unavailable checks open.
 
 Evidence: semantic snapshot tests, native protocol/action tests and a short manual
-results record. Main implementation: [native semantics](../rust/src/macos/components/accessibility.rs)
-and [logical row proxies](../rust/src/macos/components/collection_accessibility.rs).
+results record. Main implementation: [native semantics](../rust/crates/scars-window/src/macos/components/accessibility.rs)
+and [logical row proxies](../rust/crates/scars-window/src/macos/components/collection_accessibility.rs).
 
 Completion record:
 
@@ -631,9 +631,9 @@ setter. The hidden tab/menu/focus regression passes. Rebuild/restart
 
 Evidence: extend the value lab; round-trip, calendar-boundary, exact-value,
 validation/transaction and timezone tests. Main implementation:
-[values](../rust/components/src/values.rs), [date control](../rust/components/src/date.rs),
-[drafts](../rust/components/src/draft.rs),
-[Unicode/localization services](../rust/components/src/text.rs).
+[values](../rust/crates/scars-ui/src/values.rs), [date control](../rust/crates/scars-ui/src/date.rs),
+[drafts](../rust/crates/scars-ui/src/draft.rs),
+[Unicode/localization services](../rust/crates/scars-ui/src/text.rs).
 
 Completion record:
 

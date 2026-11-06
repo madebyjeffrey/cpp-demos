@@ -9,7 +9,7 @@ use skia_safe::{
 
 #[test]
 fn paragraph_geometry_and_native_indices_work_without_a_window_or_gpu() {
-    let bytes = include_bytes!("../../demo/assets/Roboto-Regular.ttf");
+    let bytes = include_bytes!("../../../../demo/assets/Roboto-Regular.ttf");
     let face = FontMgr::new()
         .new_from_data(skia_safe::Data::new_copy(bytes), None)
         .expect("bundled font");

@@ -82,8 +82,8 @@ let build = move || view! { column {
 } };
 ```
 
-The Lab's [Counter](../rust/examples/lab/model.rs) also has independent disclosure
-state. Its [view](../rust/examples/lab/view.rs) uses conditional content and normal
+The Lab's [Counter](../rust/crates/scars-window/examples/lab/model.rs) also has independent disclosure
+state. Its [view](../rust/crates/scars-window/examples/lab/view.rs) uses conditional content and normal
 state actions. The application contains no reference-counting or native ownership
 plumbing. Keys retain mounted identity; state reads subscribe automatically.
 Custom function arguments are positional; named properties apply normal `View`

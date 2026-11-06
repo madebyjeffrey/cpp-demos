@@ -84,7 +84,7 @@ class ValidationTests(unittest.TestCase):
 
     def test_native_plan_gates_and_covers_every_opt_in_harness(self):
         guards = {}
-        for source in (check.RUST / "tests").rglob("*.rs"):
+        for source in (check.RUST / "crates/scars-window/tests").rglob("*.rs"):
             found = re.search(r'var_os\("(SCARS_WINDOW_[A-Z_]+_TESTS)"\)', source.read_text())
             if found:
                 guards[source.stem] = found[1]

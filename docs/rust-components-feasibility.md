@@ -32,9 +32,9 @@ The existing [completion audit](scars-controls-verification.md) records 29 regis
 
 ## What exists in Rust, and what remains
 
-[`rust/`](../rust/) is currently `scars-window`: Rust-defined AppKit view/delegate classes, native windows and dialogs, application/window lifecycle, menus and commands, clipboard, input events, redraw scheduling, appearance, and Skia rendering into Metal. Its public [`TextInputClient`](../rust/src/types.rs#L408) transports UTF-16 ranges and UTF-8 text to the renderer. It deliberately delegates editing storage and layout to that renderer. The macOS [`ContentView`](../rust/src/macos/view.rs#L1) implements native text-input transport; it does not implement an editor or a semantic widget tree.
+[`scars-window`](../rust/crates/scars-window/) contains Rust-defined AppKit view/delegate classes, native windows and dialogs, application/window lifecycle, menus and commands, clipboard, input events, redraw scheduling, appearance, and Skia rendering into Metal. Its public [`TextInputClient`](../rust/crates/scars-window/src/types.rs#L408) transports UTF-16 ranges and UTF-8 text to the renderer. It deliberately delegates editing storage and layout to that renderer. The macOS [`ContentView`](../rust/crates/scars-window/src/macos/view.rs#L1) implements native text-input transport; it does not implement an editor or a semantic widget tree.
 
-The crate already supplies the relevant native foundation. Its [manifest](../rust/Cargo.toml) selects `skia-safe` 0.157.0 with Metal/Ganesh, text layout, embedded ICU data, SVG, JPEG, and WebP support. Its [Cargo configuration](../rust/.cargo/config.toml) forces source builds. These dependencies are independent of the C++ project's [Skia m154 pin](../dependencies/skia.json); Rust uses its bindings' matching m157 sources. Differences in rasterization and text layout are acceptable; establish new Rust baselines rather than requiring identical C++ output. The [Rust README](../rust/README.md) explains that boundary.
+The crate already supplies the relevant native foundation. The workspace [manifest](../rust/Cargo.toml) and the window crate [manifest](../rust/crates/scars-window/Cargo.toml) select `skia-safe` 0.157.0 with Metal/Ganesh, text layout, embedded ICU data, SVG, JPEG, and WebP support. Its [Cargo configuration](../rust/.cargo/config.toml) forces source builds. These dependencies are independent of the C++ project's [Skia m154 pin](../dependencies/skia.json); Rust uses its bindings' matching m157 sources. Differences in rasterization and text layout are acceptable; establish new Rust baselines rather than requiring identical C++ output. The [Rust README](../rust/README.md) explains that boundary.
 
 | Area | Existing C++ behavior | Rust migration assessment |
 | --- | --- | --- |
@@ -192,7 +192,7 @@ core work. Native Windows/Linux backends remain outside the confirmed scope.
 
 The first implementation of all six stages has committed Rust examples and focused tests.
 See the [quick guide](rust-guide.md) for commands and explicit current limits, and
-[component contracts](../rust/components/README.md) for behavior. The original
+[component contracts](../rust/crates/scars-ui/README.md) for behavior. The original
 feasibility discussion above is historical planning context, not a parity claim.
 
 | Stage | Commit |

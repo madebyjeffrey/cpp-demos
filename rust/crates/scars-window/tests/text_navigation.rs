@@ -1,6 +1,6 @@
 use scars_window::ui::*;
 fn renderer() -> Renderer {
-    Renderer::with_font(include_bytes!("../../demo/assets/Roboto-Regular.ttf")).unwrap()
+    Renderer::with_font(include_bytes!("../../../../demo/assets/Roboto-Regular.ttf")).unwrap()
 }
 fn mounted(text: &str, width: f64) -> (State<String>, Host, NodeId, Renderer) {
     let value = State::new(text.to_owned());

@@ -1,6 +1,6 @@
 use scars_window::{skia, ui::*};
 fn renderer() -> Renderer {
-    Renderer::with_font(include_bytes!("../../demo/assets/Roboto-Regular.ttf")).unwrap()
+    Renderer::with_font(include_bytes!("../../../../demo/assets/Roboto-Regular.ttf")).unwrap()
 }
 fn by_key(host: &Host, key: &str) -> Node {
     host.snapshot()

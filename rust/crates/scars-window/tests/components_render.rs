@@ -2,7 +2,7 @@ use scars_window::{skia, ui::*};
 #[test]
 fn themes_images_and_text_render_without_a_gpu() {
     let renderer =
-        Renderer::with_font(include_bytes!("../../demo/assets/Roboto-Regular.ttf")).unwrap();
+        Renderer::with_font(include_bytes!("../../../../demo/assets/Roboto-Regular.ttf")).unwrap();
     let image = Bitmap::from_rgba(1, 1, &[255, 0, 0, 255], 4).unwrap();
     let host = Host::new(
         move || view! {column(padding:10){label("Hello Rust");image(image,width:20,height:20);}},
@@ -35,7 +35,7 @@ fn themes_images_and_text_render_without_a_gpu() {
 #[test]
 fn paragraph_limits_alignment_and_line_metrics_use_the_shaping_cache_correctly() {
     let renderer =
-        Renderer::with_font(include_bytes!("../../demo/assets/Roboto-Regular.ttf")).unwrap();
+        Renderer::with_font(include_bytes!("../../../../demo/assets/Roboto-Regular.ttf")).unwrap();
     let base = TextStyle {
         size: 20.,
         ..TextStyle::default()

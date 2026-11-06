@@ -6,7 +6,7 @@ edition = "2024"
 [workspace]
 
 [dependencies]
-kit = { package = "scars-window", path = "../.." }
+kit = { package = "scars-window", path = "../../crates/scars-window" }
 
 # Match the workspace's optimized source-built native engine.
 [profile.dev.package.skia-bindings]

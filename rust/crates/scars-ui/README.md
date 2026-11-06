@@ -3,9 +3,9 @@
 The portable core implements reactive state, layout, editing, presentation,
 virtual collections, localized value controls and inspection. `scars-window`
 adds AppKit windows, native input/accessibility and Skia rendering. Start with the
-[quick guide](../../docs/rust-guide.md) and [full Lab](../../docs/rust-lab.md).
+[quick guide](../../../docs/rust-guide.md) and [full Lab](../../../docs/rust-lab.md).
 The sections below document each stage's contracts; current release evidence and
-open native/interactive gates are in the [release audit](../../docs/rust-release-audit.md).
+open native/interactive gates are in the [release audit](../../../docs/rust-release-audit.md).
 
 From `rust/`:
 
@@ -281,7 +281,7 @@ composition has first been cancelled.
 `cargo run --example m1_layout` demonstrates the current work; it also supports
 `--light`, `--render file.png` and resize. `cargo run --example m1_scroll` demonstrates
 nested two-axis scrolling. M1 evidence is recorded in
-[the checklist](../../docs/rust-completion-checklist.md); final release gates remain in M5.5/M8.
+[the checklist](../../../docs/rust-completion-checklist.md); final release gates remain in M5.5/M8.
 
 `padding` and `margin` accept a scalar, `Insets::symmetric(vertical, horizontal)`,
 or `[top, right, bottom, left]` values. `basis` controls the flex main-axis basis;
@@ -1362,7 +1362,7 @@ IME sessions at both backing scales remain M5.5. Layout payloads follow Apple's
 
 ## M6.1 — editable format policy
 
-[Editable formats](../../docs/rust-editable-formats.md) specifies the implemented
+[Editable formats](../../../docs/rust-editable-formats.md) specifies the implemented
 ASCII/ISO grammar and checked locale profiles. Civil editors
 consume their entire input: a date cannot silently discard a time, and a local
 time/datetime cannot discard an offset or zone. Leap seconds are rejected rather
@@ -1779,7 +1779,7 @@ The example also accepts `--box` or `--flex` to select a diagnostic highlight.
 
 ## M7.3 — Full Lab and custom components
 
-The [Lab guide](../../docs/rust-lab.md) maps all 28 samples and gives reproducible
+The [Lab guide](../../../docs/rust-lab.md) maps all 28 samples and gives reproducible
 page/theme/size/state/presentation commands. Seven retained pages cover the public
 control families, layout/images, typed values, virtual collections and inspection.
 Cards wrap at constrained widths; models/resources are created outside builders.

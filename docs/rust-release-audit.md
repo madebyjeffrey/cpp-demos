@@ -12,8 +12,8 @@ Native protocol checkpoints are documented in the checklist; ordinary headless
 harness skips are not native passes. Actual speech, IME placement and final
 foreground runs remain the explicit open gates below.
 
-Core test paths are relative to `rust/components/tests/`; renderer/native test
-paths are relative to `rust/tests/`. Examples run from `rust/` with
+Core test paths are relative to `rust/crates/scars-ui/tests/`; renderer/native test
+paths are relative to `rust/crates/scars-window/tests/`. Examples run from `rust/` with
 `cargo run --example NAME --locked --offline`.
 
 | Item | Status | Concrete evidence / runnable example |

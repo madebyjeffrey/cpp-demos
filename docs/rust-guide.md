@@ -82,51 +82,51 @@ models outside builders as well.
 
 `cargo run --example m3_menu` demonstrates hierarchical menus and a split action
 that remembers its selected primary action. `Menu::button` hides trigger callback
-plumbing; `Menu::view` provides the overlay. See the [menu contracts](../rust/components/README.md#completion-m3--menu-trees-and-split-actions).
+plumbing; `Menu::view` provides the overlay. See the [menu contracts](../rust/crates/scars-ui/README.md#completion-m3--menu-trees-and-split-actions).
 
 `cargo run --example m3_overlay` demonstrates configurable popovers, tooltips and
 attached context menus. `Popup::options` controls placement, sizing and focus;
 `view.context_menu(&menu, items)` attaches a menu without a separate overlay.
-See the [overlay contracts](../rust/components/README.md#completion-m3--overlay-policy).
+See the [overlay contracts](../rust/crates/scars-ui/README.md#completion-m3--overlay-policy).
 
 `cargo run --example m3_tabs` demonstrates retained tab pages. `Tabs`/`Tab` preserve
 visited controls and their editor/scroll/focus state; `Tab::lazy` defers heavier pages.
-See the [tab contracts](../rust/components/README.md#completion-m3--retained-tabs).
+See the [tab contracts](../rust/crates/scars-ui/README.md#completion-m3--retained-tabs).
 
 `cargo run --example m3_wizard` demonstrates validated setup/review navigation.
 `Wizard` owns step policy and callbacks; `wizard_view(&model, pages)` retains page
-content. See the [wizard contracts](../rust/components/README.md#completion-m3--validated-wizards).
+content. See the [wizard contracts](../rust/crates/scars-ui/README.md#completion-m3--validated-wizards).
 
 `cargo run --example m3_alerts` demonstrates single-use alert transactions; add
 `--sheet` for a native parent-modal sheet. `Alert::view` supplies an overlay and
 `surface.show_sheet(alert, body_builder)` owns the native dialog through completion.
 Use `view_with_surface` when component actions need window context. See the
-[alert contracts](../rust/components/README.md#completion-m3--alert-transactions-and-native-sheets).
+[alert contracts](../rust/crates/scars-ui/README.md#completion-m3--alert-transactions-and-native-sheets).
 
 `cargo run --example m4_list` demonstrates keyed list selection, navigation,
 typeahead, activation and configurable overscan across 100,000 rows. `ListOptions`
 sets realization policy and `select_with` makes range/additive operations explicit.
-See the [list contracts](../rust/components/README.md#completion-m4--list-interaction).
+See the [list contracts](../rust/crates/scars-ui/README.md#completion-m4--list-interaction).
 
 `cargo run --example m4_list_edit` demonstrates retained row edits. Hold a
 `list.pin(key)` handle while editing and release it on Save/Cancel; host undo,
 selection and composition survive scrolling. `on_activate_with_model` supplies
 model context without a strong self-capture. See the
-[virtual edit contracts](../rust/components/README.md#completion-m4--virtual-edit-lifetimes).
+[virtual edit contracts](../rust/crates/scars-ui/README.md#completion-m4--virtual-edit-lifetimes).
 
 `cargo run --example m4_tree` demonstrates cached lazy/deferred branches, visible
 load failure/retry and generation-checked results. `TreeNode` is recursive input;
 `TreeItem` is queried metadata. `expand`/`collapse` return results and model replacement
 retires old requests. `TreeOptions` configures selection/geometry; Left/Right navigate
 branches, and activation/expansion callbacks keep application behavior explicit.
-See the [tree interaction contracts](../rust/components/README.md#completion-m4--tree-interaction)
-and [tree model contracts](../rust/components/README.md#completion-m4--lazy-tree-models).
+See the [tree interaction contracts](../rust/crates/scars-ui/README.md#completion-m4--tree-interaction)
+and [tree model contracts](../rust/crates/scars-ui/README.md#completion-m4--lazy-tree-models).
 
 `cargo run --example m4_combo` demonstrates separate draft/committed choice,
 selection/free-text modes, loading and a virtual 100,000-option popup. Build a
 `ComboBox` once and `embed(combo.view("Find an option"))`; query/accept/cancel
 callbacks keep application policy explicit. Add `--open` to preview suggestions.
-See the [combo contracts](../rust/components/README.md#completion-m4--combo-boxes).
+See the [combo contracts](../rust/crates/scars-ui/README.md#completion-m4--combo-boxes).
 
 `cargo run --example m4_table` demonstrates keyed rows/columns, bounds-checked
 resize/reorder, sort descriptors and row/cell selection across 100,000 rows.
@@ -134,27 +134,27 @@ Construct `TableColumn`s and keyed `TableRow::cell` values, then embed `table.vi
 Header drag/keyboard controls and shared scrolling preserve logical cell identity.
 Native AXTable rows, columns, headers and cells include offscreen data through lazy
 arrays. `--semantics` prints portable metadata; `table_accessibility` is the opt-in
-native protocol test. See the [table semantic contracts](../rust/components/README.md#completion-m5--table-semantics).
-See the [table contracts](../rust/components/README.md#completion-m4--keyed-tables-and-columns).
+native protocol test. See the [table semantic contracts](../rust/crates/scars-ui/README.md#completion-m5--table-semantics).
+See the [table contracts](../rust/crates/scars-ui/README.md#completion-m4--keyed-tables-and-columns).
 
 `cargo run --example m4_table_edit` adds integrated editing with `.editable(true)`,
 pure validators, multiline text and readonly custom display. The model owns the
 active draft and pin; use `on_commit` for application updates. Add `--invalid` to
 preview validation, or use the example's conflict button to simulate remote data.
-See the [table editing contracts](../rust/components/README.md#completion-m4--integrated-table-editing).
+See the [table editing contracts](../rust/crates/scars-ui/README.md#completion-m4--integrated-table-editing).
 
 Tree views expose logical AppKit outline rows with disclosure links/actions,
 selection and loading/failure descriptions, including offscreen rows. Run
 `cargo run --example m4_tree -- --semantics` for a portable row-state listing.
 The native suite is `SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test tree_accessibility`.
-See the [tree semantic contracts](../rust/components/README.md#completion-m5--tree-semantics).
+See the [tree semantic contracts](../rust/crates/scars-ui/README.md#completion-m5--tree-semantics).
 
 `cargo run --example m5_semantics` is a compact settings example combining tabs,
 menus, validated fields and an alert. Numeric/value fields expose validation
 without extra wiring; ordinary fields accept `validation:` and `accessible_help:`.
 `--semantics` prints metadata. Native identity, scoped hit testing, real screen
 coordinates and posting without drawing are exercised by `accessibility_lifecycle`
-(the broader notification audit is still open). See the [control semantic contracts](../rust/components/README.md#completion-m5--control-and-presentation-semantics).
+(the broader notification audit is still open). See the [control semantic contracts](../rust/crates/scars-ui/README.md#completion-m5--control-and-presentation-semantics).
 
 `view!` supports ordinary expressions, `if`/`else`, keyed `for` loops, custom
 functions returning `View`, and `embed(view)` for an already-built value. Unknown
@@ -205,7 +205,7 @@ source removal/teardown clears selection. `Inspector::nodes()` returns owned,
 model-free snapshots; `select(id)` reveals a node. Richer overrides and the full
 Lab remain in M7.2/M7.3.
 
-See [component contracts](../rust/components/README.md) for layouts, controls,
+See [component contracts](../rust/crates/scars-ui/README.md) for layouts, controls,
 selection, popup placement, virtual models, deadlines, native semantics and
 inspection. [Window contracts](../rust/README.md) cover ownership and rendering.
 

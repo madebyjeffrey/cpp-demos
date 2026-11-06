@@ -17,7 +17,7 @@ target to 26.0. The application also checks the OS version at runtime.
 
 Start with the [Rust quick guide](../docs/rust-guide.md) for reactive components and
 `cargo run --locked --example todo`. Each stage has its own example and focused
-tests; [component contracts](components/README.md) describe the current coverage.
+tests; [component contracts](crates/scars-ui/README.md) describe the current coverage.
 The [full Lab](../docs/rust-lab.md) covers all control families in retained pages;
 use `cargo run --example lab --locked --offline -- --page values --size 440x740`.
 
@@ -36,16 +36,11 @@ The [example regression guide](../docs/rust-example-regressions.md) covers all
 
 ## Source layout
 
-- `components/` is the portable reactive foundation; `macros/` implements its
-  Rust-like `view!` syntax. See [stage 1 examples and contracts](components/README.md).
-- `src/lib.rs` exposes the public interface; `src/types.rs` holds shared geometry,
-  input events, menus, options and text-input contracts.
-- `src/platform.rs` selects the backend with target configuration. A future backend
-  gets its own folder and an entry here.
-- `src/macos/` contains all AppKit/Metal implementation, native dependency exports,
-  frame callbacks and native key translation. Its `mod.rs` is the backend entry point.
-- `tests/macos/` contains the native integration suites and rendering helpers;
-  `tests/desktop.rs` and `tests/fullscreen.rs` only select and run those suites.
+- `crates/scars-ui/` is the portable reactive component crate; `crates/scars-ui-macros/`
+  implements its Rust-like `view!` syntax.
+- `crates/scars-window/` contains the AppKit/Metal windowing crate, its public interface,
+  platform backends, examples and tests.
+- `checks/renamed-consumer/` verifies the public crate from an external dependency name.
 
 Public paths such as `scars_window::Window`, `scars_window::Callbacks` and
 `scars_window::app_kit` are unchanged. Targets without a backend can still use the
@@ -113,7 +108,7 @@ Use it from another Cargo project:
 
 ```toml
 [dependencies]
-scars-window = { path = "/path/to/cpp-demos/rust" }
+scars-window = { path = "/path/to/cpp-demos/rust/crates/scars-window" }
 ```
 
 ```rust,no_run
@@ -220,7 +215,7 @@ AppKit provides accessibility for native windows, menus and the titlebar buttons
 Mounted components supply their own accessibility semantics.
 
 The Rust component layer provides layout, interactive basic controls and text input.
-See [component contracts and examples](components/README.md). GPU-capture diagnostics remain future work.
+See [component contracts and examples](crates/scars-ui/README.md). GPU-capture diagnostics remain future work.
 
 ## Ownership, callbacks and modal behavior
 
