@@ -8,6 +8,7 @@ use crate::{
 use std::rc::Rc;
 type Validator = Rc<dyn Fn(DateTime) -> Result<(), Error>>;
 type Disabled = Rc<dyn Fn(Date) -> bool>;
+type ExternalCheck = Rc<dyn Fn(DateTime) -> Validation>;
 
 #[derive(Clone)]
 struct Rules {
@@ -16,6 +17,7 @@ struct Rules {
     max: DateTime,
     disabled: Option<Disabled>,
     validate: Option<Validator>,
+    external: Option<ExternalCheck>,
 }
 impl Rules {
     fn format(&self, value: DateTime) -> String {
@@ -39,7 +41,7 @@ impl Rules {
         let date = self.clock.locale.date_input(date)?;
         Ok(date.to_datetime(self.clock.parse(time, base.time())?))
     }
-    fn check(&self, value: DateTime) -> Validation {
+    fn civil_check(&self, value: DateTime) -> Validation {
         let locale = &self.clock.locale;
         let (status, message) = if !locale.date_supported(value.date()) {
             (
@@ -73,6 +75,16 @@ impl Rules {
             status,
             message,
             dirty: false,
+        }
+    }
+    fn check(&self, value: DateTime) -> Validation {
+        let civil = self.civil_check(value);
+        if civil.status == ValidationStatus::Valid
+            && let Some(check) = &self.external
+        {
+            crate::state::read_only(|| check(value))
+        } else {
+            civil
         }
     }
     fn parse(&self, text: &str, base: DateTime) -> Result<DateTime, String> {
@@ -154,7 +166,7 @@ impl Editor {
             return false;
         }
         self.draft.cancel();
-        self.value.get() == value
+        self.value.get() == value && self.draft.validation().status == ValidationStatus::Valid
     }
     fn select(&self, date: Date) -> bool {
         crate::state::batch(|| {
@@ -225,6 +237,7 @@ impl DateTimePicker {
                     max: DateTime::MAX,
                     disabled: None,
                     validate: None,
+                    external: None,
                 },
                 read_only: false,
                 blur: true,
@@ -320,6 +333,18 @@ impl DateTimePicker {
     }
     pub fn binding(&self) -> Binding<String> {
         self.editor.draft.binding()
+    }
+    pub(crate) fn external_check(self, check: impl Fn(DateTime) -> Validation + 'static) -> Self {
+        self.configure(|r| r.external = Some(Rc::new(check)))
+    }
+    pub(crate) fn raw_candidate(&self) -> Option<DateTime> {
+        self.editor.raw()
+    }
+    pub(crate) fn civil_check(&self, value: DateTime) -> Validation {
+        self.editor.rules.civil_check(value)
+    }
+    pub(crate) fn reset_draft(&self) {
+        self.editor.draft.cancel()
     }
     pub fn draft(&self) -> &Draft<DateTime> {
         &self.editor.draft

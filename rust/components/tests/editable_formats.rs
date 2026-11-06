@@ -118,38 +118,37 @@ fn civil_time_and_datetime_never_discard_offsets_or_date_parts() {
 }
 
 #[test]
-fn zoned_editor_requires_an_explicit_zone_when_an_offset_is_supplied() {
+fn zoned_editor_uses_civil_grammar_and_explicit_zone_operations() {
     let initial = resolve_zoned(
         "2026-03-04T14:30:00".parse().unwrap(),
         "America/Edmonton",
         Resolution::Reject,
     )
     .unwrap();
-    let value = State::new(initial.clone());
-    let picker = ZonedPicker::new(value.binding());
+    let value = State::new(initial.timestamp());
+    let picker = ZonedPicker::new(value.binding(), "America/Edmonton")
+        .unwrap()
+        .show_seconds(true);
     for bad in [
         "2026-03-04T14:30:00Z",
         "2026-03-04T14:30:00-07:00",
-        "2026-03-04T14:30:60-07:00[America/Edmonton]",
-        "2026-03-04T14:30:00-07:00[America/Edmonton][u-ca=gregory]",
+        "2026-03-04T14:30:60",
+        "2026-03-04T14:30:00[America/Edmonton]",
         "2026-03-04T14:30:00+00:00[America/Edmonton]",
     ] {
-        picker.draft.binding().set(bad.into());
-        assert!(!picker.draft.commit());
-        assert_eq!(value.get(), initial);
+        picker.binding().set(bad.into());
+        assert!(!picker.commit());
+        assert_eq!(value.get(), initial.timestamp());
     }
-    picker.draft.binding().set("2026-03-04T15:30".into());
-    assert!(picker.draft.commit());
-    assert_eq!(value.get().time_zone(), initial.time_zone());
-    picker.draft.binding().set(initial.to_string());
-    assert!(picker.draft.commit());
-    assert_eq!(value.get(), initial);
-    let fixed = "2026-03-04T14:30:00+05:30[+05:30]"
-        .parse::<Zoned>()
+    picker.binding().set("2026-03-04T15:30".into());
+    assert!(picker.commit());
+    assert_eq!(picker.time_zone(), initial.time_zone().clone());
+    picker
+        .change_zone("+05:30", ZoneChange::KeepInstant)
         .unwrap();
-    let value = State::new(fixed.clone());
-    let picker = ZonedPicker::new(value.binding());
-    picker.draft.binding().set(fixed.to_string());
-    assert!(picker.draft.commit());
-    assert_eq!(value.get(), fixed);
+    let instant = value.get();
+    assert_eq!(picker.zoned().offset().seconds(), 19800);
+    picker.binding().set(picker.binding().get());
+    assert!(picker.commit());
+    assert_eq!(value.get(), instant);
 }

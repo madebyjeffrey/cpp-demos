@@ -36,11 +36,18 @@ fn invalid_zoned_draft_preserves_committed_instant() {
         Resolution::Reject,
     )
     .unwrap();
-    let value = State::new(initial.clone());
-    let picker = ZonedPicker::new(value.binding());
-    picker.draft.binding().set("2024-03-10T02:30:00".into());
-    assert!(!picker.draft.commit());
-    assert_eq!(value.get().timestamp(), initial.timestamp());
-    picker.resolution.set("later".into());
-    assert!(picker.draft.commit());
+    let value = State::new(initial.timestamp());
+    let picker = ZonedPicker::new(value.binding(), "America/Edmonton")
+        .unwrap()
+        .show_seconds(true);
+    picker.binding().set("2024-03-10T02:30:00".into());
+    assert!(!picker.commit());
+    assert_eq!(value.get(), initial.timestamp());
+    picker.set_repeated_time(RepeatedTimePolicy::Later);
+    assert!(
+        !picker.commit(),
+        "gaps stay invalid under a repeated-time policy"
+    );
+    picker.binding().set("2024-11-03T01:30:00".into());
+    assert!(picker.commit());
 }

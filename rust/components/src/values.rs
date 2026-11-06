@@ -1,8 +1,8 @@
 //! Typed sRGB and ISO civil/zoned controls. Parsing never guesses a locale or DST policy.
 use crate::locale::ActionLabel;
-use crate::{Binding, Draft, EditLocale, State, View};
+use crate::{Binding, Draft, EditLocale, View};
 pub use jiff::{
-    Zoned,
+    Timestamp, Zoned,
     civil::{Date, DateTime, Time},
     tz::TimeZone,
 };
@@ -188,65 +188,4 @@ pub fn resolve_zoned(local: DateTime, zone: &str, resolution: Resolution) -> Res
         Resolution::Later => ambiguous.later(),
     }
     .map_err(|e| e.to_string())
-}
-#[derive(Clone)]
-pub struct ZonedPicker {
-    pub resolution: State<String>,
-    pub draft: Draft<Zoned>,
-}
-impl ZonedPicker {
-    pub fn new(value: Binding<Zoned>) -> Self {
-        let resolution = State::new("reject".to_owned());
-        let policy = resolution.clone();
-        let source = value.clone();
-        let draft = Draft::new(
-            value,
-            move |s| {
-                let strategy = match policy.get().as_str() {
-                    "earlier" => jiff::tz::Disambiguation::Earlier,
-                    "later" => jiff::tz::Disambiguation::Later,
-                    _ => jiff::tz::Disambiguation::Reject,
-                };
-                if let Some((civil, zone)) = s.split_once('[') {
-                    if zone
-                        .strip_suffix(']')
-                        .is_none_or(|name| name.contains(['[', ']']))
-                    {
-                        return Err("Use one bracketed time zone".into());
-                    }
-                    let (date, time) = civil.split_once('T').ok_or("Use an ISO zoned date/time")?;
-                    parse_date(date)?;
-                    let clock_end = time.find(['+', '-', 'Z']).unwrap_or(time.len());
-                    parse_time(&time[..clock_end])?;
-                    jiff::fmt::temporal::DateTimeParser::new()
-                        .disambiguation(strategy)
-                        .parse_zoned(s)
-                        .map_err(|e| e.to_string())
-                } else {
-                    let local = parse_datetime(s)?;
-                    source
-                        .get()
-                        .time_zone()
-                        .to_ambiguous_zoned(local)
-                        .disambiguate(strategy)
-                        .map_err(|e| e.to_string())
-                }
-            },
-            |z| z.to_string(),
-        );
-        Self { resolution, draft }
-    }
-    pub fn view(&self) -> View {
-        View::column(vec![
-            View::segmented(
-                self.resolution.binding(),
-                vec![
-                    crate::OptionItem::new("reject", "Reject ambiguity"),
-                    crate::OptionItem::new("earlier", "Earlier"),
-                    crate::OptionItem::new("later", "Later"),
-                ],
-            ),
-            value_field("ISO date/time · [IANA/Zone]", &self.draft),
-        ])
-    }
 }

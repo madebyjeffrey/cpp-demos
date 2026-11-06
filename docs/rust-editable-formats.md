@@ -13,11 +13,11 @@ formatters may support more locales than editable controls. A display formatter 
 | Gregorian date | Canonical ISO date produced by `Date::to_string()`; four-digit ordinary years, signed extended years at the supported extremes | Numeric locale dates, two-digit years, timestamp/offset/zone suffixes |
 | Civil time | `HH:MM[:SS[.fraction]]`, 24-hour; 1–9 fractional digits after seconds | Dates, offsets/zones, leap seconds, excess precision, 24:00, AM/PM |
 | Civil datetime | ISO date, `T`, civil time above | Offsets/zones; no discarded instant information |
-| Zoned datetime | Civil datetime in the current named zone, or ISO datetime with one bracketed zone (IANA name or explicit fixed offset) and optional matching offset | Bare offsets/Z without a bracketed zone, discarded suffixes, extra calendar annotations, leap-second clamping |
+| Zoned datetime | Civil datetime in the explicitly selected IANA zone or fixed offset; separate explicit zone-change operation | Offset/zone suffixes in the civil field, implicit machine zone, nonexistent wall times, unresolved repeated times |
 | sRGB color | `#RRGGBB` or `#RRGGBBAA`, case insensitive; output includes alpha | Named/CSS colors, shorthand, inferred channel order |
 
-Date/time validity and named-zone resolution use Jiff. Zone gaps/overlaps reject by
-default; choosing earlier/later is explicit. Invalid edits preserve both the draft
+Date/time validity and named-zone resolution use Jiff. The zoned control always
+rejects gaps; repeated times require an explicit policy. Invalid edits preserve both the draft
 and committed value. Apply/Enter validates; Revert restores the model. Numeric
 incomplete/invalid/out-of-range classification and readonly/blur policy already
 exist. Date editors now provide bounds, disabled/custom validation, readonly/blur/
@@ -133,7 +133,7 @@ External source revisions invalidate stale edits, including A→B→A transition
 `cargo run --example m6_time --locked --offline` demonstrates two clock policies
 over one exact value. Six portable tests and the hidden native `time_picker` harness
 cover precision, localized grammar, steps, validation, lifecycle and text composition.
-Zoned instant bounds and timezone policy remain open under M6.4.
+Zoned instant bounds and timezone policy are described below.
 
 ## Combined civil datetime control
 
@@ -157,4 +157,40 @@ Inclusive datetime bounds, disabled-date predicates and custom validators check
 the whole value on every commit/choice/step. Date and clock configuration is shared,
 including locale, 12/24-hour mode, optional seconds, step sizes and readonly policy.
 `m6_datetime` demonstrates an overnight booking range. The local editor does not
-resolve timezones; instant limits, DST decisions and named-zone changes remain M6.4.
+resolve timezones; use `ZonedPicker` for instant limits and timezone decisions.
+
+## Zoned control and migration from the prototype
+
+`ZonedPicker::new(instant.binding(), "America/Edmonton")?` binds `Timestamp` and
+owns an explicit display zone. Jiff's `Zoned` equality compares only instants, so
+binding its zone metadata through ordinary reactive equality could lose a zone-only
+change. `zoned()` returns the current instant in `time_zone()`. The prototype's
+`Binding<Zoned>`, public string resolution state and full zoned ISO field are replaced
+by this interface. Applications can parse a full Jiff `Zoned` and bind its
+`timestamp()`; the control's civil field rejects offset/zone suffixes rather than
+silently changing the selected zone. `resolve_zoned`/`Resolution` remain low-level
+conversion helpers, including their explicit gap-shifting policies.
+
+The civil field and calendar/clock share `DateTimePicker`'s grammar and one draft.
+`bounds` checks exact inclusive timestamps; `civil_bounds`, disabled dates and custom
+`validate(&Zoned)` also guard every candidate. Gaps never normalize to a different
+wall time. `RepeatedTimePolicy::{Reject, Earlier, Later}` selects repeated times;
+changing it revalidates unfinished text without resetting it. An unchanged existing
+fold retains its known instant; `choose_occurrence` explicitly applies either
+occurrence, even when both have identical civil text. Clock steps use wall arithmetic
+followed by zone resolution, including non-hour transitions.
+
+`change_zone(name, ZoneChange::KeepInstant/KeepLocal)` requires a valid draft,
+validates the converted whole value before writing, and commits a valid staged
+candidate. KeepInstant preserves its timestamp; KeepLocal resolves its wall time in
+the target zone. Validation failures preserve text, source and display zone.
+Application setters/callbacks can publish normalized or newer values/zone choices;
+those stay authoritative and the editor reconciles to the accepted source.
+Zone-only changes still refresh the field and calendar. The separate zone field,
+Keep instant/Keep wall time choice and Change zone button expose this operation.
+IANA names and fixed offsets are accepted; no machine zone or POSIX-rule fallback is
+inferred. Readonly disables editing, occurrence application and zone changes.
+
+Configure locale, bounds and validators before mounting. `binding`, `validation`,
+`commit`, `cancel`, callbacks, stepping and calendar inspection follow the civil
+control. `m6_zoned` demonstrates fold/gap setup, instant bounds and zone changes.

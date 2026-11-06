@@ -250,10 +250,11 @@ civil validation and a bundled timezone database in Rust, alongside ICU4X's Unic
 and localized integer services. The lockfile pins the data version; upgrading it
 is how applications receive timezone-rule updates.
 
-`ZonedPicker` accepts full zoned ISO strings with `[IANA/Zone]`, or local ISO text in
-the current zone. The default rejects gaps and overlaps; users may choose earlier
-or later resolution. Invalid drafts preserve the committed instant. This follows
-[Jiff's explicit disambiguation model](https://docs.rs/jiff/0.2.39/jiff/tz/enum.Disambiguation.html).
+`ZonedPicker::new(instant.binding(), "America/Edmonton")?` binds `Timestamp` and
+owns an explicit display zone. Its civil field shares the datetime grammar; zone
+changes separately choose KeepInstant or KeepLocal. Gaps reject; repeated wall times
+require an explicit policy, while existing folds retain their known instant.
+Invalid drafts preserve the committed instant. See M6.4 below for the full contract.
 These editors do not guess localized number/date grammars or convert civil dates
 into instants implicitly. Color editing is sRGB; wide-gamut profiles are not exposed.
 
@@ -1480,7 +1481,7 @@ publish newer authoritative values without a subsequent stale write.
 tests cover exact values, locales, boundaries, callbacks, keyboard/blur and source
 changes. The hidden native `time_picker` harness covers AX values/actions, marked
 text confirmation, readonly behavior and retired objects. This is a checkpoint:
-zoned instant validation and timezone editing still keep M6.4 open.
+zoned instant validation and timezone editing follow below.
 
 ## M6.4 checkpoint — combined civil datetime
 
@@ -1515,5 +1516,55 @@ the group. `binding()`, `draft()`, `validation()`, `commit()`, `cancel()`, `sele
 portable tests cover one-write joint editing, exact carry/extremes, localized
 grammar, shared calendar/clock state, readonly/lifecycle/source changes, rejected
 setters and callback authority. Native text/AX/composition coverage is in the
-hidden `datetime_picker` harness. Zoned instant limits, DST and zone changes remain
-required for M6.4 completion.
+hidden `datetime_picker` harness. Zoned instant limits, DST and zone changes follow below.
+
+## M6.4 — zoned datetime
+
+```rust
+let instant = State::new("2024-11-03T06:30:00Z".parse::<Timestamp>()?);
+let picker = ZonedPicker::new(instant.binding(), "America/Edmonton")?
+    .bounds(min_instant, max_instant)
+    .show_seconds(true)
+    .minute_step(15);
+// In a builder: embed(picker.view());
+```
+
+The control binds an instant and owns its explicit display zone. `zoned()` returns
+that pair; `time_zone()` reads the selected zone. This replaces the prototype's
+`Binding<Zoned>` and public string resolution state: Jiff compares `Zoned` by instant,
+so a zone-only metadata write could otherwise disappear as an equal reactive value.
+The civil field shares the combined datetime grammar and rejects offset/zone
+suffixes. IANA names/fixed offsets are edited separately with an explicit operation.
+
+`change_zone(name, ZoneChange::KeepInstant/KeepLocal)` commits a valid staged
+candidate while preserving either its instant or its wall time. Whole-value civil
+limits, exact inclusive instant bounds and `validate(&Zoned)` apply in the target
+zone before any write. Failed input, bounds, DST or rejected setters retain the
+draft and zone; normalized/reentrant application writes stay authoritative.
+Readonly disables edits, occurrence selection and zone changes. Configuration
+builders run before mounting; readonly/blur flags can vary per view clone.
+
+Gaps always fail. `set_repeated_time(RepeatedTimePolicy)` revalidates the existing
+text without resetting it. The default rejects a new repeated wall time; Earlier
+and Later choose a real occurrence. An existing unchanged fold retains its known
+instant, while `choose_occurrence(policy)` explicitly switches it. The UI exposes
+the policy and Apply occurrence action. Clock stepping applies wall arithmetic then
+resolution, including half-hour transitions; no fixed DST duration is assumed.
+`resolve_zoned`/`Resolution` remain general low-level conversion helpers with their
+previous explicit gap-shifting behavior. The control intentionally has a stricter
+gap policy.
+
+The same binding/validation/commit/cancel, calendar, stepping and callbacks as the
+civil editor remain available. The zone field exposes validation to accessibility.
+Stable keys retain the focused civil field when fold controls/errors appear or
+zones change. Source revisions detect stale drafts even when a fold's two instants
+share identical civil text. A callback can supersede a step; its resulting instant
+is revalidated before success is reported.
+
+`cargo run --example m6_zoned` opens the runnable gap/fold/zone lab. Nine core tests
+cover exact instant/civil bounds, half-hour folds, rejected gaps, both zone-change
+modes, hidden precision, localized input, readonly/extremes, source changes,
+rejected setters and callback authority. The hidden native `zoned_picker` harness
+covers actual text/AX transport, policy/occurrence/zone actions, errors, retained
+field identity, composition-before-submit, readonly and retired objects. Actual
+VoiceOver/IME candidate and visible rendering evidence remain M5.5/M8.

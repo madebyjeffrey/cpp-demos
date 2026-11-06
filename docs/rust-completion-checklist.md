@@ -605,7 +605,7 @@ sessions, composing IME candidate placement and actual scale 2 remain open.
 - [x] **M6.1 Editable format policy:** specify supported locale/grammar combinations, display/edit round trips and unsupported-format behavior. Preserve an explicit ASCII/ISO mode; do not silently guess ambiguous grouping or dates.
 - [x] **M6.2 Number/date localization:** integrate the chosen Rust services with representative decimal-comma, grouped and non-Latin-digit cases; localized labels/formatting must match the advertised editable grammar and retain exact integers.
 - [x] **M6.3 Date control:** bounds, disabled dates, custom validation, readonly/blur/submit policy, calendar keyboard navigation and synchronization after external value changes. The narrow calendar grid overflow was corrected in M6.2.
-- [ ] **M6.4 Time and datetime controls:** dedicated hour/minute/second interactions, 12/24-hour policy, step sizes, optional seconds, local/instant bounds and combined validation; verify DST gaps/overlaps and named-zone changes without corrupting drafts.
+- [x] **M6.4 Time and datetime controls:** dedicated hour/minute/second interactions, 12/24-hour policy, step sizes, optional seconds, local/instant bounds and combined validation; verify DST gaps/overlaps and named-zone changes without corrupting drafts.
 - [ ] **M6.5 Color control:** HSV as well as RGB, optional alpha, readonly and explicit transactional/live-preview behavior; cancel restores the source color, including through a color-well popup.
 - [ ] **M6.6 Shared draft lifecycle:** consistent apply/blur/cancel, dirty/incomplete/invalid/out-of-range reporting, external-change handling and callbacks across all typed value controls.
 
@@ -673,7 +673,7 @@ M6.3 completion record (`ddcaf28`):
   suites are left for the dedicated desktop audit while user-assisted VoiceOver
   testing is in progress. No unavailable interactive evidence is counted as a pass.
 
-M6.4 standalone time checkpoint (`02b1f19`; item remains open):
+M6.4 standalone time checkpoint (`02b1f19`):
 
 - `TimePicker` adds one transactional field, hour/minute/optional-second steppers,
   explicit 12/24-hour display, AM/PM selection, 1–60 minute/second steps, inclusive
@@ -688,10 +688,9 @@ M6.4 standalone time checkpoint (`02b1f19`; item remains open):
   windows stay invisible. Workspace tests, strict Clippy, portable Linux compilation,
   formatting and inventory mapping pass. Actual speech/candidate and visible GPU
   sessions remain M5.5/M8.
-- Combined local datetime followed in the checkpoint below; zoned instant bounds,
-  DST policies and named-zone changes remain required before M6.4 can be checked off.
+- Combined local datetime and zoned completion follow below.
 
-M6.4 local datetime checkpoint (item remains open):
+M6.4 local datetime checkpoint (`4124481`):
 
 - `DateTimePicker` has one full-value draft and shared calendar/clock controls.
   Joint inclusive bounds, disabled dates and custom validation guard every write.
@@ -707,8 +706,38 @@ M6.4 local datetime checkpoint (item remains open):
   date choices, retained field, composition, readonly and retired objects while
   asserting windows stay invisible. Workspace tests, strict Clippy, portable Linux
   compilation, formatting and inventory mapping pass.
-- Zoned instant bounds, DST policies and named-zone changes still remain before
-  M6.4 can be checked off. No interactive speech/candidate checks are closed here.
+- Zoned completion follows below. No interactive speech/candidate checks are closed here.
+
+M6.4 zoned completion record:
+
+- `ZonedPicker` binds `Timestamp` and owns its display zone, avoiding Jiff's
+  instant-only `Zoned` equality dropping zone-only changes. It reuses one civil
+  datetime draft/calendar/clock. Inclusive instant limits, civil limits, disabled
+  dates and pure `validate(&Zoned)` guard all candidate writes in the selected zone.
+- Gaps reject without shifting. New folds require explicit Reject/Earlier/Later
+  policy; changing it revalidates unfinished text without resetting it. An existing
+  fold retains its known occurrence; Apply occurrence explicitly changes it. Wall
+  steps resolve real transitions, including Lord Howe's 30-minute fold. Exact hidden
+  precision survives edits and zone changes.
+- Explicit `change_zone` chooses KeepInstant or KeepLocal. It validates a staged
+  candidate before publication, rejects invalid drafts/targets/bounds/DST, and
+  respects rejected setters and superseding callbacks. Source/zone revisions and
+  stable keys retain coherent text/calendar/focus. Zone errors expose AX validation.
+  The prototype's zoned binding/string-resolution/inline-zone grammar is replaced
+  by this explicit interface; the format contract records the migration and the
+  unchanged low-level conversion helpers.
+- Nine focused zoned core tests pass, alongside time/local datetime regressions.
+  They cover both occurrence/zone modes, exact limits, readonly/locales/extremes,
+  invalid-text preservation, source revisions, pure validation and reentrant setters/
+  callbacks. A reproduced equal-wall-time callback defect now revalidates the
+  resulting instant before reporting a successful step. `m6_zoned` is the runnable
+  example; dark/light previews inspected. Workspace tests, strict Clippy, portable
+  Linux compilation, formatting and inventory mapping pass. Five hidden AppKit
+  harnesses (zoned/local datetime, time, date and focus) pass, including actual
+  text/AX policy/zone/occurrence actions, error help, retained field, composition,
+  readonly and retired objects, with invisible-window assertions.
+- Actual speech, IME candidate placement and foreground/Metal runs remain M5.5/M8;
+  no skipped or protocol-only check is counted as that evidence.
 
 ## M7 — Developer tools and application ergonomics
 

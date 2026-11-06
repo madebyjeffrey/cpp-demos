@@ -10,12 +10,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let time_editor = time_draft(time.binding());
     let local = State::new("2026-11-04T14:30:00".parse::<DateTime>()?);
     let local_editor = datetime_draft(local.binding());
-    let zoned = State::new(resolve_zoned(
-        local.get(),
-        "America/Edmonton",
-        Resolution::Reject,
-    )?);
-    let zone_editor = ZonedPicker::new(zoned.binding());
+    let zoned =
+        State::new(resolve_zoned(local.get(), "America/Edmonton", Resolution::Reject)?.timestamp());
+    let zone_editor = ZonedPicker::new(zoned.binding(), "America/Edmonton")?;
     let inspector = Inspector::new();
     let inspect = inspector.clone();
     common::run_inspected(
