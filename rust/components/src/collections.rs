@@ -3,9 +3,11 @@ pub(crate) mod input;
 mod list;
 mod pin;
 mod tree;
+mod tree_input;
 use crate::{Binding, View};
 pub use list::*;
 pub use pin::RowPin;
+pub(crate) use tree::TreeAction;
 pub use tree::*;
 
 /// Editable combo box: the same text binding remains usable for values outside the options.

@@ -966,6 +966,90 @@ fn main() {
         assert_eq!(count, 2);
     }
     window.clear_view();
+    let tree_activations = State::new(Vec::<String>::new());
+    let tree_expansions = State::new(Vec::<ui::TreeExpansion>::new());
+    let interactive_tree =
+        ui::TreeModel::from_nodes(vec![ui::TreeNode::new("root", "Root").children(vec![
+            ui::TreeNode::new("off", "Off").enabled(false),
+            ui::TreeNode::new("branch", "Branch").children(vec![ui::TreeNode::new("leaf", "Leaf")]),
+        ])])
+        .unwrap()
+        .on_activate(tree_activations.handler(|s, key| s.update(|v| v.push(key))))
+        .on_expand(tree_expansions.handler(|s, event| s.update(|v| v.push(event))));
+    let tree_host = window
+        .set_view({
+            let tree = interactive_tree.clone();
+            move || tree.view().height(180)
+        })
+        .unwrap();
+    unsafe {
+        let roots: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        let container = roots.objectAtIndex(0);
+        let attribute = NSString::from_str("AXChildren");
+        let rows: Retained<NSArray<AnyObject>> = msg_send![&*container,accessibilityArrayAttributeValues:&*attribute,index:0usize,maxCount:1usize];
+        let root = rows.objectAtIndex(0);
+        let selected: bool = msg_send![&*root, accessibilityPerformPress];
+        assert!(selected);
+        let send = |code: u16| {
+            let characters = NSString::from_str("");
+            let event=app_kit::NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(app_kit::NSEventType::KeyDown,foundation::NSPoint::ZERO,app_kit::NSEventModifierFlags::empty(),0.,window.native_window().windowNumber(),None,&characters,&characters,false,code).unwrap();
+            let _: () = msg_send![native,keyDown:&*event];
+            let _: Option<Retained<AnyObject>> = msg_send![native, accessibilityFocusedUIElement];
+        };
+        send(124);
+        assert!(interactive_tree.item("root").unwrap().expanded);
+        send(124);
+        assert_eq!(interactive_tree.cursor().as_deref(), Some("branch"));
+        send(124);
+        send(124);
+        assert_eq!(interactive_tree.cursor().as_deref(), Some("leaf"));
+        send(36);
+        assert_eq!(tree_activations.get(), ["leaf"]);
+        send(123);
+        assert_eq!(interactive_tree.cursor().as_deref(), Some("branch"));
+        send(123);
+        assert!(!interactive_tree.item("branch").unwrap().expanded);
+        assert_eq!(
+            tree_expansions
+                .get()
+                .iter()
+                .map(|e| (e.key.as_str(), e.expanded))
+                .collect::<Vec<_>>(),
+            [("root", true), ("branch", true), ("branch", false)]
+        );
+        interactive_tree.reveal("leaf").unwrap();
+        let parent = tree_host
+            .snapshot()
+            .unwrap()
+            .iter()
+            .find(|n| n.tree_model.is_some())
+            .unwrap()
+            .id;
+        tree_host.select_collection_item(parent, 3, false).unwrap();
+        let _: Option<Retained<AnyObject>> = msg_send![native, accessibilityFocusedUIElement];
+        interactive_tree.collapse("root").unwrap();
+        let focused: Retained<AnyObject> = msg_send![native, accessibilityFocusedUIElement];
+        let label: Retained<NSString> = msg_send![&*focused, accessibilityLabel];
+        assert_eq!(label.to_string(), "Root");
+        let focused_key = tree_host
+            .snapshot()
+            .unwrap()
+            .iter()
+            .find(|n| Some(n.id) == tree_host.focused())
+            .unwrap()
+            .key
+            .clone();
+        assert_eq!(focused_key.as_deref(), Some("root"));
+        interactive_tree
+            .set_nodes(vec![ui::TreeNode::new("root", "Root")])
+            .unwrap();
+        let stale: bool = msg_send![&*focused, isAccessibilityElement];
+        assert!(!stale);
+        let fresh: Retained<AnyObject> = msg_send![native, accessibilityFocusedUIElement];
+        let label: Retained<NSString> = msg_send![&*fresh, accessibilityLabel];
+        assert_eq!(label.to_string(), "Root");
+    }
+    window.clear_view();
     window.show();
     app.quit_after(std::time::Duration::from_millis(200));
     app.run().unwrap();

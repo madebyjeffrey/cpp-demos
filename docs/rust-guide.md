@@ -108,7 +108,10 @@ model context without a strong self-capture. See the
 `cargo run --example m4_tree` demonstrates cached lazy/deferred branches, visible
 load failure/retry and generation-checked results. `TreeNode` is recursive input;
 `TreeItem` is queried metadata. `expand`/`collapse` return results and model replacement
-retires old requests. See the [tree model contracts](../rust/components/README.md#completion-m4--lazy-tree-models).
+retires old requests. `TreeOptions` configures selection/geometry; Left/Right navigate
+branches, and activation/expansion callbacks keep application behavior explicit.
+See the [tree interaction contracts](../rust/components/README.md#completion-m4--tree-interaction)
+and [tree model contracts](../rust/components/README.md#completion-m4--lazy-tree-models).
 
 `view!` supports ordinary expressions, `if`/`else`, keyed `for` loops, custom
 functions returning `View`, and `embed(view)` for an already-built value. Unknown

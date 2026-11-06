@@ -60,6 +60,8 @@ pub struct Node {
     pub(crate) scroll_axes: crate::ScrollAxes,
     pub(crate) scrollbars: bool,
     pub collection: Option<crate::ListModel>,
+    pub tree_model: Option<crate::TreeModel>,
+    pub tree_item: Option<crate::TreeItem>,
     pub label: String,
     pub help: String,
     pub focused: bool,
@@ -398,6 +400,9 @@ impl Host {
         let Some((d, value)) = target else {
             return Ok(false);
         };
+        if let Some(action) = &d.tree_action {
+            return self.tree_disclosure(id, action);
+        }
         if let Some((alert, action)) = &d.alert_action {
             return self.alert_action(id, alert, action);
         }
@@ -655,6 +660,8 @@ fn mount(
         scroll_axes: d.scroll_axes,
         scrollbars: d.scrollbars,
         collection: d.collection.clone(),
+        tree_model: d.tree.clone(),
+        tree_item: d.tree_item.clone(),
         help: d.tooltip.clone(),
         label: if d.accessible.is_empty() {
             d.text.clone()

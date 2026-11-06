@@ -1,12 +1,20 @@
 //! Keyed tree metadata, lazy snapshots and generation-checked async completion.
 use crate::{Error, Insets, ListItem, ListModel, State, View};
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{BTreeSet, HashMap},
     rc::{Rc, Weak},
 };
 type Loader = Rc<dyn Fn() -> Result<Vec<TreeNode>, Error>>;
 type LoadHandler = Rc<dyn Fn(TreeLoad)>;
+type ExpandHandler = Rc<dyn Fn(TreeExpansion)>;
+#[derive(Clone)]
+pub(crate) struct TreeAction {
+    pub model: TreeModel,
+    pub key: String,
+    pub token: u64,
+    pub retry: bool,
+}
 
 #[derive(Clone)]
 pub struct TreeNode {
@@ -137,6 +145,9 @@ struct Inner {
     data: State<Rc<Snapshot>>,
     list: ListModel,
     on_load: RefCell<Option<LoadHandler>>,
+    options: TreeOptions,
+    on_expand: RefCell<Option<ExpandHandler>>,
+    notifying: Cell<bool>,
 }
 #[derive(Clone)]
 pub struct TreeModel(Rc<Inner>);
@@ -325,14 +336,37 @@ fn flatten(data: &Snapshot) -> Vec<TreeItem> {
 }
 impl TreeModel {
     pub fn new() -> Self {
-        Self(Rc::new(Inner {
-            data: State::new(Rc::new(Snapshot::default())),
-            list: ListModel::new(vec![], 36.),
-            on_load: RefCell::new(None),
-        }))
+        Self::with_options(vec![], TreeOptions::default()).expect("Valid default tree options")
     }
     pub fn from_nodes(nodes: Vec<TreeNode>) -> Result<Self, Error> {
-        let tree = Self::new();
+        Self::with_options(nodes, TreeOptions::default())
+    }
+    pub fn with_options(nodes: Vec<TreeNode>, options: TreeOptions) -> Result<Self, Error> {
+        if !options.row_height.is_finite()
+            || options.row_height <= 0.
+            || !options.indentation.is_finite()
+            || options.indentation < 0.
+            || options.visible_rows == 0
+            || !(options.visible_rows as f64 * options.row_height).is_finite()
+        {
+            return Err(Error(
+                "Invalid tree row height, visible rows or indentation".into(),
+            ));
+        }
+        let list = ListModel::new(vec![], options.row_height).options(crate::ListOptions {
+            selection: options.selection,
+            visible_rows: options.visible_rows,
+            overscan_rows: options.overscan_rows,
+            ..Default::default()
+        })?;
+        let tree = Self(Rc::new(Inner {
+            data: State::new(Rc::new(Snapshot::default())),
+            list,
+            on_load: RefCell::new(None),
+            options,
+            on_expand: RefCell::new(None),
+            notifying: Cell::new(false),
+        }));
         tree.set_nodes(nodes)?;
         Ok(tree)
     }
@@ -356,14 +390,57 @@ impl TreeModel {
             .iter()
             .map(|i| (i.key.clone(), data.records[&i.key].token))
             .collect();
+        let old = self.0.data.get();
+        let enabled_keys = visible
+            .iter()
+            .filter(|i| i.enabled)
+            .map(|i| i.key.clone())
+            .collect::<BTreeSet<_>>();
+        let project = |key: &str| {
+            let mut current = Some(key);
+            let mut result = None;
+            while let Some(key) = current {
+                if enabled_keys.contains(key) {
+                    result = Some(key.to_owned());
+                    break;
+                }
+                current = data
+                    .records
+                    .get(key)
+                    .or_else(|| old.records.get(key))
+                    .and_then(|r| r.parent.as_deref());
+            }
+            result
+        };
+        let selected = self
+            .selected()
+            .iter()
+            .filter_map(|key| project(key))
+            .collect();
+        let previous_cursor = self.cursor();
+        let cursor = previous_cursor.as_deref().and_then(project).or_else(|| {
+            previous_cursor.as_ref().and_then(|key| {
+                let start = self
+                    .0
+                    .list
+                    .index_of(key)
+                    .unwrap_or(0)
+                    .min(visible.len().saturating_sub(1));
+                (start..visible.len())
+                    .chain((0..start).rev())
+                    .find(|i| visible[*i].enabled)
+                    .map(|i| visible[i].key.clone())
+            })
+        });
+        let anchor = self.0.list.anchor().as_deref().and_then(project);
         let rows = visible
             .into_iter()
             .map(|i| ListItem::new(i.key, i.label).enabled(i.enabled))
             .collect();
         data.revision = super::list::next_token();
-        let old = self.0.data.get();
         crate::state::batch(|| {
             self.0.list.replace_items(rows, Some(&tokens))?;
+            self.0.list.restore_selection(selected, cursor, anchor);
             self.0.data.set(Rc::new(data));
             Ok(())
         })?;
@@ -419,6 +496,7 @@ impl TreeModel {
             return Err(Error(format!("Tree node is missing or disabled: {key}")));
         }
         let record = data.records.get_mut(key).unwrap();
+        let opening = !record.expanded;
         record.load = TreeLoadState::Loading;
         record.expanded = true;
         record.request = Some(super::list::next_token());
@@ -433,6 +511,9 @@ impl TreeModel {
             request: record.request.unwrap(),
         };
         self.publish(data)?;
+        if opening {
+            self.emit_expand(key, request.token, true);
+        }
         Ok(request)
     }
     fn dispatch(&self, request: TreeLoad) -> Result<(), Error> {
@@ -494,6 +575,7 @@ impl TreeModel {
             self.dispatch(request)?;
             return Ok(true);
         }
+        let token = record.token;
         let changed = !record.expanded;
         let failed = if let TreeLoadState::Failed(error) = &record.load {
             Some(error.clone())
@@ -503,6 +585,7 @@ impl TreeModel {
         if changed {
             data.records.get_mut(key).unwrap().expanded = true;
             self.publish(data)?;
+            self.emit_expand(key, token, true);
         }
         if let Some(error) = failed {
             return Err(Error(error));
@@ -519,8 +602,10 @@ impl TreeModel {
         if !record.expanded {
             return Ok(false);
         }
+        let token = record.token;
         record.expanded = false;
         self.publish(data)?;
+        self.emit_expand(key, token, false);
         Ok(true)
     }
     pub fn toggle(&self, key: &str) -> Result<bool, Error> {
@@ -589,12 +674,14 @@ impl TreeModel {
             return Ok(false);
         }
         let parent = data.records.get_mut(request.key()).unwrap();
+        let was_expanded = parent.expanded;
         parent.children = children;
         parent.load = TreeLoadState::Loaded;
         parent.request = None;
         if !parent.can_expand() {
             parent.expanded = false;
         }
+        let closed = was_expanded && !parent.expanded;
         if data
             .failure
             .as_ref()
@@ -603,6 +690,9 @@ impl TreeModel {
             data.failure = None;
         }
         self.publish(data)?;
+        if closed {
+            self.emit_expand(request.key(), request.token, false);
+        }
         Ok(true)
     }
     /// Publish one branch through checked completion; supersedes its pending load.
@@ -624,66 +714,52 @@ impl TreeModel {
     pub fn view(&self) -> View {
         let data = self.0.data.get();
         let tree = self.clone();
-        self.0.list.view_with(move |row| {
+        let mut view = self.0.list.view_with(move |row| {
             let record = &data.records[&row.key];
             let info = item(record, enabled(&data, &row.key));
-            let marker = if info.loading {
-                "◌"
-            } else if info.error.is_some() {
-                "↻"
-            } else if !info.expandable {
-                "•"
-            } else if info.expanded {
-                "▾"
+            let action = |retry| {
+                let label = if retry {
+                    "Retry"
+                } else if info.expanded {
+                    "▾"
+                } else {
+                    "▸"
+                };
+                let mut control = View::button(label, || {})
+                    .padding(2.)
+                    .width(if retry { 60 } else { 26 })
+                    .shrink(0.)
+                    .key(if retry { "$retry" } else { "$disclosure" })
+                    .accessible_label(format!(
+                        "{} {}",
+                        if retry {
+                            "Retry loading"
+                        } else if info.expanded {
+                            "Collapse"
+                        } else {
+                            "Expand"
+                        },
+                        info.accessible_label
+                    ));
+                Rc::make_mut(&mut control.0).tree_action = Some(TreeAction {
+                    model: tree.clone(),
+                    key: row.key.clone(),
+                    token: record.token,
+                    retry,
+                });
+                control
+            };
+            let control = if info.expandable {
+                action(false)
             } else {
-                "▸"
+                View::spacer().width(26).grow(0.)
             };
             let status = if info.loading {
                 " — Loading…".into()
             } else if let Some(error) = &info.error {
-                format!(" — {error} (retry)")
+                format!(" — {error}")
             } else {
                 String::new()
-            };
-            let action = tree.clone();
-            let key = row.key.clone();
-            let token = record.token;
-            let control = View::button(marker, move || {
-                if action
-                    .0
-                    .data
-                    .get()
-                    .records
-                    .get(&key)
-                    .is_none_or(|r| r.token != token)
-                {
-                    return;
-                }
-                let result = if action.item(&key).is_some_and(|i| i.error.is_some()) {
-                    action.retry(&key)
-                } else {
-                    action.toggle(&key)
-                };
-                if let Err(error) = result
-                    && action
-                        .0
-                        .data
-                        .get()
-                        .records
-                        .get(&key)
-                        .is_some_and(|r| r.token == token)
-                {
-                    action.note_error(&key, error);
-                }
-            })
-            .padding(2.)
-            .width(26)
-            .key("$disclosure")
-            .accessible_label(format!("{}{status}", info.accessible_label));
-            let control = if info.expandable {
-                control
-            } else {
-                View::spacer().width(26).grow(0.)
             };
             let label = View::label(format!("{}{status}", info.label))
                 .grow(1.)
@@ -693,18 +769,267 @@ impl TreeModel {
                 } else {
                     crate::LabelStyle::Standard
                 });
-            View::row(vec![control, label])
+            let mut children = vec![control, label];
+            if info.error.is_some() {
+                children.push(action(true));
+            }
+            View::row(children)
                 .align(crate::Align::Center)
                 .margin(Insets {
-                    left: info.depth as f64 * 18.,
+                    left: info.depth as f64 * tree.0.options.indentation,
                     ..Default::default()
                 })
                 .tooltip(info.error.unwrap_or_default())
-        })
+        });
+        let root = Rc::make_mut(&mut view.0);
+        root.tree = Some(self.clone());
+        for row in &mut root.children {
+            if let Some((_, key, _, _)) = &row.0.collection_row {
+                let info = self.item(key);
+                let row = Rc::make_mut(&mut row.0);
+                if let Some(info) = &info {
+                    row.accessible = info.accessible_label.clone();
+                }
+                row.tree_item = info;
+            }
+        }
+        view
     }
 }
 impl Default for TreeModel {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TreeOptions {
+    pub row_height: f64,
+    pub visible_rows: usize,
+    pub overscan_rows: usize,
+    pub indentation: f64,
+    pub selection: crate::ListSelectionMode,
+}
+impl Default for TreeOptions {
+    fn default() -> Self {
+        Self {
+            row_height: 36.,
+            visible_rows: 8,
+            overscan_rows: 2,
+            indentation: 18.,
+            selection: crate::ListSelectionMode::Single,
+        }
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TreeExpansion {
+    pub key: String,
+    pub expanded: bool,
+}
+
+impl TreeModel {
+    pub fn tree_options(&self) -> TreeOptions {
+        let mut options = self.0.options;
+        let list = self.0.list.list_options();
+        options.selection = list.selection;
+        options.visible_rows = list.visible_rows;
+        options.overscan_rows = list.overscan_rows;
+        options
+    }
+    pub fn multiple(self) -> Self {
+        self.0.list.clone().multiple();
+        self
+    }
+    pub fn selected(&self) -> BTreeSet<String> {
+        self.0.list.selected()
+    }
+    pub fn selection_count(&self) -> usize {
+        self.0.list.selection_count()
+    }
+    pub fn cursor(&self) -> Option<String> {
+        self.0.list.cursor()
+    }
+    pub fn select(&self, key: &str, extend: bool) -> bool {
+        self.0.list.select(key, extend)
+    }
+    pub fn select_with(&self, key: &str, operation: crate::ListSelection) -> bool {
+        self.0.list.select_with(key, operation)
+    }
+    pub fn clear_selection(&self) {
+        self.0.list.clear_selection();
+    }
+    pub fn select_all(&self) -> bool {
+        self.0.list.select_all()
+    }
+    pub fn item_token(&self, key: &str) -> Option<u64> {
+        self.0.data.get().records.get(key).map(|r| r.token)
+    }
+    pub fn on_activate(self, callback: impl Fn(String) + 'static) -> Self {
+        self.0.list.clone().on_activate(callback);
+        self
+    }
+    pub fn on_activate_with_model(self, callback: impl Fn(&TreeModel, String) + 'static) -> Self {
+        let weak = Rc::downgrade(&self.0);
+        self.on_activate(move |key| {
+            if let Some(owner) = weak.upgrade() {
+                callback(&TreeModel(owner), key);
+            }
+        })
+    }
+    pub fn on_expand(self, callback: impl Fn(TreeExpansion) + 'static) -> Self {
+        crate::state::check_write();
+        let old = self.0.on_expand.replace(Some(Rc::new(callback)));
+        drop(old);
+        self
+    }
+    fn emit_expand(&self, key: &str, token: u64, expanded: bool) {
+        if self.item_token(key) != Some(token)
+            || self.item(key).is_none_or(|i| i.expanded != expanded)
+            || self.0.notifying.replace(true)
+        {
+            return;
+        }
+        struct Guard<'a>(&'a Cell<bool>);
+        impl Drop for Guard<'_> {
+            fn drop(&mut self) {
+                self.0.set(false);
+            }
+        }
+        let _guard = Guard(&self.0.notifying);
+        let callback = self.0.on_expand.borrow().clone();
+        if let Some(callback) = callback {
+            callback(TreeExpansion {
+                key: key.into(),
+                expanded,
+            });
+        }
+    }
+    /// Activate a visible enabled item. A custom callback owns activation;
+    /// otherwise branches toggle/retry and leaves have no default action.
+    pub fn activate(&self, key: &str) -> Result<bool, Error> {
+        crate::state::check_write();
+        let Some(info) = self
+            .item(key)
+            .filter(|i| i.enabled && self.0.list.index_of(key).is_some())
+        else {
+            return Ok(false);
+        };
+        if self.0.list.has_activation() {
+            return Ok(self.0.list.activate(key));
+        }
+        if info.error.is_some() {
+            self.retry(key)
+        } else if info.expandable {
+            self.toggle(key)
+        } else {
+            Ok(false)
+        }
+    }
+    pub(crate) fn ui_activate(&self, key: &str) -> bool {
+        let token = self.item_token(key);
+        match self.activate(key) {
+            Ok(handled) => handled,
+            Err(error) => {
+                if self.item_token(key) == token {
+                    self.note_error(key, error);
+                }
+                true
+            }
+        }
+    }
+    fn ui_result(&self, key: &str, token: Option<u64>, result: Result<bool, Error>) -> bool {
+        match result {
+            Ok(changed) => changed,
+            Err(error) => {
+                if self.item_token(key) == token {
+                    self.note_error(key, error);
+                }
+                true
+            }
+        }
+    }
+    pub(crate) fn ui_disclose(&self, key: &str, token: u64, retry: bool) -> bool {
+        if self.item_token(key) != Some(token) {
+            return false;
+        }
+        self.ui_result(
+            key,
+            Some(token),
+            if retry {
+                self.retry(key)
+            } else {
+                self.toggle(key)
+            },
+        )
+    }
+    pub(crate) fn ui_expansion(&self, key: &str, expanded: bool) -> bool {
+        self.ui_result(
+            key,
+            self.item_token(key),
+            if expanded {
+                self.expand(key)
+            } else {
+                self.collapse(key)
+            },
+        )
+    }
+    pub(crate) fn child(&self, key: &str) -> Option<String> {
+        let data = self.0.data.get();
+        data.records
+            .get(key)?
+            .children
+            .iter()
+            .find(|key| enabled(&data, key) && self.0.list.index_of(key).is_some())
+            .cloned()
+    }
+    pub(crate) fn parent(&self, key: &str) -> Option<String> {
+        let data = self.0.data.get();
+        let mut parent = data.records.get(key)?.parent.as_deref();
+        while let Some(key) = parent {
+            if enabled(&data, key) && self.0.list.index_of(key).is_some() {
+                return Some(key.into());
+            }
+            parent = data.records.get(key)?.parent.as_deref();
+        }
+        None
+    }
+    pub(crate) fn index_of(&self, key: &str) -> Option<usize> {
+        self.0.list.index_of(key)
+    }
+    /// Open known ancestors, then reveal a logical item without selecting it.
+    pub fn reveal(&self, key: &str) -> Result<bool, Error> {
+        crate::state::check_write();
+        let data = self.0.data.get();
+        let Some(target) = data.records.get(key) else {
+            return Ok(false);
+        };
+        let token = target.token;
+        if let Some(index) = self.index_of(key) {
+            self.0.list.reveal(index);
+            return Ok(true);
+        }
+        let mut parents = vec![];
+        let mut parent = target.parent.as_deref();
+        while let Some(key) = parent {
+            let record = &data.records[key];
+            parents.push((key.to_owned(), record.token));
+            parent = record.parent.as_deref();
+        }
+        drop(data);
+        for (key, token) in parents.into_iter().rev() {
+            if self.item_token(&key) != Some(token) {
+                return Ok(false);
+            }
+            self.expand(&key)?;
+        }
+        if self.item_token(key) != Some(token) {
+            return Ok(false);
+        }
+        if let Some(index) = self.index_of(key) {
+            self.0.list.reveal(index);
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 }

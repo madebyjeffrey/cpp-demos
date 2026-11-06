@@ -34,7 +34,7 @@ overall goal complete while an in-scope item remains open.
 | Layout and basic controls | Inventory, constrained layout, rich text, style coverage and two-axis scrolling verified | Final cross-component visual/semantic audit in M5/M8 |
 | Editing | Shared buffer, visual navigation/gestures, search/password/numeric policies and held steppers | Localization/value-control expansion in M6; final interactive IME audit in M5 |
 | Presentation | Retained splits/tabs/wizards, hierarchical menus, configured portals, transactional alerts and native sheets | Final interactive and visible desktop audits in M5/M8 |
-| Collections | Configurable lists, bounded pinned edits, distinct row lifetimes and lazy/deferred tree metadata | Tree interaction, combo lifecycle, cell/column interactions and final semantics |
+| Collections | Configurable lists, bounded pinned edits, distinct row lifetimes and interactive lazy/deferred trees | Combo lifecycle, cell/column interactions and final semantics |
 | Values and tooling | Typed drafts, sRGB/hex, calendar, ISO/zoned editing, picking/width overrides | Complete value-control policies and inspector/Lab coverage |
 | Verification | Core/CPU tests and native input/accessibility protocol tests | Interactive audits, final visible GPU/full-screen runs and repeatable checks |
 
@@ -300,7 +300,7 @@ Completion record:
 - [x] **M4.1 List interaction:** anchor/range and additive selection, disabled-row skipping, activation/typeahead, configurable overscan and keyboard reveal while logical keys survive sorting and replacement.
 - [x] **M4.2 Virtual edit lifetime:** bounded realization/retention on large data; retain or explicitly pin active row edits through scrolling, and make removed/reinserted item lifetimes distinct.
 - [x] **M4.3 Tree model:** integrated lazy loading with expandable/loading/error metadata and safe model replacement; validate keys across collapsed branches and do not silently discard expansion errors.
-- [ ] **M4.4 Tree interaction:** left/right expand/collapse and parent/child navigation, activation, selection and focus retention when branches change or disappear.
+- [x] **M4.4 Tree interaction:** left/right expand/collapse and parent/child navigation, activation, selection and focus retention when branches change or disappear.
 - [ ] **M4.5 Combo box:** separate query and selection, selection/free-text modes, filtering, loading/empty states, keyboard highlight/accept/cancel and accessible popup relationships; replace the fixed suggestion cap with bounded realization where needed.
 - [ ] **M4.6 Table model and columns:** keyed columns, width bounds, resize/reorder, sort descriptors and row/cell selection modes. Keep selection attached to logical keys rather than indices.
 - [ ] **M4.7 Table editing:** integrated cell activation/edit/commit/cancel, validation and readonly/custom content policies; preserve drafts through scrolling and reject stale commits after row/column/model changes.
@@ -350,7 +350,7 @@ Completion record (in progress):
   provides the runnable example, inspected dark/light previews and native smoke.
   Actual interactive VoiceOver/IME placement and visible GPU audits remain M5/M8.
 
-- M4.3: `TreeNode` describes eager/lazy/deferred sources and `TreeItem` reports
+- M4.3 (`53db9dd`): `TreeNode` describes eager/lazy/deferred sources and `TreeItem` reports
   known-node metadata, including parent/depth/enabled/expandable/loading/error state.
   All known keys validate across collapsed branches before structural replacement.
   Pure synchronous loaders cache results; failures/panics and invalid lazy children
@@ -367,8 +367,27 @@ Completion record (in progress):
   regressions and workspace tests pass; strict Clippy and portable compilation pass.
   Native component tests retire old row proxies after same-key snapshot replacement.
   `m4_tree` provides the runnable model example; dark/light previews inspected and
-  native smoke passes. Tree keyboard/selection interaction remains M4.4 and full
-  hierarchical native semantics/interactive auditing remain M5.
+  native smoke passes. Tree interaction is covered below; hierarchical native
+  semantics/interactive auditing remain M5.
+
+- M4.4: `TreeOptions` configures selection and bounded row geometry/overscan.
+  Left/Right close/open branches or visit enabled parents/children; shared list
+  range/additive selection, typeahead, reveal and activation remain available.
+  Disclosure/retry controls focus their owning row, keeping one row Tab stop.
+  Return/double-click invoke application activation or default branch toggle/retry.
+- Collapse projects selected/focused descendants to a visible enabled ancestor,
+  preserving unrelated selection. Removal falls back to an ancestor or nearby
+  cursor row; fresh same-key snapshots retain logical focus with new host/AX IDs.
+  Completion does not steal focus from another control. `reveal` opens known
+  ancestors without selecting; expansion/activation callbacks permit model updates
+  outside borrows, with nested notifications suppressed.
+- Evidence: eight focused portable interaction tests include collapse/removal,
+  deferred/error branches, callback replacement, modifier selection and bounded
+  navigation through 100,000 children. Existing model/list/edit and workspace tests
+  pass; strict Clippy and portable Linux compilation pass. Native key/AX protocol
+  tests cover parent/child navigation, callbacks and stale proxy retirement.
+  `m4_tree` demonstrates the interaction contracts; dark/light previews inspected
+  and native smoke passes. Full hierarchy semantics and interactive audits remain M5.
 
 ## M5 — Accessibility semantics and native behavior
 

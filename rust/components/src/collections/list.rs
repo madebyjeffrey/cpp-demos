@@ -187,6 +187,11 @@ impl ListModel {
                 .filter_map(|key| self.item_token(key).map(|token| (key.clone(), token)))
                 .collect::<HashMap<_, _>>()
         });
+        let lifetimes_changed = lifetimes.is_some_and(|given| {
+            given
+                .iter()
+                .any(|(key, token)| self.item_token(key) != Some(*token))
+        });
         let previous_cursor = self.cursor().and_then(|k| self.index_of(&k));
         let mut index = HashMap::new();
         for (i, item) in items.iter().enumerate() {
@@ -247,7 +252,7 @@ impl ListModel {
             .borrow_mut()
             .retain(|key, _| index.get(key).is_some_and(|i| items[*i].enabled));
         *self.0.index.borrow_mut() = index;
-        if *self.0.items.get() != items {
+        if *self.0.items.get() != items || lifetimes_changed {
             self.0.revision.set(self.0.revision.get().wrapping_add(1));
         }
         self.0.items.set(Rc::new(items));
@@ -259,6 +264,19 @@ impl ListModel {
         let viewport = self.0.viewport.get();
         self.set_viewport(viewport.offset, viewport.height);
         Ok(())
+    }
+    pub(super) fn restore_selection(
+        &self,
+        selected: BTreeSet<String>,
+        cursor: Option<String>,
+        anchor: Option<String>,
+    ) {
+        self.0.selected.set(selected);
+        self.0.cursor.set(cursor);
+        self.0.anchor.set(anchor);
+    }
+    pub(super) fn has_activation(&self) -> bool {
+        self.0.activate.borrow().is_some()
     }
     pub fn len(&self) -> usize {
         self.0.items.get().len()

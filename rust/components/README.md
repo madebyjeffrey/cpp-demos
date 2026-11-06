@@ -913,6 +913,45 @@ old loader resources drop outside state borrows and may safely query new state.
 Eleven focused tests cover metadata, hidden-key validation, caching/empty results,
 failures/retry, read-only queries, deferred completion, replacement generations,
 reentrant callbacks, scheduler consistency, disclosure rendering and resource teardown.
-Native checks cover retired row proxies after snapshot replacement. Full tree
-keyboard/selection interaction remains M4.4; hierarchical native semantics and the
-actual interactive audit remain M5.
+Native checks cover retired row proxies after snapshot replacement. Interaction is
+covered below; hierarchical native semantics and the actual interactive audit remain M5.
+
+## Completion M4 — tree interaction
+
+`TreeModel::with_options(nodes, TreeOptions { selection: ListSelectionMode::Multiple,
+..Default::default() })` configures selection, row height, visible rows, overscan
+and indentation. Geometry must be finite and valid. The `m4_tree` example adds
+keyboard instructions, selection/cursor status and activation/expansion callbacks.
+
+A tree has one row Tab stop. Up/Down, Home/End, Page keys and typeahead use the list
+navigation rules. Right opens a closed branch or enters its first enabled child;
+Left closes an open branch or visits an enabled ancestor. Shift extends the range,
+Command/Control moves the cursor without replacing selection, and combined modifiers
+add a range. Disclosure and Retry remain distinct pointer actions, both focusing
+their row. Disabled nodes and descendants cannot be selected or expanded.
+
+`select_with`, `selected`, `selection_count`, `cursor`, `clear_selection` and
+`select_all` expose the shared selection rules. Collapse maps selected descendants,
+the cursor and range anchor to their nearest visible enabled ancestor. Unrelated
+selection survives; reopening does not restore hidden selection. Removal uses the
+same ancestor fallback; if none survives, the cursor moves to a nearby enabled row
+without implicitly selecting it. Empty trees clear the cursor. Replacement preserves
+surviving logical keys but gives new nodes fresh host/native lifetimes. Changes do
+not pull focus back from another control.
+
+`reveal(key)` opens known ancestors and scrolls the item into view without selecting
+it. It validates item lifetimes across callbacks and reports loading/expansion errors.
+It cannot discover an unknown key inside an unloaded branch.
+
+`on_activate(|key| ...)` handles Return/double-click; `on_activate_with_model` supplies
+model context without a strong self-capture. A custom handler owns activation. Without
+one, branches toggle, failed branches retry, and leaves have no default action.
+Repeated Return does not repeatedly activate. `on_expand` receives `TreeExpansion {
+key, expanded }` after a current transition publishes; snapshot replacement does not
+emit disclosure events. Callbacks run outside borrows and can change the model.
+Nested notifications are suppressed to prevent recursive callback loops.
+
+Eight focused interaction tests cover keyboard/selection/focus retention, model
+replacement inside callbacks, deferred/error states and bounded 100,000-child
+navigation. Native protocol tests exercise actual AppKit keys and focused AX objects.
+Hierarchical/offscreen native tree semantics and interactive VoiceOver auditing remain M5.

@@ -242,6 +242,7 @@ impl Host {
         self.redraw();
     }
     pub fn focus(&self, id: NodeId) -> Result<bool, Error> {
+        let id = self.tree_row_owner(id).unwrap_or(id);
         self.unmark_text(true)?;
         self.refresh()?;
         if !self.0.mounted.borrow().nodes.iter().any(|n| {
@@ -260,6 +261,7 @@ impl Host {
         {
             state.revealed = false;
         }
+        self.0.interaction.borrow_mut().pending_row = None;
         let previous = self.0.interaction.borrow_mut().focus.replace(id);
         if previous != Some(id) {
             self.0.interaction.borrow_mut().tooltip_hover = None;
@@ -290,6 +292,7 @@ impl Host {
         self.cancel_field_work();
         let mut i = self.0.interaction.borrow_mut();
         let previous = i.focus.take().filter(|_| i.active);
+        i.pending_row = None;
         i.pressed = None;
         i.scroll_drag = None;
         i.split_drag = None;
@@ -313,6 +316,16 @@ impl Host {
                     && self.in_scope(n.id)
             })
             .filter(|n| {
+                if self
+                    .0
+                    .mounted
+                    .borrow()
+                    .descriptions
+                    .get(&n.id)
+                    .is_some_and(|d| d.tree_action.is_some())
+                {
+                    return false;
+                }
                 if n.kind == Kind::CollectionRow {
                     return self.collection_tab_stop(n, &nodes);
                 }
@@ -578,7 +591,7 @@ impl Host {
                                 crate::collections::input::selection(event.modifiers),
                             )?;
                             if handled && clicks == 2 {
-                                model.activate(row.key.as_deref().unwrap());
+                                self.activate_collection_row(parent, row.key.as_deref().unwrap())?;
                             }
                         }
                     } else if !matches!(kind, Some(Kind::Slider | Kind::TextField))

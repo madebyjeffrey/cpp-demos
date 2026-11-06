@@ -10,7 +10,7 @@ pub(crate) fn selection(modifiers: Modifiers) -> ListSelection {
     }
 }
 impl Host {
-    fn list(&self, id: NodeId) -> Option<ListModel> {
+    pub(crate) fn list(&self, id: NodeId) -> Option<ListModel> {
         self.0
             .mounted
             .borrow()
@@ -19,7 +19,7 @@ impl Host {
             .find(|n| n.id == id && n.enabled && !n.hidden && !n.layout_hidden && self.in_scope(id))
             .and_then(|n| n.collection.clone())
     }
-    fn focused_list(&self) -> Option<(NodeId, ListModel)> {
+    pub(crate) fn focused_list(&self) -> Option<(NodeId, ListModel)> {
         let id = self.focused()?;
         let m = self.0.mounted.borrow();
         let n = m.nodes.iter().find(|n| n.id == id)?;
@@ -153,6 +153,22 @@ impl Host {
             }
             return;
         }
+        let tree = self
+            .0
+            .mounted
+            .borrow()
+            .descriptions
+            .get(&parent)
+            .and_then(|d| d.tree.clone());
+        if tree.is_some() && model.revision() != revision {
+            if let Some(key) = model.cursor()
+                && let Some(index) = model.index_of(&key)
+            {
+                model.reveal(index);
+                self.0.interaction.borrow_mut().pending_row = Some((parent, key));
+            }
+            return;
+        }
         if model.revision() != revision {
             if let Some(key) = model
                 .cursor()
@@ -172,6 +188,9 @@ impl Host {
         let Some((parent, model)) = self.focused_list() else {
             return Ok(None);
         };
+        if let Some(handled) = self.tree_key(parent, event)? {
+            return Ok(Some(handled));
+        }
         if event.key == Key::A && (event.modifiers.command || event.modifiers.control) {
             return Ok(Some(model.select_all()));
         }
@@ -180,7 +199,7 @@ impl Host {
             if !event.repeat
                 && let Some(key) = model.cursor()
             {
-                model.activate(&key);
+                self.activate_collection_row(parent, &key)?;
             }
             return Ok(Some(true));
         }

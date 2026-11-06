@@ -341,11 +341,18 @@ fn disclosure_actions_render_load_errors_and_explicitly_retry_without_loading_du
         host.snapshot()
             .unwrap()
             .iter()
-            .any(|n| n.kind == Kind::Label && n.text.contains("Offline (retry)"))
+            .any(|n| n.kind == Kind::Label && n.text.contains("Offline"))
     );
     assert_eq!(tree.last_failure().unwrap().message, "Offline");
     online.set(true);
-    assert!(host.activate(action).unwrap());
+    let retry = host
+        .snapshot()
+        .unwrap()
+        .iter()
+        .find(|n| n.key.as_deref() == Some("$retry"))
+        .unwrap()
+        .id;
+    assert!(host.activate(retry).unwrap());
     assert_eq!(calls.get(), 2);
     assert!(tree.item("ready").is_some());
     assert!(tree.last_failure().is_none());
