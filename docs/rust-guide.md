@@ -131,6 +131,12 @@ active draft and pin; use `on_commit` for application updates. Add `--invalid` t
 preview validation, or use the example's conflict button to simulate remote data.
 See the [table editing contracts](../rust/components/README.md#completion-m4--integrated-table-editing).
 
+Tree views expose logical AppKit outline rows with disclosure links/actions,
+selection and loading/failure descriptions, including offscreen rows. Run
+`cargo run --example m4_tree -- --semantics` for a portable row-state listing.
+The native suite is `SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test tree_accessibility`.
+See the [tree semantic contracts](../rust/components/README.md#completion-m5--tree-semantics).
+
 `view!` supports ordinary expressions, `if`/`else`, keyed `for` loops, custom
 functions returning `View`, and `embed(view)` for an already-built value. Unknown
 properties fail compilation. Use stable keys for reordered items; unkeyed identity

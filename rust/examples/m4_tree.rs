@@ -5,7 +5,7 @@ fn nodes(online: &State<bool>) -> Vec<TreeNode> {
     let online = online.clone();
     vec![TreeNode::new("workspace", "Workspace").children(vec![
             TreeNode::new("local", "Local documents").children(vec![
-                TreeNode::new("notes", "Notes.md"),
+                TreeNode::new("notes", "Notes.md").accessible_label("Notes document"),
                 TreeNode::new("design", "Design.sketch"),
             ]),
             TreeNode::new("remote", "Remote documents").lazy(move || {
@@ -68,6 +68,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Err(error) = tree.expand("remote") {
         status.set(format!("Remote load failed: {error}"));
     }
+    if std::env::args().any(|arg| arg == "--semantics") {
+        for row in tree.rows(0, 16) {
+            println!(
+                "{}: label={:?} parent={:?} level={} selected={} expanded={} loading={} error={:?}",
+                row.item.key,
+                row.item.accessible_label,
+                row.item.parent,
+                row.item.depth,
+                row.selected,
+                row.item.expanded,
+                row.item.loading,
+                row.item.error
+            );
+        }
+        return Ok(());
+    }
     common::run("SCARS · Lazy tree model", (880, 620), move || {
         let connect = tree.clone();
         let backend = online.clone();
@@ -91,7 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 });
                 button("Replace snapshot",on_click:move||{replace.set_nodes(nodes(&source)).unwrap();replace.expand("workspace").unwrap();replace_status.set("New snapshot: prior requests and item lifetimes retired.".into());});
             }
-            embed(tree.view(),grow:1,key:"workspace-tree");
+            embed(tree.view().accessible_label("Workspace documents"),grow:1,key:"workspace-tree");
             label(format!("{} known nodes · {} visible · deferred request: {}",tree.known_count(),tree.visible_count(),pending.get().map_or("none".into(),|load|format!("{} ({})",load.key(),if load.is_current(){"current"}else{"stale"}))),wrap:true,label_style:LabelStyle::Micro,shrink:0);
             label(format!("{} selected · cursor {} · {}",tree.selection_count(),tree.cursor().as_deref().unwrap_or("—"),expansion.get()),wrap:true,label_style:LabelStyle::Micro,shrink:0);
             label(status.get(),wrap:true,label_style:LabelStyle::Status,shrink:0);

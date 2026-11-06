@@ -1,13 +1,68 @@
 //! Tree disclosure and parent/child navigation reuse keyed list selection/reveal.
 use crate::{Error, Host, Key, KeyEvent, ListSelection, NodeId, TreeModel};
 impl Host {
-    fn tree(&self, parent: NodeId) -> Option<TreeModel> {
+    pub(crate) fn tree(&self, parent: NodeId) -> Option<TreeModel> {
         self.0
             .mounted
             .borrow()
             .descriptions
             .get(&parent)
             .and_then(|d| d.tree.clone())
+    }
+    pub fn set_tree_selection(&self, parent: NodeId, keys: &[String]) -> Result<bool, Error> {
+        self.refresh()?;
+        let Some(model) = self.tree(parent).filter(|_| self.list(parent).is_some()) else {
+            return Ok(false);
+        };
+        let inside = self
+            .focused()
+            .is_some_and(|id| Self::within(&self.0.mounted.borrow().nodes, id, parent));
+        model.set_selection(keys)?;
+        if inside
+            && let Some(key) = model.cursor()
+            && let Some(index) = self.list(parent).and_then(|m| m.index_of(&key))
+        {
+            self.list(parent).unwrap().reveal(index);
+            self.0.interaction.borrow_mut().pending_row = Some((parent, key));
+        }
+        self.redraw();
+        Ok(true)
+    }
+    pub fn set_tree_disclosed(
+        &self,
+        parent: NodeId,
+        key: &str,
+        token: u64,
+        expanded: bool,
+    ) -> Result<bool, Error> {
+        self.refresh()?;
+        let Some(model) = self.tree(parent).filter(|_| self.list(parent).is_some()) else {
+            return Ok(false);
+        };
+        if model
+            .row(key)
+            .is_none_or(|r| r.token != token || !r.item.enabled || !r.item.expandable)
+        {
+            return Ok(false);
+        }
+        let handled = model.ui_expansion(key, expanded);
+        self.redraw();
+        Ok(handled)
+    }
+    pub fn activate_tree_item(&self, parent: NodeId, key: &str, token: u64) -> Result<bool, Error> {
+        self.refresh()?;
+        let Some(model) = self.tree(parent).filter(|_| self.list(parent).is_some()) else {
+            return Ok(false);
+        };
+        if model
+            .row(key)
+            .is_none_or(|r| r.token != token || !r.item.enabled)
+        {
+            return Ok(false);
+        }
+        let handled = model.ui_activate(key);
+        self.redraw();
+        Ok(handled)
     }
     pub(crate) fn tree_row_owner(&self, id: NodeId) -> Option<NodeId> {
         let m = self.0.mounted.borrow();

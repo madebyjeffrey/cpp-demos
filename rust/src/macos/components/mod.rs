@@ -3,6 +3,7 @@ use crate::ui;
 mod accessibility;
 mod collection_accessibility;
 mod input;
+mod row_array;
 pub(super) use accessibility::{children, focused, hit_test};
 
 pub(super) struct Mounted {
@@ -13,6 +14,12 @@ pub(super) struct Mounted {
     previous: Callbacks,
     previous_input: Option<Rc<dyn TextInputClient>>,
     cache: RefCell<std::collections::HashMap<ui::NodeId, Retained<accessibility::Element>>>,
+    row_cache: RefCell<
+        std::collections::HashMap<
+            (ui::NodeId, u64),
+            objc2::rc::Weak<collection_accessibility::Row>,
+        >,
+    >,
     generation: Cell<u64>,
     focus: Cell<Option<ui::NodeId>>,
     value: RefCell<String>,
@@ -126,6 +133,7 @@ impl Mounted {
             surface.set_cursor(Cursor::Arrow);
         }
         self.cache.borrow_mut().clear();
+        self.row_cache.borrow_mut().clear();
     }
 }
 impl Surface {
@@ -161,6 +169,7 @@ impl Surface {
             previous: self.state.callbacks.borrow().clone(),
             previous_input: self.state.text_input.borrow().clone(),
             cache: RefCell::new(Default::default()),
+            row_cache: RefCell::new(Default::default()),
             generation: Cell::new(0),
             focus: Cell::new(None),
             value: RefCell::new(String::new()),

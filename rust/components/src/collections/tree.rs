@@ -115,7 +115,7 @@ struct Record {
     parent: Option<String>,
     depth: usize,
     enabled: bool,
-    children: Vec<String>,
+    children: Rc<Vec<String>>,
     expandable: bool,
     expanded: bool,
     accessible_label: String,
@@ -247,7 +247,7 @@ fn register(
             parent,
             depth,
             enabled: node.enabled,
-            children: child_keys,
+            children: Rc::new(child_keys),
             expandable: node.expandable,
             expanded: false,
             accessible_label: node.accessible_label,
@@ -653,11 +653,11 @@ impl TreeModel {
         };
         let mut data = (*self.0.data.get()).clone();
         let parent = data.records.get_mut(request.key()).unwrap();
-        let mut old = std::mem::take(&mut parent.children);
+        let mut old = Rc::unwrap_or_clone(std::mem::take(&mut parent.children));
         let depth = parent.depth + 1;
         while let Some(key) = old.pop() {
             if let Some(record) = data.records.remove(&key) {
-                old.extend(record.children);
+                old.extend(Rc::unwrap_or_clone(record.children));
             }
         }
         let children = match register(nodes, Some(request.key.clone()), depth, &mut data.records) {
@@ -675,7 +675,7 @@ impl TreeModel {
         }
         let parent = data.records.get_mut(request.key()).unwrap();
         let was_expanded = parent.expanded;
-        parent.children = children;
+        parent.children = Rc::new(children);
         parent.load = TreeLoadState::Loaded;
         parent.request = None;
         if !parent.can_expand() {
@@ -1031,5 +1031,113 @@ impl TreeModel {
         } else {
             Ok(false)
         }
+    }
+}
+
+/// A visible logical outline row; independent of viewport realization.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TreeRowInfo {
+    pub item: TreeItem,
+    pub index: usize,
+    pub token: u64,
+    pub selected: bool,
+    pub activatable: bool,
+}
+impl TreeModel {
+    pub fn row(&self, key: &str) -> Option<TreeRowInfo> {
+        let index = self.0.list.index_of(key)?;
+        let item = self.item(key)?;
+        let activatable = item.enabled
+            && (self.0.list.has_activation() || item.expandable || item.error.is_some());
+        Some(TreeRowInfo {
+            token: self.item_token(key)?,
+            selected: self.0.list.is_selected(key),
+            item,
+            index,
+            activatable,
+        })
+    }
+    pub fn rows(&self, start: usize, count: usize) -> Vec<TreeRowInfo> {
+        let end = start.saturating_add(count).min(self.visible_count());
+        (start.min(end)..end)
+            .filter_map(|i| self.0.list.item(i).and_then(|r| self.row(&r.key)))
+            .collect()
+    }
+    pub fn disclosed_count(&self, key: &str) -> usize {
+        let data = self.0.data.get();
+        data.records
+            .get(key)
+            .filter(|r| r.expanded && self.0.list.index_of(key).is_some())
+            .map_or(0, |r| r.children.len())
+    }
+    pub fn disclosed_rows(&self, key: &str, start: usize, count: usize) -> Vec<TreeRowInfo> {
+        let data = self.0.data.get();
+        let Some(record) = data
+            .records
+            .get(key)
+            .filter(|r| r.expanded && self.0.list.index_of(key).is_some())
+        else {
+            return vec![];
+        };
+        let end = start.saturating_add(count).min(record.children.len());
+        record.children[start.min(end)..end]
+            .iter()
+            .filter_map(|key| self.row(key))
+            .collect()
+    }
+    pub fn row_snapshot(&self) -> crate::ListSnapshot {
+        self.0.list.snapshot()
+    }
+    pub fn set_selection(&self, keys: &[String]) -> Result<(), Error> {
+        crate::state::check_write();
+        let selected = keys.iter().cloned().collect::<BTreeSet<_>>();
+        if self.tree_options().selection == crate::ListSelectionMode::Single && selected.len() > 1
+            || selected
+                .iter()
+                .any(|key| self.row(key).is_none_or(|r| !r.item.enabled))
+        {
+            return Err(Error(
+                "Tree selection must contain visible enabled rows and respect the selection mode"
+                    .into(),
+            ));
+        }
+        let cursor = keys.last().cloned().or_else(|| self.cursor());
+        let anchor = keys.first().cloned().or_else(|| self.0.list.anchor());
+        crate::state::batch(|| self.0.list.restore_selection(selected, cursor, anchor));
+        Ok(())
+    }
+}
+
+/// Immutable direct-child membership without retaining loaders or allocating row objects.
+#[derive(Clone)]
+pub struct TreeChildrenSnapshot {
+    rows: crate::ListSnapshot,
+    keys: Rc<Vec<String>>,
+}
+impl TreeChildrenSnapshot {
+    pub fn len(&self) -> usize {
+        self.keys.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.keys.is_empty()
+    }
+    pub fn key(&self, index: usize) -> Option<&str> {
+        self.keys.get(index).map(String::as_str)
+    }
+    pub fn token(&self, index: usize) -> Option<u64> {
+        self.rows.item_token(self.key(index)?)
+    }
+}
+impl TreeModel {
+    pub fn disclosed_snapshot(&self, key: &str) -> Option<TreeChildrenSnapshot> {
+        let data = self.0.data.get();
+        let record = data
+            .records
+            .get(key)
+            .filter(|r| r.expanded && self.0.list.index_of(key).is_some())?;
+        Some(TreeChildrenSnapshot {
+            rows: self.0.list.snapshot(),
+            keys: record.children.clone(),
+        })
     }
 }

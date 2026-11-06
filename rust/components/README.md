@@ -1154,3 +1154,57 @@ commit/unmount, Unicode length and multiline/Tab behavior. Native protocol tests
 cover retained preedit, repeated Return, validation/cancel, real Command/Control-Return
 and native detach with a retained host. Full native table semantics and actual
 interactive VoiceOver/IME auditing remain M5.
+
+
+## Completion M5 — tree semantics
+
+Tree views expose an AppKit outline with logical rows. Rows report accessible labels,
+zero-based disclosure levels, expanded/disclosed state and selected/enabled/focused
+state. A row's AX parent is the outline; `accessibilityDisclosedByRow` links its
+logical parent and `accessibilityDisclosedRows` lists direct children. Collapsed
+children leave the exposed row set; known metadata remains queryable in Rust.
+
+`TreeModel::row`/`rows(start, count)` return `TreeRowInfo` independently of viewport
+realization. `disclosed_count`, `disclosed_rows` and `disclosed_snapshot` query direct
+membership without invoking loaders. `row_snapshot`/`ListSnapshot` share immutable
+row order and lifetime tokens. Child snapshots retain names/tokens, not loaders or
+application callbacks. Current actions still validate the live mount and item token.
+
+Ordinary native row arrays implement NSArray's count/object primitives over these
+shared snapshots. Counts and ranged row requests do not create every proxy; copying
+an immutable array preserves laziness. Enumerating all entries creates the requested
+proxies, without realizing all widgets. Array membership/order is immutable while
+each live row reports current model attributes. Native proxy caches use weak entries;
+held rows share one identity across focus, hit-testing and hierarchy queries.
+Entries retire when the final proxy reference is released, without rescanning the
+cache on every attribute query.
+Collapse makes hidden rows inert, then reopening restores the same surviving item;
+removal/replacement gives new tokens and permanently retires old proxies.
+
+Native `accessibilityRows`, visible rows, selected rows/children and range hooks
+return logical proxies, including offscreen items. Visible-row queries exclude
+overscan. Selection setters reject foreign, stale, hidden or disabled rows atomically
+and respect single/multiple selection. Focusing a tree row preserves selection;
+selection updates do not take focus from another control. Disclosure setters work
+on offscreen visible logical rows and reject disabled/leaf/stale requests. Disabled
+ancestors keep row metadata readable while blocking actions.
+
+Loading appears in `accessibilityValueDescription`; failure text appears there and
+in help. Confirm invokes the application activation handler or the default
+branch/retry behavior. Realized failed rows also expose their Retry button as a
+child, with the logical row as parent. Queries never trigger lazy loading.
+
+Contracts follow Apple's [outline protocol](https://developer.apple.com/documentation/appkit/nsaccessibilityoutline),
+[outline-row properties](https://developer.apple.com/documentation/appkit/nsaccessibilityprotocol)
+and [NSArray subclass primitives](https://developer.apple.com/documentation/foundation/nsarray).
+
+`cargo run --example m4_tree` supplies the native example, now with descriptive
+outline/document labels. `--semantics` prints portable row state without opening a
+window. Five focused tests cover hierarchy, immutable snapshots, selection/scope,
+offscreen actions, loading/failure and loader-resource release. Run the native suite
+with `SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test tree_accessibility --locked --offline`:
+it checks actual outline/row attributes, direct links, selection/focus/hit identity,
+loading/retry, stale objects and a 100,000-child outline. Full-array count/copy creates
+zero proxies; requested entries alone populate the lazy array's cache. Two hundred
+transient ranged queries return the weak registry to its original size. Combined
+notifications/lifecycle and actual VoiceOver/IME sessions remain M5.4/M5.5.

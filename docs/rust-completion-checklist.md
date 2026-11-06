@@ -433,7 +433,7 @@ Completion record (in progress):
   example; dark/light previews inspected and native smoke passes. Integrated editing
   is covered below; complete native table semantics/interactive audits remain M5/M8.
 
-- M4.7: column editing is opt-in, with multiline/length policy, pure validation and
+- M4.7 (`1378a01`): column editing is opt-in, with multiline/length policy, pure validation and
   custom display builders. Return/double-click activates; composition commits before
   submission, repeated Return does not submit, and Command/Control-Return saves
   multiline content. Escape cancels; Tab saves and traverses. Errors keep drafts
@@ -463,7 +463,7 @@ Completion record (in progress):
 
 Implement semantics alongside M1–M4; this milestone closes their combined audit.
 
-- [ ] **M5.1 Tree semantics:** hierarchy, disclosure level, expanded/loading state and expand/collapse actions for logical offscreen items, with correct parent and selection relationships.
+- [x] **M5.1 Tree semantics:** hierarchy, disclosure level, expanded/loading state and expand/collapse actions for logical offscreen items, with correct parent and selection relationships.
 - [ ] **M5.2 Table semantics:** columns, cells, headers, row/cell selection, editing and sort information; indexed queries must remain bounded and avoid creating the full table.
 - [ ] **M5.3 Control/presentation semantics:** correct menu, tab, split, alert, validation, help and value roles/states/actions, rather than exposing every composition merely as generic groups/buttons.
 - [ ] **M5.4 Lifecycle/notifications:** stable logical identity, native focus/selection/value/layout notifications and coordinate conversion; retained objects become inert after removal, unmount or close, including nested presentations.
@@ -473,7 +473,27 @@ Evidence: semantic snapshot tests, native protocol/action tests and a short manu
 results record. Main implementation: [native semantics](../rust/src/macos/components/accessibility.rs)
 and [logical row proxies](../rust/src/macos/components/collection_accessibility.rs).
 
-Completion record: pending.
+Completion record:
+
+- M5.1: tree views expose AXOutline/AXRow semantics with logical parent/direct-child
+  links, disclosure levels, selected/enabled/focused state, accessible labels and
+  loading/failure descriptions. Selection and disclosure actions validate mount,
+  modal scope, effective enabled state and lifetime tokens; offscreen actions do not
+  require realizing the target widget. Retry buttons belong to the logical row.
+- Immutable shared snapshots back lazy native row arrays. Counts/copy do not allocate
+  every proxy; requested entries preserve identity across row arrays, focus and hit
+  testing. Weak cache entries retire when proxies deallocate. Collapsed rows become
+  inert, reopening preserves surviving identity, and replaced/unmounted rows reject
+  stale actions. Snapshots do not retain loader callbacks or application resources.
+- Evidence: five core semantic tests cover hierarchy, snapshots, atomic selection,
+  modal scope, offscreen loading/retry and resource release. Dedicated AppKit tests
+  cover actual protocol attributes/actions, disabled ancestors, selection/focus/hit
+  identity, stale objects, a 100,000-child outline and 200 transient queries returning
+  the weak cache to its original size. Existing native component regressions,
+  workspace tests, strict Clippy, formatting and portable compilation pass.
+  `m4_tree` is the runnable example; `--semantics` prints portable semantic state.
+  Dark/light previews inspected and native smoke passes. Combined notification and
+  interactive VoiceOver/IME audits remain open under M5.4/M5.5.
 
 ## M6 — Localization and complete value controls
 

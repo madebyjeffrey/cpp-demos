@@ -51,7 +51,7 @@ pub(super) struct Model {
     activate: RefCell<Option<Activation>>,
     activating: Cell<bool>,
     revision: Cell<u64>,
-    tokens: RefCell<HashMap<String, u64>>,
+    tokens: RefCell<Rc<HashMap<String, u64>>>,
     pub(super) pins: State<std::collections::BTreeMap<String, u64>>,
     pub(super) leases: RefCell<HashMap<String, std::rc::Weak<super::pin::Lease>>>,
 }
@@ -64,6 +64,13 @@ impl PartialEq for ListModel {
 }
 impl Eq for ListModel {}
 impl ListModel {
+    /// Immutable row order/lifetimes without realizing controls or cloning the dataset.
+    pub fn snapshot(&self) -> ListSnapshot {
+        ListSnapshot {
+            items: self.0.items.get(),
+            tokens: self.0.tokens.borrow().clone(),
+        }
+    }
     pub fn new(items: Vec<ListItem>, row_height: f64) -> Self {
         assert!(
             row_height.is_finite() && row_height > 0.,
@@ -85,7 +92,7 @@ impl ListModel {
             activate: RefCell::new(None),
             activating: Cell::new(false),
             revision: Cell::new(0),
-            tokens: RefCell::new(HashMap::new()),
+            tokens: RefCell::new(Rc::new(HashMap::new())),
             pins: State::new(Default::default()),
             leases: RefCell::new(HashMap::new()),
         }));
@@ -212,7 +219,8 @@ impl ListModel {
             .filter(|key| index.get(key).is_some_and(|i| items[*i].enabled))
             .collect();
         {
-            let mut tokens = self.0.tokens.borrow_mut();
+            let mut storage = self.0.tokens.borrow_mut();
+            let tokens = Rc::make_mut(&mut storage);
             tokens.retain(|key, _| index.contains_key(key));
             for key in index.keys() {
                 if let Some(token) = lifetimes.and_then(|tokens| tokens.get(key)) {
@@ -289,6 +297,11 @@ impl ListModel {
     }
     pub fn index_of(&self, key: &str) -> Option<usize> {
         self.0.index.borrow().get(key).copied()
+    }
+    pub fn selected_range(&self, start: usize, count: usize) -> Vec<String> {
+        self.0
+            .selected
+            .with(|keys| keys.iter().skip(start).take(count).cloned().collect())
     }
     pub fn selection_count(&self) -> usize {
         self.0.selected.with(|selected| selected.len())
@@ -448,7 +461,7 @@ impl ListModel {
     pub fn row_height(&self) -> f64 {
         self.0.height
     }
-    pub(crate) fn viewport_height(&self) -> f64 {
+    pub fn viewport_height(&self) -> f64 {
         self.0.viewport.get().height
     }
     pub fn offset(&self) -> f64 {
@@ -585,5 +598,26 @@ impl Default for ListOptions {
             typeahead_timeout: Duration::from_secs(1),
             max_pinned_rows: 1,
         }
+    }
+}
+
+/// Stable collection data used by lazy native arrays and bounded logical queries.
+#[derive(Clone)]
+pub struct ListSnapshot {
+    items: Rc<Vec<ListItem>>,
+    tokens: Rc<HashMap<String, u64>>,
+}
+impl ListSnapshot {
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+    pub fn item(&self, index: usize) -> Option<&ListItem> {
+        self.items.get(index)
+    }
+    pub fn item_token(&self, key: &str) -> Option<u64> {
+        self.tokens.get(key).copied()
     }
 }
