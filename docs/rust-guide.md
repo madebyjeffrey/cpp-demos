@@ -41,9 +41,12 @@ All stages have runnable examples:
 Examples 2–6, Lab and Todo accept `--light`, `--smoke`, and `--render file.png`.
 Render mode uses CPU Skia and accepts `--inspect` to print layout bounds. Shared
 examples also accept `--size WIDTHxHEIGHT` and raster `--reveal-key KEY`.
+`--scale 1|2` chooses raster pixel density; native windows follow their display.
 See the [Lab guide](rust-lab.md) for all 28 samples, page/state/presentation flags,
 reproducible previews and concise custom component functions.
 Inspected raster examples also accept `--select-key KEY` to select a source node.
+The [example regression runner](rust-example-regressions.md) checks every Cargo
+example and keeps unavailable native smoke checks explicit.
 
 ## A small application
 

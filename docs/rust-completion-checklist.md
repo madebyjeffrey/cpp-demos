@@ -1003,6 +1003,37 @@ M8.4 resource evidence prepared; visible verification remains open:
   while the desktop is locked. M8.4 remains unchecked until that visible evidence
   passes. The [resource report](rust-resources.md) records commands and limits.
 
+M8.5 headless regression evidence prepared; native examples remain open:
+
+- The example runner classifies all 39 Cargo targets. The full headless entry
+  point passed all ten checks, including 37 executed examples (three terminal
+  demonstrations) and 156 dark/light, 1×/2× PNGs (78 verified pairs). Sheet content,
+  Arabic localization and inspector box/flex/popover variants also run. The
+  two native-only diagnostics, `stage1` and `windows`, are explicitly unrun.
+- Seven Todo tests pass, including the mounted view in both themes: adding,
+  editing/cancel/save, completion/filter controls, persistence/reload, recovery
+  after a failed save, external input/item updates and retained keyed identity.
+  A new external-item regression reproduced duplicate task IDs `[1, 1]` before
+  the fix; allocation now advances beyond both its counter and current items,
+  while deleted bindings remain inert for later tasks.
+- Todo raster runs receive deliberately invalid saved data. All four preview
+  renders succeed with sample tasks in their inspected scenes and leave that
+  fixture unchanged. Reviewed Todo in both themes, Arabic localized values and
+  the inspector popover preview. Visual review found that popover's transparent
+  body overlapping underlying content; the example now supplies a themed frame,
+  padding and width. Strict Clippy and the complete example matrix passed again
+  after that correction; both themed popovers were visually rechecked.
+  The [example guide](rust-example-regressions.md)
+  provides runnable commands, coverage and artifact locations.
+- Nine validator tests pass, including exhaustive Cargo target classification,
+  read-only native planning and cancellation of a nested runner's separate child
+  process group. The full entry point and CI now include example regression
+  checks; native mode includes foreground example/sheet smoke runs.
+- The fresh readiness probe still reports the login window and zero active
+  displays. No native examples ran. M8.5 remains unchecked until those real
+  windowing runs pass; native, VoiceOver and IME evidence is not inferred from
+  successful CPU previews or model/view tests.
+
 M8.3 completion record:
 
 - `python3 scripts/check_rust.py` is the documented local entry point. Headless

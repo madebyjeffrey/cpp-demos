@@ -23,9 +23,9 @@ configuration and consumer profile preserve the same native source-build setting
 
 | Suite | Command | Scope |
 | --- | --- | --- |
-| Headless | `python3 scripts/check_rust.py` | Validator tests, inventory, workspace/consumer formatting, strict all-target Clippy, core/macro/raster/application tests, Linux core compilation and renamed-consumer compilation |
+| Headless | `python3 scripts/check_rust.py` | Validator tests, inventory, workspace/consumer formatting, strict all-target Clippy, core/macro/raster/application tests, Linux core compilation, renamed-consumer compilation and example regressions |
 | Portable | `python3 scripts/check_rust.py --suite portable` | Validator/inventory/format checks, core/macro Clippy and tests, Linux core compilation; no Skia/native dependency build |
-| Native | `python3 scripts/check_rust.py --suite native` | Desktop readiness, actual visible Metal/lifecycle, full-screen, secure input, foreground sheets and every opt-in native protocol harness, run sequentially |
+| Native | `python3 scripts/check_rust.py --suite native` | Desktop readiness, actual visible Metal/lifecycle, full-screen, secure input, foreground sheets, every opt-in native protocol harness and native example smoke checks, run sequentially |
 
 Append `--offline` when appropriate. `--plan` prints commands without executing
 checks or producing a passing report. Native execution requires macOS 26+ and an
@@ -44,6 +44,10 @@ under `lab/` for each run. `lab_artifacts` in the report gives the exact path.
 Open its `index.html` to filter paired 1×/2× CPU previews; the gallery step checks
 that every pair exists and the 2× framebuffer has twice the width and height.
 Older runs are retained separately and cannot supply missing current previews.
+`example_artifacts` points to a separate fresh directory containing every
+headless example preview, its paired gallery and a coverage/command report.
+See [example regressions](rust-example-regressions.md) for modes and standalone
+commands; native-only examples remain explicitly unrun in headless reports.
 
 A failed command stops later checks. Unexecuted steps remain `not_run`; timeouts
 and interruptions fail the check and terminate Cargo's process group, including

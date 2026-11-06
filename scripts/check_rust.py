@@ -58,9 +58,10 @@ def plan(suite: str, offline: bool) -> list[Step]:
             cargo("secure-input", "test", "--test", "secure_input", env={NATIVE_FLAGS[2]: "1"}),
             cargo("native-sheets", "test", "--test", "sheets", "--", "--foreground", env=desktop),
             *[cargo(f"native-{test}", "test", "--test", test, env=desktop) for test in PROTOCOL_TESTS],
+            Step("example-regressions", (sys.executable, str(ROOT / "scripts/check_rust_examples.py"), "--native", *(("--offline",) if offline else ())), ROOT, {"SCARS_VALIDATION_NESTED": "1"}),
         ]
     steps = [
-        Step("validator-tests", (sys.executable, "-m", "unittest", "discover", "-s", "scripts/tests", "-p", "test_check_rust.py"), ROOT),
+        Step("validator-tests", (sys.executable, "-m", "unittest", "discover", "-s", "scripts/tests", "-p", "test_check_rust*.py"), ROOT),
         Step("inventory", (sys.executable, str(ROOT / "scripts/check_rust_inventory.py")), ROOT),
         Step("format", ("cargo", "fmt", "--all", "--", "--check")),
         Step("consumer-format", ("cargo", "fmt", "--manifest-path", "checks/renamed-consumer/Cargo.toml", "--", "--check")),
@@ -74,6 +75,7 @@ def plan(suite: str, offline: bool) -> list[Step]:
     if suite == "headless":
         steps.append(cargo("renamed-consumer", "check", "--manifest-path", "checks/renamed-consumer/Cargo.toml"))
         steps.append(Step("raster-gallery", (sys.executable, str(ROOT / "scripts/rust_gallery.py")), ROOT))
+        steps.append(Step("example-regressions", (sys.executable, str(ROOT / "scripts/check_rust_examples.py"), *(("--offline",) if offline else ())), ROOT, {"SCARS_VALIDATION_NESTED": "1"}))
     return steps
 
 
@@ -82,16 +84,20 @@ def environment(output: Path, suite: str) -> dict[str, str]:
     for key in NATIVE_FLAGS:
         env.pop(key, None)
     env.pop("SCARS_LAB_ARTIFACTS", None)
+    env.pop("SCARS_EXAMPLE_ARTIFACTS", None)
+    env.pop("SCARS_VALIDATION_NESTED", None)
     # Never download upstream's prebuilt Skia libraries. Cargo still reuses local builds.
     env["FORCE_SKIA_BUILD"] = "1"
     env["MACOSX_DEPLOYMENT_TARGET"] = "26.0"
     target = Path(env.get("CARGO_TARGET_DIR", RUST / "target"))
     env["CARGO_TARGET_DIR"] = str((RUST / target).resolve() if not target.is_absolute() else target)
     env["CARGO_TERM_COLOR"] = "never"
-    if suite == "headless":
+    if suite in ("headless", "native"):
         # Keep old artifacts out of the current run without deleting user files.
         run = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid4().hex[:8]
-        env["SCARS_LAB_ARTIFACTS"] = str(output / "lab" / run)
+        env["SCARS_EXAMPLE_ARTIFACTS"] = str(output / "examples" / run)
+        if suite == "headless":
+            env["SCARS_LAB_ARTIFACTS"] = str(output / "lab" / run)
     return env
 
 
@@ -105,7 +111,8 @@ def _stop(process: subprocess.Popen) -> None:
     else:
         process.terminate()
     try:
-        process.wait(timeout=2)
+        # Nested runners must finish cleanup before their parent's two-second grace expires.
+        process.wait(timeout=0.5 if os.environ.get("SCARS_VALIDATION_NESTED") else 2)
     except subprocess.TimeoutExpired:
         pass
     if os.name == "posix":
@@ -178,6 +185,12 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def handle_termination() -> None:
+    def interrupted(_signal, _frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, interrupted)
+
+
 def metadata(command: tuple[str, ...], cwd: Path = RUST) -> str:
     try:
         return subprocess.check_output(command, cwd=cwd, text=True, stderr=subprocess.STDOUT).strip()
@@ -186,6 +199,7 @@ def metadata(command: tuple[str, ...], cwd: Path = RUST) -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
+    handle_termination()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite", choices=("headless", "portable", "native"), default="headless")
     parser.add_argument("--offline", action="store_true", help="Pass --offline to Cargo (requires cached sources/build prerequisites)")
@@ -212,6 +226,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         "native_execution": "requested" if args.suite == "native" else "not_run",
         "manual_audits": {"voiceover": "not_run", "ime_1x": "not_run", "ime_2x": "not_run"},
         "lab_artifacts": env.get("SCARS_LAB_ARTIFACTS"),
+        "example_artifacts": env.get("SCARS_EXAMPLE_ARTIFACTS"),
     }
     return run_steps(steps, output, env, report)
 

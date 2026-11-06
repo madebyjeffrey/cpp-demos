@@ -28,6 +28,8 @@ checks remain explicit; a headless pass does not substitute for them.
 `cargo run --example m8_resources --locked --offline` exercises large collections,
 editing and renderer caches in a terminal. The [resource report](../docs/rust-resources.md)
 records measured limits, ownership, cancellation checks and remaining native work.
+The [example regression guide](../docs/rust-example-regressions.md) covers all
+39 example targets, todo persistence/interaction checks and native-only runs.
 
 ## Source layout
 

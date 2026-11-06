@@ -75,7 +75,15 @@ impl Todos {
         if title.is_empty() {
             return;
         }
-        let id = self.next.get();
+        let id = self.next.get().max(
+            self.items
+                .get()
+                .iter()
+                .map(|item| item.id)
+                .max()
+                .unwrap_or(0)
+                .saturating_add(1),
+        );
         let Some(next) = id.checked_add(1) else {
             self.error.set(Some("No task identifiers remain".into()));
             return;

@@ -77,6 +77,9 @@ class ValidationTests(unittest.TestCase):
         self.assertEqual(steps[0].name, "desktop-readiness")
         selected = {}
         for step in steps[1:]:
+            if step.name == "example-regressions":
+                self.assertIn("--native", step.command)
+                continue
             self.assertIn("--locked", step.command)
             self.assertIn("--offline", step.command)
             target = step.command[step.command.index("--test") + 1]
@@ -86,7 +89,21 @@ class ValidationTests(unittest.TestCase):
         for target, flag in guards.items():
             self.assertEqual(selected[target], {flag: "1"})
         for suite in ("headless", "portable"):
-            self.assertTrue(all(not step.env for step in check.plan(suite, True)))
+            self.assertTrue(all(not (set(step.env) & set(check.NATIVE_FLAGS)) for step in check.plan(suite, True)))
+
+    @unittest.skipUnless(os.name == "posix", "Process-group termination requires POSIX")
+    def test_parent_timeout_retires_a_nested_runner_and_its_separate_child_group(self):
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            marker = directory / "orphan"
+            child = f"import time;from pathlib import Path;time.sleep(1);Path({str(marker)!r}).touch()"
+            program = "import sys;sys.path.insert(0," + repr(str(check.ROOT / "scripts")) + ");import check_rust as c;from pathlib import Path;c.handle_termination();c.execute(c.Step('nested-child',(sys.executable,'-c'," + repr(child) + ")),dict(__import__('os').environ),Path(" + repr(str(directory / "nested.log")) + "))"
+            step = check.Step("nested-runner", (sys.executable, "-c", program), env={"SCARS_VALIDATION_NESTED": "1"}, timeout=0.4)
+            code, report = self.run_steps([step], directory, check.environment(directory, "portable"))
+            self.assertEqual(code, 1)
+            self.assertEqual(report["steps"][0]["exit_code"], 124)
+            time.sleep(1.1)
+            self.assertFalse(marker.exists(), "a nested runner must retire its separate child group")
 
     def test_planning_native_checks_requires_no_native_execution(self):
         with tempfile.TemporaryDirectory() as directory:

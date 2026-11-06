@@ -13,7 +13,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let copies = Numeric::new(State::new(3i64).binding(), 0, 10, 1);
     let visible = State::new(true);
     let compact = State::new(false);
-    let popup = Popup::new();
+    let popup = Popup::new().options(OverlayOptions {
+        width: Some(280.),
+        ..Default::default()
+    });
     let rows = ListModel::new(
         (0..10_000)
             .map(|i| ListItem::new(format!("r{i}"), format!("Item {i}")))
@@ -55,7 +58,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }}
                     embed(inspect.view(),width:400,shrink:0);
                 }
-                embed(popup.popover("options",View::column(vec![View::label("Options popup"),View::button("Close",move || close.dismiss())])));
+                embed(popup.popover("options",view! {group_box("Options",padding:16,gap:12){
+                    label("Options popup");
+                    button("Close",on_click:move || close.dismiss());
+                }}));
             }}
         },
     )
