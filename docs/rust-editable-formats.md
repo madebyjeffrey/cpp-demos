@@ -1,7 +1,7 @@
 # Editable value formats
 
-M6.1/M6.2 contract. ASCII/ISO editing remains the default. `EditLocale` selects a
-checked locale profile shared by `Numeric` and `DatePicker`. Read-only display
+M6 editable-format contract. ASCII/ISO editing remains the default. `EditLocale` selects a
+checked locale profile shared by `Numeric`, `DatePicker` and `TimePicker`. Read-only display
 formatters may support more locales than editable controls. A display formatter does not define an input grammar.
 
 ## Default grammar
@@ -45,8 +45,8 @@ supported profiles are intentionally finite and testable:
 
 These are advertised editing patterns with four-digit years, not a claim to cover
 every CLDR date pattern/calendar. Calendar labels and hints must follow the chosen
-profile. Time/datetime controls retain ISO until their explicit hour-cycle policy
-is implemented in M6.4. BCE/extended-year editing remains available in ISO mode.
+profile. The standalone time control adds the explicit clock policy below; legacy
+time/datetime draft helpers retain ISO. BCE/extended-year editing remains available in ISO mode.
 
 - Validate profile names at construction. Unknown/malformed profiles and unsupported
   calendar/numbering extensions return an error; never silently substitute an edit
@@ -102,3 +102,35 @@ tests cover grammar, precision, grouping/digits, stepping, date order, unsupport
 profiles, extreme values, calendar layout/actions and external value replacement.
 The opt-in native `localized_values` harness tests actual text/AX transport; it does
 not replace the pending interactive VoiceOver/IME audit.
+
+## Standalone time control
+
+`TimePicker` defaults to a 24-hour `HH:MM` field. `hour_cycle(HourCycle::H12)`
+uses `hh:MM AM/PM`, accepts one- or two-digit hours 1–12 and case-insensitive English
+period markers. Arabic profiles use `ص`/`م`; the period follows one ASCII space.
+Midnight is 12 AM and noon 12 PM. Locale does not implicitly select the hour cycle.
+
+`show_seconds(true)` adds `:SS` and, when nonzero, 1–9 fractional digits. The
+fraction separator matches the profile's decimal separator; time components always
+use `:`. Selected digits or ASCII digits are accepted consistently across the whole
+value; mixed digit sets fail. No grouping, whitespace, leap seconds, offsets, dates,
+zones or day wrapping is inferred. The field's hint advertises its configured grammar.
+
+Omitting seconds preserves the source's exact seconds and nanoseconds. Supplying
+seconds replaces both; omitted fractional digits mean zero nanoseconds. Hidden
+seconds cannot be typed until enabled. An untouched display and hour/minute-only
+edits therefore retain subsecond precision. Pure bounds/custom validation checks
+the entire candidate, including hidden precision. Stepping uses exact arithmetic,
+carries into larger components and rejects crossing midnight or configured bounds.
+Minute/second steps are 1–60; AM/PM explicitly toggles 12 hours within the same day.
+
+Configure clock/locale/bounds/validation builders before mounting; changing them
+restores the committed draft. Readonly/blur flags can vary on view clones. Apply or
+Enter commits and submits; blur commits by default without submitting, while Revert
+or Escape restores the model. Invalid text and rejected setters keep the draft.
+External source revisions invalidate stale edits, including A→B→A transitions.
+
+`cargo run --example m6_time --locked --offline` demonstrates two clock policies
+over one exact value. Six portable tests and the hidden native `time_picker` harness
+cover precision, localized grammar, steps, validation, lifecycle and text composition.
+Combined datetime/instant bounds and timezone policy remain open under M6.4.

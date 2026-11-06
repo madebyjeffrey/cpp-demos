@@ -673,6 +673,24 @@ M6.3 completion record:
   suites are left for the dedicated desktop audit while user-assisted VoiceOver
   testing is in progress. No unavailable interactive evidence is counted as a pass.
 
+M6.4 standalone time checkpoint (item remains open):
+
+- `TimePicker` adds one transactional field, hour/minute/optional-second steppers,
+  explicit 12/24-hour display, AM/PM selection, 1–60 minute/second steps, inclusive
+  bounds, pure custom validation, readonly/blur/submit/cancel policy and locale
+  digits/fraction separators. Hour/minute edits retain hidden seconds/nanoseconds.
+  Steps carry components without wrapping days; invalid text/bounds remain intact.
+- Six focused portable tests cover exact values, localized grammar, midnight/noon,
+  steps/bounds/custom validation, keyboard/blur/callbacks, rejected setters and
+  source revisions. `m6_time` is the runnable two-clock example; dark/light raster
+  previews inspected. Hidden native time/date/focus tests pass, covering text/AX
+  values/actions, preedit confirmation, readonly and retired objects while asserting
+  windows stay invisible. Workspace tests, strict Clippy, portable Linux compilation,
+  formatting and inventory mapping pass. Actual speech/candidate and visible GPU
+  sessions remain M5.5/M8.
+- Combined local datetime/instant bounds, joint validation, DST policies and named
+  zone changes remain required before M6.4 can be checked off.
+
 ## M7 — Developer tools and application ergonomics
 
 - [ ] **M7.1 Inspector:** a navigable mounted hierarchy with layout, focus, selection, validation, overlay and collection-window details, synchronized with picking and removal.

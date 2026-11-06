@@ -4,7 +4,7 @@ use icu_decimal::{DecimalFormatter, input::Decimal};
 use icu_locale_core::Locale;
 use std::rc::Rc;
 
-/// An explicit, validated editing locale shared by numeric and date controls.
+/// An explicit, validated editing locale shared by numeric, date and time controls.
 /// ASCII/ISO is the default; unsupported profiles/extensions return an error.
 #[derive(Clone, Debug, Default)]
 pub struct EditLocale(Option<Rc<Localized>>);
@@ -225,6 +225,46 @@ impl EditLocale {
     }
     fn profile(&self) -> Option<Profile> {
         self.0.as_ref().map(|l| l.profile)
+    }
+    pub(crate) fn clock_digits(&self, ascii: &str) -> String {
+        self.profile().map_or_else(
+            || ascii.into(),
+            |p| p.digits(&ascii.replace('.', &p.decimal().to_string())),
+        )
+    }
+    pub(crate) fn clock_input(&self, text: &str) -> Result<String, String> {
+        self.profile().map_or_else(
+            || Ok(text.into()),
+            |p| {
+                if p.decimal() != '.' && text.contains('.') {
+                    return Err(format!("Use {} for fractional seconds", p.decimal()));
+                }
+                p.ascii_digits(text).map(|s| s.replace(p.decimal(), "."))
+            },
+        )
+    }
+    pub(crate) fn clock_label(&self) -> &'static str {
+        match self.profile() {
+            Some(Profile::De) => "Uhrzeit",
+            Some(Profile::Fr) => "Heure",
+            Some(Profile::Ar) => "الوقت",
+            _ => "Time",
+        }
+    }
+    pub(crate) fn clock_part(&self, index: usize) -> &'static str {
+        match self.profile() {
+            Some(Profile::De) => ["Stunde", "Minute", "Sekunde"][index],
+            Some(Profile::Fr) => ["Heure", "Minute", "Seconde"][index],
+            Some(Profile::Ar) => ["الساعة", "الدقيقة", "الثانية"][index],
+            _ => ["Hour", "Minute", "Second"][index],
+        }
+    }
+    pub(crate) fn periods(&self) -> [&'static str; 2] {
+        if self.rtl() {
+            ["ص", "م"]
+        } else {
+            ["AM", "PM"]
+        }
     }
     pub(crate) fn date(&self, date: Date) -> String {
         let Some(p) = self.profile() else {

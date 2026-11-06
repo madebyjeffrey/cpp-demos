@@ -1444,3 +1444,40 @@ AX selected children/day state, unavailable focus, retained field identity, nati
 text/IME transport and inert stale objects. The hidden `accessibility_focus` test
 also checks meaningful expansion attributes and nonduplicated text-focus posts.
 Interactive VoiceOver/IME and visible GPU checks remain explicit in M5.5/M8.
+
+## M6.4 checkpoint — standalone time control
+
+```rust
+let picker = TimePicker::new(value.binding())
+    .hour_cycle(HourCycle::H12)
+    .show_seconds(true)
+    .minute_step(5)
+    .bounds(min, max)
+    .validate(|time| validate_booking_time(time));
+// In a builder: embed(picker.view());
+```
+
+One typed field owns the draft; hour/minute/optional-second steppers and AM/PM
+share it. A valid step commits the whole candidate. Invalid text stays editable
+and disables stepping. Hour/minute edits preserve hidden seconds/nanoseconds;
+explicit seconds replace them. Steps use exact arithmetic and carry into larger
+components, rejecting day/bounds/custom-rule violations. Steps are 1–60 for minutes
+and seconds. Focus a stepper and use arrow keys; native AX increment/decrement
+exposes exact component values and direction availability.
+
+`HourCycle` is explicit rather than inferred from locale. `EditLocale` supplies
+digits, fractional separators, period/action labels and grammar hints. Bounds are
+inclusive and validators are pure. Configure once before mounting; configuration
+builders reset the draft. Readonly and blur flags can vary per view. The default
+commits on blur without submitting. Apply/Enter commits and calls `on_submit` on
+success; Revert/Escape restores the source and calls `on_cancel`. External source
+revisions invalidate stale edits; rejected setters retain text. Callbacks can
+publish newer authoritative values without a subsequent stale write.
+
+`binding()`, `draft()`, `validation()`, `commit()`, `cancel()`, `can_step()` and
+`step(TimePart, increase)` expose the same behavior to application code.
+`cargo run --example m6_time` opens the concise two-clock example. Six portable
+tests cover exact values, locales, boundaries, callbacks, keyboard/blur and source
+changes. The hidden native `time_picker` harness covers AX values/actions, marked
+text confirmation, readonly behavior and retired objects. This is a checkpoint:
+combined datetime/instant validation and timezone editing still keep M6.4 open.

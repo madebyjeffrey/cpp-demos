@@ -48,6 +48,7 @@ mod state;
 mod tabs;
 pub mod text;
 mod text_buffer;
+mod time;
 mod tooltip;
 mod values;
 mod view;
@@ -78,6 +79,7 @@ pub use split::{PointerCursor, Split, SplitInfo, SplitOptions, SplitPane, split,
 pub use state::{Binding, State};
 pub use tabs::{Tab, TabItemInfo, Tabs, TabsInfo, tab_view, tabs};
 pub use text_buffer::{Selection, TextBuffer, TextCommand, TextOptions};
+pub use time::{HourCycle, TimePart, TimePicker};
 pub use tooltip::{TooltipOptions, TooltipPresentation};
 pub use values::*;
 pub use view::{CheckState, Kind, OptionItem, Value, View};

@@ -16,7 +16,7 @@ pub(crate) fn parse_date(text: &str) -> Result<Date, String> {
     }
     Ok(date)
 }
-fn parse_time(text: &str) -> Result<Time, String> {
+pub(crate) fn parse_time(text: &str) -> Result<Time, String> {
     let (clock, fraction) = text
         .split_once('.')
         .map_or((text, None), |(a, b)| (a, Some(b)));
@@ -37,7 +37,7 @@ fn parse_time(text: &str) -> Result<Time, String> {
     }
     text.parse::<Time>().map_err(|e| e.to_string())
 }
-fn parse_datetime(text: &str) -> Result<DateTime, String> {
+pub(crate) fn parse_datetime(text: &str) -> Result<DateTime, String> {
     let (date, time) = text
         .split_once('T')
         .ok_or("Use an ISO local date/time: YYYY-MM-DDTHH:MM[:SS]")?;
