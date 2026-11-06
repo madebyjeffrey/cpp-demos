@@ -367,3 +367,43 @@ fn validation_callbacks_cannot_commit_a_retired_or_replaced_calendar_action() {
     assert_eq!(picker.draft.binding().get(), "2024-02-01");
     assert!(!picker.validation().dirty);
 }
+
+#[test]
+fn validation_callbacks_keep_newer_calendar_navigation_on_apply_and_cancel() {
+    use std::cell::RefCell;
+    let source = State::new(date("2024-02-01"));
+    let armed = Rc::new(Cell::new(false));
+    let slot: Rc<RefCell<Option<Host>>> = Rc::new(RefCell::new(None));
+    let picker = DatePicker::new(source.binding()).on_validation({
+        let a = armed.clone();
+        let s = slot.clone();
+        move |_| {
+            if a.replace(false) {
+                assert!(
+                    s.borrow()
+                        .as_ref()
+                        .unwrap()
+                        .key(key(Key::PageDown))
+                        .unwrap()
+                );
+            }
+        }
+    });
+    let host = Host::new({
+        let p = picker.clone();
+        move || p.view()
+    });
+    *slot.borrow_mut() = Some(host.clone());
+    layout(&host);
+    host.focus(day(&host, date("2024-02-01")).id).unwrap();
+    picker.binding().set("2024-02-02".into());
+    armed.set(true);
+    assert!(picker.commit());
+    assert_eq!(source.get(), date("2024-02-02"));
+    assert_eq!(picker.calendar().cursor, date("2024-03-02"));
+    layout(&host);
+    armed.set(true);
+    picker.cancel();
+    assert_eq!(picker.calendar().cursor, date("2024-03-02"));
+    slot.borrow_mut().take();
+}

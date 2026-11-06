@@ -296,3 +296,46 @@ fn stepper_is_one_keyboard_stop_with_exact_value_queries_and_actions() {
     host.focus_next(false).unwrap();
     assert_eq!(host.focused(), Some(node(&host, "Next").id));
 }
+
+#[test]
+fn generic_value_fields_cancel_with_escape_and_expose_readonly_to_the_host() {
+    let value = State::new(3i64);
+    let draft = Draft::new(
+        value.binding(),
+        |s| s.parse::<i64>().map_err(|e| e.to_string()),
+        |v| v.to_string(),
+    );
+    let host = Host::new({
+        let d = draft.clone();
+        move || value_field("Custom value", &d)
+    });
+    host.layout(Size::new(400., 220.), &Metrics).unwrap();
+    let id = field(&host).id;
+    host.focus(id).unwrap();
+    host.set_text(id, "unfinished").unwrap();
+    assert!(host.text_command(TextCommand::Escape, false).unwrap());
+    assert_eq!(draft.binding().get(), "3");
+    assert_eq!(value.get(), 3);
+    let readonly = draft.read_only(true);
+    let host = Host::new(move || value_field("Custom value", &readonly));
+    host.layout(Size::new(400., 220.), &Metrics).unwrap();
+    assert!(field(&host).read_only);
+    assert!(!node(&host, "Apply").enabled);
+    assert!(!node(&host, "Revert").enabled);
+}
+
+#[test]
+fn stepper_announces_the_valid_staged_value_that_its_next_action_will_adjust() {
+    let value = State::new(3i64);
+    let number = Numeric::new(value.binding(), 0, 10, 1);
+    let host = Host::new({
+        let n = number.clone();
+        move || stepper("Count", &n)
+    });
+    host.layout(Size::new(200., 50.), &Metrics).unwrap();
+    number.binding().set("7".into());
+    let control = node(&host, "Count");
+    assert_eq!(control.stepper.unwrap().value, "7");
+    assert!(host.step_control(control.id, true).unwrap());
+    assert_eq!(value.get(), 8);
+}

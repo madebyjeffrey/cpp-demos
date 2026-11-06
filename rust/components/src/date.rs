@@ -207,6 +207,9 @@ impl DatePicker {
     pub fn validation(&self) -> Validation {
         self.draft.validation()
     }
+    pub fn binding(&self) -> Binding<String> {
+        self.draft.binding()
+    }
     fn page(&self) -> Page {
         let page = self.page.get();
         let base = self.value.get();
@@ -242,9 +245,10 @@ impl DatePicker {
     }
     pub fn commit(&self) -> bool {
         crate::state::batch(|| {
+            let page_version = self.page.version();
             let accepted =
                 self.draft.commit() && self.validation().status == ValidationStatus::Valid;
-            if accepted {
+            if accepted && self.page.version() == page_version {
                 let base = self.value.get();
                 let cursor = self.rules.clamp(base);
                 self.page.set(Page {
@@ -259,7 +263,6 @@ impl DatePicker {
     }
     pub fn cancel(&self) {
         crate::state::batch(|| {
-            self.draft.cancel();
             let base = self.value.get();
             let cursor = self.rules.clamp(base);
             self.page.set(Page {
@@ -268,6 +271,7 @@ impl DatePicker {
                 month: cursor.first_of_month(),
                 cursor,
             });
+            self.draft.cancel();
             if let Some(callback) = &self.cancel {
                 callback()
             }
@@ -278,8 +282,9 @@ impl DatePicker {
             return None;
         }
         let before = (self.value.get(), self.value.revision());
-        self.draft.binding().set(self.rules.locale.date(date));
-        ((self.value.get(), self.value.revision()) == before).then_some(before)
+        (self.draft.stage_text(self.rules.locale.date(date))
+            && (self.value.get(), self.value.revision()) == before)
+            .then_some(before)
     }
     pub fn select(&self, date: Date) -> bool {
         crate::state::batch(|| {

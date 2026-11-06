@@ -181,6 +181,12 @@ changes. `m6_zoned` demonstrates gaps/folds and KeepInstant versus KeepLocal.
 Cancel. `alpha(false)` preserves hidden alpha. `m6_color` shows these policies and
 an anchored well; use one picker per independent editing session.
 
+`cargo run --example m6_drafts` demonstrates application acceptance and retry
+across all six typed editors. They share `binding()`, `validation()`, `commit()`
+and `cancel()`: rejected updates retain text and feedback, accepted normalization
+is read back, and newer callback edits supersede the original action. Shared
+prefix/blur/composition coverage is still in progress under M6.6.
+
 See [component contracts](../rust/components/README.md) for layouts, controls,
 selection, popup placement, virtual models, deadlines, native semantics and
 inspection. [Window contracts](../rust/README.md) cover ownership and rendering.

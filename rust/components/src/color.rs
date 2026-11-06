@@ -608,9 +608,11 @@ impl ColorPicker {
         }
         crate::state::batch(|| {
             let accepted = self.publish(true);
+            let version = self.inner.edit.version();
             let source = stamp(&self.inner.source);
             self.notify();
             accepted
+                && self.inner.edit.version() == version
                 && stamp(&self.inner.source) == source
                 && self.validation().status == ValidationStatus::Valid
         })

@@ -600,6 +600,11 @@ also reproduced redundant initial text-selection and focus notifications on entr
 Both fixes pass the hidden native regression (`29362a5`); actual speech recheck remains pending. Other matrix
 sessions, composing IME candidate placement and actual scale 2 remain open.
 
+Follow-up: the running `m5_semantics` process was confirmed to have started before
+`29362a5`. It was replaced with the rebuilt example and the hidden tab/focus
+regression passed again. Speech from that restarted process is still awaiting the
+user's report; the earlier utterance is not evidence against the rebuilt version.
+
 ## M6 — Localization and complete value controls
 
 - [x] **M6.1 Editable format policy:** specify supported locale/grammar combinations, display/edit round trips and unsupported-format behavior. Preserve an explicit ASCII/ISO mode; do not silently guess ambiguous grouping or dates.
@@ -739,7 +744,7 @@ M6.4 zoned completion record (`b2a52c0`):
 - Actual speech, IME candidate placement and foreground/Metal runs remain M5.5/M8;
   no skipped or protocol-only check is counted as that evidence.
 
-M6.5 completion record:
+M6.5 completion record (`0a7f750`):
 
 - `ColorPicker` now owns one RGB/HSV/hex draft, numeric component fields/sliders,
   model switching, alpha policy and checkerboard preview. Public HSV conversions
@@ -770,6 +775,29 @@ M6.5 completion record:
   `--well` for the open popover. Dark/light inline and open-well previews inspected.
   Foreground/interactive evidence remains M5.5/M8; native protocol/raster evidence
   does not close those gates.
+
+M6.6 acceptance checkpoint (milestone remains open):
+
+- Shared drafts retain rejected text with feedback and explicit retry, read back
+  application normalization, preserve exact pristine values without equal writes,
+  and protect newer edits made by setters or validation callbacks. Codec/status
+  queries are pure. Invalid non-reflexive values can be corrected; formatter
+  context changes replace stale text. Numeric/time/datetime stepping uses the
+  same acceptance path. Zoned changes and color Apply honor newer callback edits.
+- All six editors expose `binding()`, `validation()`, `commit()` and `cancel()`.
+  Date selection cannot commit text staged by a newer callback, and apply/cancel
+  preserve callback calendar navigation. Generic value fields support Escape and
+  host readonly state; numeric steppers announce their staged candidate.
+- `m6_drafts` demonstrates six editors with an application acceptance switch.
+  Eight shared lifecycle tests plus focused numeric/calendar tests cover rejection,
+  retry, normalization, callbacks, purity, exactness and host behavior. Dark/light
+  previews inspected. Strict Clippy, portable Linux compilation, formatting,
+  inventory mapping and hidden native date/time/datetime/zoned/color/focus checks
+  pass. Full workspace tests pass; their skipped native harnesses are not counted
+  as desktop evidence.
+- Still open: consistent appendable-prefix classification and the shared
+  blur/composition/lifecycle interaction matrix. Actual VoiceOver/IME checks remain
+  M5.5; this checkpoint does not check off M6.6.
 
 ## M7 — Developer tools and application ergonomics
 

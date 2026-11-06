@@ -389,12 +389,7 @@ impl TimePicker {
             let Some(next) = self.next(part, increase) else {
                 return false;
             };
-            self.value.set(next);
-            if self.value.get() != next {
-                return false;
-            }
-            self.draft.cancel();
-            self.value.get() == next
+            self.draft.accept(next)
         })
     }
     fn parts(&self) -> View {

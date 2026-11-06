@@ -91,19 +91,25 @@ pub(crate) fn localized_value_field<T: Clone + PartialEq + 'static>(
     let commit = draft.clone();
     let apply = draft.clone();
     let cancel = draft.clone();
+    let escape = draft.clone();
+    let read_only = draft.is_read_only();
     let mut children = vec![
         View::label(&label),
         View::text_field("", draft.binding())
             .accessible_label(label)
+            .read_only(read_only)
             .validation(draft.validation())
+            .on_cancel(move || escape.cancel())
             .on_submit(move || {
                 commit.commit();
             }),
         View::row(vec![
             View::button(locale.action(ActionLabel::Apply), move || {
                 apply.commit();
-            }),
-            View::button(locale.action(ActionLabel::Revert), move || cancel.cancel()),
+            })
+            .enabled(!read_only),
+            View::button(locale.action(ActionLabel::Revert), move || cancel.cancel())
+                .enabled(!read_only),
         ]),
     ];
     if let Some(error) = draft.error() {

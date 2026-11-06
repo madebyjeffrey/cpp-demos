@@ -1624,3 +1624,26 @@ VoiceOver/IME candidate and visible GPU evidence remain M5.5/M8.
 
 Use `--well` to start with the color popover open. It sizes to its content up to
 the configured maximum height and scrolls when the viewport is constrained.
+
+### Shared draft acceptance (M6.6 in progress)
+
+All six typed editors expose `binding()`, `validation()`, `commit()` and `cancel()`.
+`binding()` is the editable text; the application binding remains the committed
+value (except explicit color live preview). A rejected setter retains text and an
+error; Apply can retry. Accepted normalization is read back. Pristine Apply skips
+an equal setter and preserves hidden precision. External model/revision or formatter
+context changes replace stale text. Custom bindings should supply revisions when
+equal-looking replacements need to invalidate edits.
+
+Parsers, formatters and validation queries must be pure. Validation callbacks run
+outside borrows and may publish application changes or stage another edit. Such
+newer work supersedes the original action; it is preserved and `commit()` returns
+false. Notifications suppress recursive delivery. Generic `value_field` also
+supports Escape and exposes readonly to the host; its Apply/Revert buttons are
+inactive when readonly. Numeric steppers announce the valid staged value they
+will adjust.
+
+`cargo run --example m6_drafts` demonstrates all six editors and application
+acceptance/retry without native plumbing. The remaining M6.6 work is consistent
+prefix classification and the shared blur/composition/lifecycle interaction matrix;
+this acceptance checkpoint does not close that milestone.

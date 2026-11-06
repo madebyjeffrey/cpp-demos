@@ -321,8 +321,8 @@ impl ZonedPicker {
         self.context.zone.set(zone.clone());
         self.zone_input.set(name(&zone));
         self.error.set(None);
-        self.local.reset_draft();
-        if self.context.source.get() == instant && self.context.zone.get() == zone {
+        let current = self.local.reset_draft();
+        if current && self.context.source.get() == instant && self.context.zone.get() == zone {
             Ok(())
         } else {
             Err(Error("The application superseded the change".into()))

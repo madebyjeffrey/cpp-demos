@@ -161,12 +161,7 @@ impl Editor {
         if self.read_only || self.rules.check(value).status != ValidationStatus::Valid {
             return false;
         }
-        self.value.set(value);
-        if self.value.get() != value {
-            return false;
-        }
-        self.draft.cancel();
-        self.value.get() == value && self.draft.validation().status == ValidationStatus::Valid
+        self.draft.accept(value)
     }
     fn select(&self, date: Date) -> bool {
         crate::state::batch(|| {
@@ -343,8 +338,8 @@ impl DateTimePicker {
     pub(crate) fn civil_check(&self, value: DateTime) -> Validation {
         self.editor.rules.civil_check(value)
     }
-    pub(crate) fn reset_draft(&self) {
-        self.editor.draft.cancel()
+    pub(crate) fn reset_draft(&self) -> bool {
+        self.editor.draft.reset()
     }
     pub fn draft(&self) -> &Draft<DateTime> {
         &self.editor.draft

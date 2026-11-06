@@ -233,3 +233,15 @@ dismissal callbacks are retained. A replacement presentation retires the previou
 session. Retain one picker per independent editor session; multiple pickers can
 share a source. `info()` provides source/original/draft, HSV, model and validation.
 `m6_color` demonstrates inline transactional/live editors and a well.
+
+## Shared acceptance rules (M6.6 in progress)
+
+Each typed editor has `binding()`, `validation()`, `commit()` and `cancel()`. A
+rejected setter leaves editable text plus an error; retry is explicit. Successful
+normalization comes from the application readback. Equal pristine Apply preserves
+exact hidden precision without another setter call. Newer edits or source changes
+made by setters/validation callbacks supersede the original action. Codec queries
+are pure; notifications may mutate state and suppress recursive delivery.
+
+`m6_drafts` demonstrates acceptance/retry across all six editors. Prefix status and
+shared blur/composition/lifecycle coverage remain open in M6.6.

@@ -21,7 +21,9 @@ pub struct Validation {
 struct Edit<T> {
     text: String,
     base: T,
+    base_text: String,
     revision: Option<u64>,
+    rejected: Option<String>,
 }
 #[derive(Clone)]
 pub struct Draft<T> {
@@ -41,23 +43,29 @@ impl<T: Clone + PartialEq + 'static> Draft<T> {
         parse: impl Fn(&str) -> Result<T, String> + 'static,
         format: impl Fn(&T) -> String + 'static,
     ) -> Self {
-        let base = value.get();
-        let text = format(&base);
-        let revision = value.revision();
+        let (base, text, revision) = crate::state::read_only(|| {
+            let base = value.get();
+            let text = format(&base);
+            (base, text, value.revision())
+        });
         let parse: Parse<T> = Rc::new(parse);
         let classify = parse.clone();
         Self {
             value,
             edit: State::new(Edit {
-                text,
                 base,
+                base_text: text.clone(),
+                text,
                 revision,
+                rejected: None,
             }),
             parse,
             format: Rc::new(format),
             classify: Rc::new(move |text| {
                 if classify(text).is_ok() {
                     ValidationStatus::Valid
+                } else if text.is_empty() {
+                    ValidationStatus::Incomplete
                 } else {
                     ValidationStatus::Invalid
                 }
@@ -71,6 +79,9 @@ impl<T: Clone + PartialEq + 'static> Draft<T> {
     pub fn read_only(mut self, read_only: bool) -> Self {
         self.read_only = read_only;
         self
+    }
+    pub fn is_read_only(&self) -> bool {
+        self.read_only
     }
     pub fn on_validation(mut self, callback: impl Fn(Validation) + 'static) -> Self {
         self.notify = Some(Rc::new(callback));
@@ -91,58 +102,84 @@ impl<T: Clone + PartialEq + 'static> Draft<T> {
         draft.read_only = self.read_only;
         draft
     }
-    // Projected controls must also discard state when another part of the shared
-    // draft changes, including source A→B→A transitions.
     pub(crate) fn revision(&self) -> u64 {
         self.edit
             .version()
             .wrapping_add(self.value.revision().unwrap_or(0))
     }
+    fn fresh(&self) -> Edit<T> {
+        crate::state::read_only(|| {
+            let base = self.value.get();
+            let text = (self.format)(&base);
+            Edit {
+                base,
+                base_text: text.clone(),
+                text,
+                revision: self.value.revision(),
+                rejected: None,
+            }
+        })
+    }
+    fn same_source(a: &Edit<T>, b: &Edit<T>) -> bool {
+        // Non-reflexive models such as NaN still need a stable editable baseline.
+        // Revisions detect equal-looking external replacements; format text detects
+        // metadata/context changes hidden by the model's PartialEq implementation.
+        a.revision == b.revision
+            && a.base_text == b.base_text
+            && (a.base == b.base || !a.base.eq(&a.base) && !b.base.eq(&b.base))
+    }
+    fn current(&self) -> Edit<T> {
+        crate::state::read_only(|| {
+            let edit = self.edit.get();
+            let source = self.fresh();
+            if Self::same_source(&edit, &source) {
+                edit
+            } else {
+                source
+            }
+        })
+    }
+    fn source_matches(&self, source: &Edit<T>) -> bool {
+        crate::state::read_only(|| Self::same_source(source, &self.fresh()))
+    }
     pub fn binding(&self) -> Binding<String> {
-        let read = self.clone();
-        let write = self.clone();
+        let (read, write) = (self.clone(), self.clone());
         Binding::new(
-            move || {
-                let e = read.edit.get();
-                let current = read.value.get();
-                if read.value.revision() != e.revision
-                    || current != e.base
-                    || (read.format)(&current) != (read.format)(&e.base)
-                {
-                    (read.format)(&current)
-                } else {
-                    e.text
-                }
-            },
-            move |text: String| {
-                if write.read_only {
-                    return;
-                }
-                let base = write.value.get();
-                let revision = write.value.revision();
-                write.edit.set(Edit {
-                    text,
-                    base,
-                    revision,
-                });
-                write.notify();
+            move || read.current().text,
+            move |text| {
+                write.stage_text(text);
             },
         )
     }
-    pub fn validation(&self) -> Validation {
-        let text = self.binding().get();
-        let current = self.value.get();
-        let dirty = text != (self.format)(&current);
-        if !dirty && let Some(status) = &self.model_status {
-            return status(&current);
+    pub(crate) fn stage_text(&self, text: String) -> bool {
+        if self.read_only {
+            return false;
         }
-        let status = (self.classify)(&text);
+        crate::state::batch(|| {
+            let mut edit = self.fresh();
+            edit.text = text;
+            self.edit.set(edit);
+            let version = self.edit.version();
+            let source = self.fresh();
+            self.notify();
+            self.edit.version() == version && self.source_matches(&source)
+        })
+    }
+    fn status(&self, edit: &Edit<T>) -> Validation {
+        let dirty = edit.text != edit.base_text;
+        if !dirty && let Some(model) = &self.model_status {
+            let mut value = model(&edit.base);
+            value.dirty = false;
+            return value;
+        }
+        let status = (self.classify)(&edit.text);
         Validation {
             status,
+            dirty,
             message: if status == ValidationStatus::Valid {
                 None
             } else {
-                (self.parse)(&text).err().or_else(|| {
+                (self.parse)(&edit.text).err().or_else(|| {
                     Some(
                         if status == ValidationStatus::OutOfRange {
                             "The committed value is outside supported bounds"
@@ -153,8 +190,24 @@ impl<T: Clone + PartialEq + 'static> Draft<T> {
                     )
                 })
             },
-            dirty,
         }
+    }
+    pub(crate) fn raw_validation(&self) -> Validation {
+        crate::state::read_only(|| self.status(&self.current()))
+    }
+    pub fn validation(&self) -> Validation {
+        crate::state::read_only(|| {
+            let edit = self.current();
+            let mut value = self.status(&edit);
+            if value.status == ValidationStatus::Valid
+                && let Some(message) = edit.rejected
+            {
+                value.status = ValidationStatus::Invalid;
+                value.message = Some(message);
+                value.dirty = true;
+            }
+            value
+        })
     }
     pub fn error(&self) -> Option<String> {
         self.validation().message
@@ -167,50 +220,110 @@ impl<T: Clone + PartialEq + 'static> Draft<T> {
             struct Reset<'a>(&'a Cell<bool>);
             impl Drop for Reset<'_> {
                 fn drop(&mut self) {
-                    self.0.set(false);
+                    self.0.set(false)
                 }
             }
             let _reset = Reset(&self.notifying);
             callback(self.validation());
         }
     }
+    pub(crate) fn candidate(&self) -> Option<T> {
+        crate::state::read_only(|| {
+            let edit = self.current();
+            if self.status(&edit).status != ValidationStatus::Valid {
+                return None;
+            }
+            if edit.text == edit.base_text {
+                Some(edit.base)
+            } else {
+                (self.parse)(&edit.text).ok()
+            }
+        })
+    }
+    // None means a reentrant setter has already staged a newer edit. Never reset
+    // it or repeat its notification as part of the superseded outer operation.
+    fn write(&self, value: T) -> Option<bool> {
+        if self.read_only {
+            return Some(false);
+        }
+        if self.model_status.as_ref().is_some_and(|f| {
+            crate::state::read_only(|| f(&value).status != ValidationStatus::Valid)
+        }) {
+            return Some(false);
+        }
+        let version = self.edit.version();
+        let before = self.current();
+        let same = crate::state::read_only(|| {
+            value == before.base && (self.format)(&value) == before.base_text
+        });
+        if !same {
+            self.value.set(value);
+        }
+        if self.edit.version() != version {
+            return None;
+        }
+        let accepted = self.fresh();
+        if !same && crate::state::read_only(|| Self::same_source(&before, &accepted)) {
+            let mut rejected = before;
+            rejected.rejected = Some("The application rejected the value; Apply can retry".into());
+            self.edit.set(rejected);
+            return Some(false);
+        }
+        self.edit.set(accepted);
+        Some(self.raw_validation().status == ValidationStatus::Valid)
+    }
+    fn finish(&self, result: Option<bool>) -> bool {
+        let Some(accepted) = result else {
+            return false;
+        };
+        let version = self.edit.version();
+        let source = self.fresh();
+        self.notify();
+        accepted
+            && self.edit.version() == version
+            && self.source_matches(&source)
+            && self.validation().status == ValidationStatus::Valid
+    }
+    pub(crate) fn accept(&self, value: T) -> bool {
+        if self.read_only {
+            return false;
+        }
+        crate::state::batch(|| {
+            let result = self.write(value);
+            self.finish(result)
+        })
+    }
     pub fn commit(&self) -> bool {
         if self.read_only {
             return false;
         }
-        let validation = self.validation();
-        // Formatting precision must never round an untouched model on focus loss.
-        if !validation.dirty {
-            self.notify();
-            return validation.status == ValidationStatus::Valid;
-        }
-        match (self.parse)(&self.binding().get()) {
-            Ok(value) => {
-                let before = self.value.get();
-                self.value.set(value.clone());
-                let accepted = self.value.get();
-                if accepted == before && accepted != value {
-                    self.notify();
-                    false
-                } else {
-                    self.cancel();
-                    true
+        crate::state::batch(|| {
+            let edit = self.current();
+            let status = crate::state::read_only(|| self.status(&edit));
+            let result = if status.status != ValidationStatus::Valid {
+                Some(false)
+            } else if !status.dirty {
+                Some(true)
+            } else {
+                match crate::state::read_only(|| (self.parse)(&edit.text)) {
+                    Ok(value) => self.write(value),
+                    Err(_) => Some(false),
                 }
-            }
-            Err(_) => {
-                self.notify();
-                false
-            }
-        }
+            };
+            self.finish(result)
+        })
+    }
+    pub(crate) fn reset(&self) -> bool {
+        crate::state::batch(|| {
+            self.edit.set(self.fresh());
+            let version = self.edit.version();
+            let source = self.fresh();
+            self.notify();
+            self.edit.version() == version && self.source_matches(&source)
+        })
     }
     pub fn cancel(&self) {
-        let base = self.value.get();
-        self.edit.set(Edit {
-            text: (self.format)(&base),
-            revision: self.value.revision(),
-            base,
-        });
-        self.notify();
+        self.reset();
     }
 }
 /// Implementors format finite values using ASCII numeric syntax; localized editing
@@ -465,6 +578,9 @@ impl<T: Number> Numeric<T> {
     pub fn validation(&self) -> Validation {
         self.draft.validation()
     }
+    pub fn binding(&self) -> Binding<String> {
+        self.draft.binding()
+    }
     pub fn commit(&self) -> bool {
         self.draft.commit()
     }
@@ -487,14 +603,13 @@ impl<T: Number> Numeric<T> {
         }
     }
     fn next(&self, increase: bool) -> Option<T> {
-        if self.read_only || self.validation().status != ValidationStatus::Valid {
+        crate::state::read_only(|| self.next_value(increase))
+    }
+    fn next_value(&self, increase: bool) -> Option<T> {
+        if self.read_only || self.draft.raw_validation().status != ValidationStatus::Valid {
             return None;
         }
-        let current = if self.validation().dirty {
-            (self.draft.parse)(&self.draft.binding().get()).ok()?
-        } else {
-            self.value.get()
-        };
+        let current = self.draft.candidate()?;
         let next = current
             .checked_step(self.step, increase)
             .unwrap_or(if increase { self.max } else { self.min });
@@ -514,14 +629,7 @@ impl<T: Number> Numeric<T> {
         let Some(next) = self.next(increase) else {
             return false;
         };
-        // Publish one accepted value; never round integers or overwrite invalid drafts.
-        let before = self.value.get();
-        self.value.set(next);
-        if self.value.get() == before {
-            return false;
-        }
-        self.draft.cancel();
-        true
+        self.draft.accept(next)
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -602,7 +710,11 @@ impl View {
         d.read_only = number.read_only;
         d.stepper = Some(StepperData {
             read: Rc::new(move || StepperInfo {
-                value: read.value.get().to_string(),
+                value: read
+                    .draft
+                    .candidate()
+                    .unwrap_or_else(|| read.value.get())
+                    .to_string(),
                 min: read.min.to_string(),
                 max: read.max.to_string(),
                 can_increment: read.can_step(true),
