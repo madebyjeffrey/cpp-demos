@@ -113,3 +113,33 @@ pub fn view(model: &Lab) -> View {
         label(model.status.get(),wrap:true,label_style:LabelStyle::Status,shrink:0);
     } }
 }
+
+/// Focus a real interactive descendant, preserving the normal scope policy.
+pub fn focus_sample(host: &Host, key: Option<&str>) -> Result<Option<NodeId>, Error> {
+    let nodes = host.snapshot()?;
+    let card = nodes
+        .iter()
+        .find(|n| {
+            !n.hidden
+                && match key {
+                    Some(key) => n.key.as_deref() == Some(key),
+                    None => n.key.as_ref().is_some_and(|key| key.starts_with("sample-")),
+                }
+        })
+        .ok_or_else(|| Error("No active sample matches the focus request".into()))?;
+    let parents: std::collections::HashMap<_, _> = nodes.iter().map(|n| (n.id, n.parent)).collect();
+    for n in &nodes {
+        let mut ancestor = Some(n.id);
+        while ancestor.is_some() && ancestor != Some(card.id) {
+            ancestor = parents.get(&ancestor.unwrap()).copied().flatten();
+        }
+        if ancestor == Some(card.id)
+            && n.enabled
+            && !n.hidden
+            && (host.focus(n.id)? || host.focused() == Some(n.id))
+        {
+            return Ok(host.focused());
+        }
+    }
+    Ok(None) // Images and static typography need not expose a focus target.
+}

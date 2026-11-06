@@ -13,7 +13,7 @@ pub fn view(m: &Lab) -> View {
             view! {column(gap:12){
                 label("Heading",label_style:LabelStyle::Heading);
                 label("A deliberately long single line ends with an ellipsis when space is constrained.",text_overflow:TextOverflow::Ellipsis,max_lines:1);
-                label("مرحبا · שלום · café · 👩🏽‍💻 · A longer sentence wraps to its actual available width.",wrap:true);
+                label(m.notes.get(),wrap:true);
                 rich_text(vec![Span::new("Styled ").bold(true).into(),"inline ".into(),View::button("control",m.checked.action(|s|s.update(|v| *v = !*v))).into()," in a shaped paragraph.".into()]);
                 label("Straße",uppercase:true,letter_spacing:2,text_align:Align::End);
             }},

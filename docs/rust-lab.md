@@ -33,11 +33,16 @@ remaining interactive/Metal release audits.
 ## Reproduce a view
 
 `--page` accepts the page IDs in the table. `--state` accepts `default`, `disabled`,
-`readonly` or `error`. `--show menu|dropdown|popover|alert|combo|color` opens a
+`readonly`, `error` or `focused`. Focused previews select a real interactive
+descendant of the revealed sample; static samples have no focus target.
+`--text long|rtl|emoji` supplies representative text to the name, notes and
+typography samples. Error previews retain invalid typed drafts and a table edit.
+`--show menu|dropdown|popover|alert|combo|color` opens a
 presentation and chooses its page. Startup actions reveal and focus their actual
 opener after layout, so offscreen anchors remain valid.
-All examples using the shared runner accept `--size WIDTHxHEIGHT`; raster mode
-also supports `--reveal-key KEY` to scroll a mounted target into view.
+All examples using the shared runner accept `--size WIDTHxHEIGHT`,
+`--reveal-key KEY` to scroll a mounted target into view and `--focus-key KEY`
+to focus a particular control. Raster mode additionally accepts `--scale 1|2`.
 
 ```sh
 cargo run --example lab --locked --offline -- --page layout --light \
@@ -46,11 +51,15 @@ cargo run --example lab --locked --offline -- --show combo \
   --render /tmp/lab-combo.png
 cargo run --example lab --locked --offline -- --page fields --state error \
   --reveal-key sample-numeric --render /tmp/lab-error.png
+cargo run --example lab --locked --offline -- --page fields --state focused \
+  --text emoji --light --size 440x740 --reveal-key sample-text --scale 2 \
+  --render /tmp/lab-emoji-2x.png
 ```
 
-The raster runner uses CPU Skia. These dimensions are logical points at raster
-scale 1; they do not establish actual display backing-scale or visible Metal
-passes. Actual VoiceOver/IME and release visual evidence remain on the checklist.
+The raster runner uses CPU Skia. Sizes are logical points: 440×740 at scale 2
+produces an 880×1480 PNG with the same logical layout. Native windows follow the
+display's actual backing scale and reject `--scale`. Raster previews do not
+establish actual display backing-scale, visible Metal or VoiceOver/IME passes.
 
 ## Writing a component
 
@@ -97,9 +106,18 @@ cargo test -p scars-ui --test controls --locked --offline
 ```
 
 The catalog test selects and reveals every sample in both themes at 440×740 and
-1120×900, validates finite/reachable geometry and actually paints with Skia. Tall
-cards also get a bottom view. The optional directory receives those PNGs. Other
+1120×900, across all five states and both raster scales. It validates
+finite/reachable geometry and paints with Skia. Tall cards also get a bottom
+view. Additional tests exercise long/RTL/emoji text, editable/readonly/disabled
+behavior, grapheme-safe hit testing, actual field pixels at both scales and focus
+painting confined to its field. The optional directory receives those PNGs. Other
 tests exercise independent custom instances, retained editor identity, readonly
 changes, modal/menu scope, real collection edits and all six startup presentations. Collection realization stays
 bounded. A separate renamed-dependency consumer compiles custom macro components,
 annotations and slider/property interfaces.
+
+The [validation entry point](rust-validation.md) emits a fresh gallery for each
+run and records its path as `lab_artifacts` in `report.json`. Open `index.html`
+there to filter paired 1×/2× previews by sample, state, theme, width or text profile.
+Direct artifact runs can build the same index with
+`SCARS_LAB_ARTIFACTS=/tmp/scars-lab-gallery python3 ../scripts/rust_gallery.py`.

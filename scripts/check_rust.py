@@ -15,6 +15,7 @@ import subprocess
 import sys
 import time
 from typing import Optional
+from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parent.parent
 RUST = ROOT / "rust"
@@ -72,6 +73,7 @@ def plan(suite: str, offline: bool) -> list[Step]:
     ])
     if suite == "headless":
         steps.append(cargo("renamed-consumer", "check", "--manifest-path", "checks/renamed-consumer/Cargo.toml"))
+        steps.append(Step("raster-gallery", (sys.executable, str(ROOT / "scripts/rust_gallery.py")), ROOT))
     return steps
 
 
@@ -87,7 +89,9 @@ def environment(output: Path, suite: str) -> dict[str, str]:
     env["CARGO_TARGET_DIR"] = str((RUST / target).resolve() if not target.is_absolute() else target)
     env["CARGO_TERM_COLOR"] = "never"
     if suite == "headless":
-        env["SCARS_LAB_ARTIFACTS"] = str(output / "lab")
+        # Keep old artifacts out of the current run without deleting user files.
+        run = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid4().hex[:8]
+        env["SCARS_LAB_ARTIFACTS"] = str(output / "lab" / run)
     return env
 
 
@@ -207,6 +211,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         "build_profile": {key: env.get(key, "Cargo default") for key in ("CARGO_PROFILE_DEV_DEBUG", "CARGO_PROFILE_TEST_DEBUG", "CARGO_BUILD_JOBS")},
         "native_execution": "requested" if args.suite == "native" else "not_run",
         "manual_audits": {"voiceover": "not_run", "ime_1x": "not_run", "ime_2x": "not_run"},
+        "lab_artifacts": env.get("SCARS_LAB_ARTIFACTS"),
     }
     return run_steps(steps, output, env, report)
 

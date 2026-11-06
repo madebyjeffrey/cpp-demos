@@ -179,6 +179,44 @@ impl Lab {
             inspector: Inspector::new(),
         })
     }
+    pub fn preview_state(&self, state: &str) -> Result<(), Error> {
+        match state {
+            "default" | "focused" => {}
+            "disabled" => self.enabled.set(false),
+            "readonly" => self.set_readonly(true),
+            "error" => {
+                self.text.set(String::new());
+                self.number.binding().set("invalid".into());
+                self.date.binding().set("30.02.2026".into());
+                self.time.binding().set("invalid".into());
+                self.datetime.binding().set("invalid".into());
+                self.zoned.binding().set("invalid".into());
+                self.color.binding().set("#GGGGGG".into());
+                let edit = self.table.start_edit(TableCell::new("0", "name"))?;
+                edit.set_text("");
+                let _ = edit.commit();
+            }
+            _ => {
+                return Err(Error(
+                    "--state needs default, disabled, readonly, error or focused".into(),
+                ));
+            }
+        }
+        Ok(())
+    }
+    pub fn text_profile(&self, profile: &str) -> Result<(), Error> {
+        let text = match profile {
+            "long" => {
+                "A deliberately long project name with spaces and an_unbroken_identifier_that_exceeds_a_narrow_field to exercise horizontal scrolling and constrained text layout."
+            }
+            "rtl" => "مرحبا بالعالم · שלום עולם · ١٢٣",
+            "emoji" => "Build 👩🏽‍💻 · family 👨‍👩‍👧‍👦 · flag 🇨🇦 · café e\u{301}",
+            _ => return Err(Error("--text needs long, rtl or emoji".into())),
+        };
+        self.text.set(text.into());
+        self.notes.set(format!("{text}\n{text}\n{text}"));
+        Ok(())
+    }
     pub fn confirm(&self) {
         self.active.set(Some(
             Alert::new(

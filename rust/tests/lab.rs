@@ -3,8 +3,12 @@
 mod catalog;
 #[path = "../examples/lab/model.rs"]
 mod model;
+#[path = "../examples/common/raster.rs"]
+mod raster;
 use model::Lab;
 use scars_window::{skia, ui::*};
+#[path = "lab/visual.rs"]
+mod visual;
 fn mounted(lab: &Lab) -> Host {
     let h = Host::new({
         let lab = lab.clone();
@@ -25,20 +29,22 @@ fn find(h: &Host, key: &str) -> Node {
         .unwrap_or_else(|| panic!("Missing {key}"))
 }
 fn paint(h: &Host, size: (i32, i32), r: &Renderer, name: &str) {
-    let mut surface = skia::surfaces::raster_n32_premul(size).unwrap();
-    surface.canvas().clear(skia::Color::new(h.theme().window));
-    r.paint(h, surface.canvas(), 0.).unwrap();
-    if let Some(directory) = std::env::var_os("SCARS_LAB_ARTIFACTS") {
-        std::fs::create_dir_all(&directory).unwrap();
-        let png = surface
-            .image_snapshot()
-            .encode(None, skia::EncodedImageFormat::PNG, None)
+    for scale in [1, 2] {
+        let mut surface = raster::render(h, r, size, scale).unwrap();
+        assert_eq!(surface.width(), size.0 * scale);
+        assert_eq!(surface.height(), size.1 * scale);
+        if let Some(directory) = std::env::var_os("SCARS_LAB_ARTIFACTS") {
+            std::fs::create_dir_all(&directory).unwrap();
+            let png = surface
+                .image_snapshot()
+                .encode(None, skia::EncodedImageFormat::PNG, None)
+                .unwrap();
+            std::fs::write(
+                std::path::PathBuf::from(directory).join(format!("{name}-{scale}x.png")),
+                png.as_bytes(),
+            )
             .unwrap();
-        std::fs::write(
-            std::path::PathBuf::from(directory).join(format!("{name}.png")),
-            png.as_bytes(),
-        )
-        .unwrap();
+        }
     }
 }
 #[test]
@@ -47,72 +53,79 @@ fn every_sample_is_reachable_and_paints_in_both_themes_at_narrow_and_wide_sizes(
     let mut kinds = std::collections::HashSet::new();
     for (theme, palette) in [("dark", Theme::default()), ("light", Theme::light())] {
         for (width, height) in [(440, 740), (1120, 900)] {
-            let lab = Lab::new().unwrap();
-            let h = mounted(&lab);
-            h.set_theme(palette);
-            let size = Size::new(width as f64, height as f64);
-            for (sample, page) in catalog::SAMPLES {
-                lab.pages.select(*page);
-                layout(&h, size, &r);
-                let card = find(&h, &format!("sample-{sample}"));
-                assert!(!card.hidden, "{sample} must be on its declared page");
-                assert!(
-                    card.bounds.width > 0. && card.bounds.height > 0.,
-                    "{sample}: {:?}",
-                    card.bounds
-                );
-                h.reveal_rect(card.id, card.bounds);
-                layout(&h, size, &r);
-                let card = find(&h, &format!("sample-{sample}"));
-                assert!(
-                    card.clip.width > 0. && card.clip.height > 0.,
-                    "{sample} unreachable at {width}"
-                );
-                for node in h.snapshot().unwrap().into_iter().filter(|n| !n.hidden) {
-                    kinds.insert(node.kind);
-                    assert!(
-                        [
-                            node.bounds.x,
-                            node.bounds.y,
-                            node.bounds.width,
-                            node.bounds.height,
-                            node.clip.width,
-                            node.clip.height
-                        ]
-                        .iter()
-                        .all(|v| v.is_finite()),
-                        "{sample}: {:?}",
-                        node.kind
-                    );
-                    assert!(node.clip.width >= 0. && node.clip.height >= 0.);
-                }
-                paint(
-                    &h,
-                    (width, height),
-                    &r,
-                    &format!("{theme}-{width}-{sample}"),
-                );
-                if card.bounds.height > card.clip.height + 1. {
-                    h.reveal_rect(
-                        card.id,
-                        Rect::new(
-                            card.bounds.x,
-                            card.bounds.y + card.bounds.height - 1.,
-                            card.bounds.width,
-                            1.,
-                        ),
-                    );
+            for state in ["default", "disabled", "readonly", "error", "focused"] {
+                let lab = Lab::new().unwrap();
+                lab.preview_state(state).unwrap();
+                let h = mounted(&lab);
+                h.set_theme(palette);
+                let size = Size::new(width as f64, height as f64);
+                for (sample, page) in catalog::SAMPLES {
+                    lab.pages.select(*page);
                     layout(&h, size, &r);
+                    let card = find(&h, &format!("sample-{sample}"));
+                    assert!(!card.hidden, "{sample} must be on its declared page");
+                    assert!(
+                        card.bounds.width > 0. && card.bounds.height > 0.,
+                        "{sample}: {:?}",
+                        card.bounds
+                    );
+                    h.reveal_rect(card.id, card.bounds);
+                    layout(&h, size, &r);
+                    if state == "focused" {
+                        catalog::focus_sample(&h, Some(&format!("sample-{sample}"))).unwrap();
+                        layout(&h, size, &r);
+                    }
+                    let card = find(&h, &format!("sample-{sample}"));
+                    assert!(
+                        card.clip.width > 0. && card.clip.height > 0.,
+                        "{sample} unreachable at {width}"
+                    );
+                    for node in h.snapshot().unwrap().into_iter().filter(|n| !n.hidden) {
+                        kinds.insert(node.kind);
+                        assert!(
+                            [
+                                node.bounds.x,
+                                node.bounds.y,
+                                node.bounds.width,
+                                node.bounds.height,
+                                node.clip.width,
+                                node.clip.height
+                            ]
+                            .iter()
+                            .all(|v| v.is_finite()),
+                            "{sample}: {:?}",
+                            node.kind
+                        );
+                        assert!(node.clip.width >= 0. && node.clip.height >= 0.);
+                    }
                     paint(
                         &h,
                         (width, height),
                         &r,
-                        &format!("{theme}-{width}-{sample}-bottom"),
+                        &format!("{state}-{theme}-{width}-{sample}"),
                     );
+                    if card.bounds.height > card.clip.height + 1. {
+                        h.reveal_rect(
+                            card.id,
+                            Rect::new(
+                                card.bounds.x,
+                                card.bounds.y + card.bounds.height - 1.,
+                                card.bounds.width,
+                                1.,
+                            ),
+                        );
+                        layout(&h, size, &r);
+                        paint(
+                            &h,
+                            (width, height),
+                            &r,
+                            &format!("{state}-{theme}-{width}-{sample}-bottom"),
+                        );
+                    }
                 }
+                assert!(lab.list.realized_indices().len() < 30);
+                assert!(lab.table.realized_row_count() < 30);
             }
-            assert!(lab.list.realized_indices().len() < 30);
-            assert!(lab.table.realized_row_count() < 30);
         }
     }
     for kind in [

@@ -940,11 +940,40 @@ M7.3 completion record (`8782764`):
 ## M8 — Release evidence and documentation
 
 - [ ] **M8.1 Native rendering:** rerun visible Metal pixel, lifecycle and full-screen suites on an awake foreground desktop; record failures accurately and fix genuine regressions.
-- [ ] **M8.2 Visual/interaction matrix:** reproducible dark/light previews at 1×/2×, narrow/wide sizes, disabled/readonly/error/focused states and representative long/RTL/emoji text.
+- [x] **M8.2 Visual/interaction matrix:** reproducible dark/light previews at 1×/2×, narrow/wide sizes, disabled/readonly/error/focused states and representative long/RTL/emoji text.
 - [x] **M8.3 Repeatable checks:** one documented local validation entry point and suitable CI checks for formatting, strict Clippy, core/macro/raster tests, external consumer compilation and portable-core compilation; native interactive checks remain explicit.
 - [ ] **M8.4 Resource behavior:** measure large collections and long editing sessions for retained objects/caches and idle wakeups; verify inactive/hidden/unmounted controls cancel work and settle.
 - [ ] **M8.5 Regression examples:** run the themed todo app and all milestone examples after the final interfaces settle; verify editing, filtering, persistence and external value updates still work.
 - [ ] **M8.6 Inventory sign-off:** close every in-scope inventory row and checklist item with evidence, update public docs/examples and remove stale completion claims. Record remaining optional extensions separately before completing the goal.
+
+M8.2 completion record:
+
+- The Lab paints all 28 samples in both themes at logical sizes 440×740 and
+  1120×900, across default/disabled/readonly/error/focused states and explicit
+  CPU raster scales 1 and 2. Focus previews use real interactive descendants;
+  static samples do not invent a focus target. Tall cards also receive bottom
+  views. Invalid numeric/date/time/datetime/zoned/color drafts and a rejected
+  table edit remain visible as real component state.
+- Six Lab tests pass. Added tests cover long/RTL/emoji text across themes,
+  widths and availability states; editable changes succeed while disabled and
+  readonly mutations fail. Text hit tests remain on grapheme boundaries.
+  Actual field pixels match the theme at both scales, and active focus changes
+  pixels inside its field only. Existing instance/identity, scope, collection
+  action and six startup-presentation tests also pass.
+- The full headless validation passed all nine steps: formatting, strict
+  Clippy, workspace tests, inventory, Linux-core and renamed-consumer checks,
+  validator tests and gallery verification. This run produced 644 paired scenes
+  (1,288 PNGs); the gallery verifies every 2× image has twice the framebuffer
+  width and height. Each run has a fresh artifact directory, recorded under
+  `lab_artifacts`, and a searchable `index.html` pairs both densities.
+- Reviewed representative narrow/wide, dark/light, error, disabled, readonly,
+  focused, RTL, emoji and long-text previews. Nine actual Lab CLI renders also
+  passed dimension checks, including all six light-theme presentations at 2×.
+  Invalid raster scales and requesting a synthetic native scale are rejected.
+  The [Lab guide](rust-lab.md) gives concise reproduction commands.
+- These are CPU raster and portable interaction results. The reported tab
+  utterance still needs an actual speech recheck. M5.5 and M8.1 remain open for
+  VoiceOver, real IME/display backing scales and visible Metal evidence.
 
 M8.3 completion record:
 

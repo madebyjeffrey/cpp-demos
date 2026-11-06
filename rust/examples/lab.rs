@@ -21,19 +21,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         lab.pages.select(page);
     }
-    if let Some(i) = args.iter().position(|a| a == "--state") {
-        match args.get(i + 1).map(String::as_str) {
-            Some("disabled") => lab.enabled.set(false),
-            Some("readonly") => lab.set_readonly(true),
-            Some("error") => {
-                lab.text.set(String::new());
-                lab.number.binding().set("invalid".into());
-                lab.date.binding().set("30.02.2026".into());
-            }
-            Some("default") => {}
-            _ => return Err("--state needs default, disabled, readonly or error".into()),
-        }
+    if let Some(i) = args.iter().position(|a| a == "--text") {
+        lab.text_profile(args.get(i + 1).ok_or("--text needs a profile")?)?;
     }
+    let state = if let Some(i) = args.iter().position(|a| a == "--state") {
+        args.get(i + 1).ok_or("--state needs a profile")?.as_str()
+    } else {
+        "default"
+    };
+    lab.preview_state(state)?;
+    let focused = state == "focused";
+    let sample = args
+        .iter()
+        .position(|a| a == "--reveal-key")
+        .and_then(|i| args.get(i + 1))
+        .cloned();
     let presentation = if let Some(i) = args.iter().position(|a| a == "--show") {
         let kind = args
             .get(i + 1)
@@ -58,6 +60,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         move |host| {
             if let Some(kind) = presentation {
                 preview.present(&kind, host)?;
+            }
+            if focused {
+                catalog::focus_sample(host, sample.as_deref())?;
             }
             Ok(())
         },

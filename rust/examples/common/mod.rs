@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+pub mod raster;
 use scars_window::{skia, ui::*};
 /// Every milestone supports `--render file.png` and `--smoke`.
 pub fn run(
@@ -25,6 +26,20 @@ pub fn run_prepared(
     prepare: impl FnOnce(&Host) -> Result<(), Error>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().collect();
+    let scale = if let Some(i) = args.iter().position(|v| v == "--scale") {
+        if !args.iter().any(|v| v == "--render") {
+            return Err(
+                "--scale is a raster preview option; native scale follows the display".into(),
+            );
+        }
+        match args.get(i + 1).map(String::as_str) {
+            Some("1") => 1,
+            Some("2") => 2,
+            _ => return Err("--scale needs 1 or 2".into()),
+        }
+    } else {
+        1
+    };
     let size = if let Some(i) = args.iter().position(|v| v == "--size") {
         let (width, height) = args
             .get(i + 1)
@@ -63,6 +78,8 @@ pub fn run_prepared(
         }
         prepare(&host)?;
         host.layout(Size::new(size.0 as f64, size.1 as f64), &renderer)?;
+        focus_key(&args, &host)?;
+        host.layout(Size::new(size.0 as f64, size.1 as f64), &renderer)?;
         if let Some(i) = args.iter().position(|v| v == "--select-key") {
             let key = args.get(i + 1).ok_or("--select-key needs a mounted key")?;
             let inspector = host.inspector();
@@ -90,12 +107,7 @@ pub fn run_prepared(
                 println!("{:?} {} {:?}", node.kind, node.text, node.bounds);
             }
         }
-        let mut surface =
-            skia::surfaces::raster_n32_premul(size).ok_or("Raster surface unavailable")?;
-        surface
-            .canvas()
-            .clear(skia::Color::new(host.theme().window));
-        renderer.paint(&host, surface.canvas(), 0.)?;
+        let mut surface = raster::render(&host, &renderer, size, scale)?;
         let png = surface
             .image_snapshot()
             .encode(None, skia::EncodedImageFormat::PNG, None)
@@ -129,6 +141,8 @@ pub fn run_prepared(
         reveal(&args, &host)?;
         prepare(&host)?;
         host.layout(viewport, &renderer)?;
+        focus_key(&args, &host)?;
+        host.layout(viewport, &renderer)?;
         if args.iter().any(|v| v == "--smoke") {
             app.quit_after(std::time::Duration::from_secs(1));
         }
@@ -150,4 +164,24 @@ fn reveal(args: &[String], host: &Host) -> Result<bool, Error> {
         .ok_or_else(|| Error("No node matches --reveal-key".into()))?;
     host.reveal_rect(target.id, target.bounds);
     Ok(true)
+}
+fn focus_key(args: &[String], host: &Host) -> Result<(), Error> {
+    let Some(i) = args.iter().position(|v| v == "--focus-key") else {
+        return Ok(());
+    };
+    let key = args
+        .get(i + 1)
+        .ok_or_else(|| Error("--focus-key needs a mounted key".into()))?;
+    let target = host
+        .snapshot()?
+        .into_iter()
+        .find(|n| n.key.as_ref() == Some(key))
+        .ok_or_else(|| Error("No node matches --focus-key".into()))?;
+    host.focus(target.id)?;
+    if host.focused() != Some(target.id) {
+        return Err(Error(
+            "The requested focus target is unavailable or not focusable".into(),
+        ));
+    }
+    Ok(())
 }

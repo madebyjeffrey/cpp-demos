@@ -38,8 +38,12 @@ It should be run after the headless build has finished, when the desktop is free
 Logs and an atomic JSON report go to `rust/target/validation/SUITE/`. Choose another
 directory with `--output PATH`. The report records the revision, dirty state,
 platform, Rust/Cargo versions, source-build/profile environment, exact commands,
-step exit codes, timings and log paths. The headless suite also writes the Lab's
-narrow/wide, dark/light and startup-presentation PNGs into its `lab/` directory.
+step exit codes, timings and log paths. The headless suite writes the Lab's
+state/text/theme/size matrix and startup-presentation PNGs into a fresh directory
+under `lab/` for each run. `lab_artifacts` in the report gives the exact path.
+Open its `index.html` to filter paired 1×/2× CPU previews; the gallery step checks
+that every pair exists and the 2× framebuffer has twice the width and height.
+Older runs are retained separately and cannot supply missing current previews.
 
 A failed command stops later checks. Unexecuted steps remain `not_run`; timeouts
 and interruptions fail the check and terminate Cargo's process group, including
