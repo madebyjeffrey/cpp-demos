@@ -43,6 +43,8 @@ pub(crate) trait Dependency {
 
 thread_local! {
     static TRACKING: RefCell<Vec<Vec<Rc<dyn Dependency>>>> = const { RefCell::new(Vec::new()) };
+    static BATCH_DEPTH: Cell<usize> = const {Cell::new(0)};
+    static WAKES: RefCell<Vec<Wake>> = const {RefCell::new(Vec::new())};
     static CLEANUPS: RefCell<Vec<Box<dyn FnOnce()>>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -83,6 +85,44 @@ pub(crate) fn flush_cleanups() {
     let pending = CLEANUPS.with(|q| std::mem::take(&mut *q.borrow_mut()));
     for action in pending {
         action();
+    }
+}
+/// Publish related model/derived-view changes before calling external schedulers.
+pub(crate) fn batch<R>(change: impl FnOnce() -> R) -> R {
+    check_write();
+    BATCH_DEPTH.with(|depth| depth.set(depth.get() + 1));
+    struct Guard;
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            let flush = BATCH_DEPTH.with(|depth| {
+                depth.set(depth.get() - 1);
+                depth.get() == 0
+            });
+            if flush {
+                let pending = WAKES.with(|w| std::mem::take(&mut *w.borrow_mut()));
+                for wake in pending {
+                    wake();
+                }
+            }
+        }
+    }
+    let _guard = Guard;
+    change()
+}
+fn notify(wakes: Vec<Wake>) {
+    if BATCH_DEPTH.with(|depth| depth.get() > 0) {
+        WAKES.with(|pending| {
+            let mut pending = pending.borrow_mut();
+            for wake in wakes {
+                if !pending.iter().any(|old| Rc::ptr_eq(old, &wake)) {
+                    pending.push(wake);
+                }
+            }
+        });
+    } else {
+        for wake in wakes {
+            wake();
+        }
     }
 }
 pub(crate) fn check_write() {
@@ -166,13 +206,13 @@ impl<T: 'static> State<T> {
         T: PartialEq,
     {
         check_write();
-        {
+        let old = {
             let mut previous = self.0.value.borrow_mut();
             if *previous == value {
                 return;
             }
-            *previous = value;
-        }
+            std::mem::replace(&mut *previous, value)
+        };
         let observers = self.0.observers.borrow().clone();
         let mut wakes = Vec::new();
         for (weak, epoch) in observers {
@@ -183,10 +223,10 @@ impl<T: 'static> State<T> {
                 wakes.push(wake);
             }
         }
-        // Mark every dependent host dirty before invoking any external scheduler.
-        for wake in wakes {
-            wake();
-        }
+        // Destructors and schedulers may reenter state. Publish and invalidate
+        // first, then release resources outside the value borrow.
+        drop(old);
+        notify(wakes);
     }
     /// Transform a snapshot, then publish it. No state borrow spans the closure.
     pub fn update(&self, change: impl FnOnce(&mut T))

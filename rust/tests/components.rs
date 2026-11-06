@@ -928,6 +928,44 @@ fn main() {
         assert!(!edit_host.text_input().unwrap().unwrap().can_undo);
     }
     window.clear_view();
+    // Tree snapshot replacement retires logical row proxies even when the key
+    // and label are reused. Hierarchical tree semantics are audited in M5.
+    let tree =
+        ui::TreeModel::from_nodes(vec![ui::TreeNode::new("root", "Workspace").deferred()]).unwrap();
+    window
+        .set_view({
+            let tree = tree.clone();
+            move || tree.view()
+        })
+        .unwrap();
+    unsafe {
+        let roots: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        let container = roots.objectAtIndex(0);
+        let attribute = NSString::from_str("AXChildren");
+        let rows: Retained<NSArray<AnyObject>> = msg_send![&*container,accessibilityArrayAttributeValues:&*attribute,index:0usize,maxCount:1usize];
+        let retired = rows.objectAtIndex(0);
+        tree.expand("root").unwrap();
+        let pending = tree.pending_load("root").unwrap();
+        assert!(tree.item("root").unwrap().loading);
+        tree.set_nodes(vec![
+            ui::TreeNode::new("root", "Workspace")
+                .children(vec![ui::TreeNode::new("fresh", "Fresh child")]),
+        ])
+        .unwrap();
+        assert!(
+            !pending
+                .complete(Ok(vec![ui::TreeNode::new("stale", "Stale child")]))
+                .unwrap()
+        );
+        let valid: bool = msg_send![&*retired, isAccessibilityElement];
+        assert!(!valid);
+        let pressed: bool = msg_send![&*retired, accessibilityPerformPress];
+        assert!(!pressed);
+        tree.expand("root").unwrap();
+        let count: usize = msg_send![&*container,accessibilityArrayAttributeCount:&*attribute];
+        assert_eq!(count, 2);
+    }
+    window.clear_view();
     window.show();
     app.quit_after(std::time::Duration::from_millis(200));
     app.run().unwrap();

@@ -33,6 +33,10 @@ struct Viewport {
     offset: f64,
     height: f64,
 }
+pub(super) fn next_token() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
 type Activation = Rc<dyn Fn(String)>;
 pub(super) struct Model {
     pub(super) items: State<Rc<Vec<ListItem>>>,
@@ -170,7 +174,19 @@ impl ListModel {
         }
     }
     pub fn set_items(&self, items: Vec<ListItem>) -> Result<(), crate::Error> {
+        self.replace_items(items, None)
+    }
+    pub(super) fn replace_items(
+        &self,
+        items: Vec<ListItem>,
+        lifetimes: Option<&HashMap<String, u64>>,
+    ) -> Result<(), crate::Error> {
         crate::state::check_write();
+        let old_tokens = self.0.pins.with(|pins| {
+            pins.keys()
+                .filter_map(|key| self.item_token(key).map(|token| (key.clone(), token)))
+                .collect::<HashMap<_, _>>()
+        });
         let previous_cursor = self.cursor().and_then(|k| self.index_of(&k));
         let mut index = HashMap::new();
         for (i, item) in items.iter().enumerate() {
@@ -191,14 +207,14 @@ impl ListModel {
             .filter(|key| index.get(key).is_some_and(|i| items[*i].enabled))
             .collect();
         {
-            use std::sync::atomic::{AtomicU64, Ordering};
-            static NEXT: AtomicU64 = AtomicU64::new(1);
             let mut tokens = self.0.tokens.borrow_mut();
             tokens.retain(|key, _| index.contains_key(key));
             for key in index.keys() {
-                tokens
-                    .entry(key.clone())
-                    .or_insert_with(|| NEXT.fetch_add(1, Ordering::Relaxed));
+                if let Some(token) = lifetimes.and_then(|tokens| tokens.get(key)) {
+                    tokens.insert(key.clone(), *token);
+                } else {
+                    tokens.entry(key.clone()).or_insert_with(next_token);
+                }
             }
         }
         let cursor = self
@@ -221,7 +237,10 @@ impl ListModel {
             .pins
             .get()
             .into_iter()
-            .filter(|(key, _)| index.get(key).is_some_and(|i| items[*i].enabled))
+            .filter(|(key, _)| {
+                index.get(key).is_some_and(|i| items[*i].enabled)
+                    && old_tokens.get(key).copied() == self.item_token(key)
+            })
             .collect();
         self.0
             .leases

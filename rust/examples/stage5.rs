@@ -16,22 +16,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .collect(),
     );
     let tree = TreeModel::new();
-    tree.set_tree(&[TreeItem {
-        key: "workspace".into(),
-        label: "Workspace".into(),
-        children: vec![
-            TreeItem {
-                key: "design".into(),
-                label: "Design".into(),
-                children: vec![],
-            },
-            TreeItem {
-                key: "engineering".into(),
-                label: "Engineering".into(),
-                children: vec![],
-            },
+    tree.set_nodes(vec![TreeNode::new("workspace", "Workspace").children(
+        vec![
+            TreeNode::new("design", "Design"),
+            TreeNode::new("engineering", "Engineering"),
         ],
-    }])?;
+    )])?;
     let query = State::new(String::new());
     let popup = Popup::new();
     let editor = Popup::new();

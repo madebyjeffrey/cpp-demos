@@ -1,0 +1,710 @@
+//! Keyed tree metadata, lazy snapshots and generation-checked async completion.
+use crate::{Error, Insets, ListItem, ListModel, State, View};
+use std::{
+    cell::RefCell,
+    collections::{BTreeSet, HashMap},
+    rc::{Rc, Weak},
+};
+type Loader = Rc<dyn Fn() -> Result<Vec<TreeNode>, Error>>;
+type LoadHandler = Rc<dyn Fn(TreeLoad)>;
+
+#[derive(Clone)]
+pub struct TreeNode {
+    pub key: String,
+    pub label: String,
+    pub enabled: bool,
+    pub children: Vec<TreeNode>,
+    pub expandable: bool,
+    pub loading: bool,
+    pub error: Option<String>,
+    pub accessible_label: String,
+    deferred: bool,
+    loader: Option<Loader>,
+}
+impl TreeNode {
+    pub fn new(key: impl Into<String>, label: impl Into<String>) -> Self {
+        Self {
+            key: key.into(),
+            label: label.into(),
+            enabled: true,
+            children: vec![],
+            expandable: false,
+            loading: false,
+            error: None,
+            accessible_label: String::new(),
+            deferred: false,
+            loader: None,
+        }
+    }
+    pub fn children(mut self, children: Vec<Self>) -> Self {
+        self.children = children;
+        self
+    }
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+    pub fn expandable(mut self, expandable: bool) -> Self {
+        self.expandable = expandable;
+        self
+    }
+    pub fn accessible_label(mut self, label: impl Into<String>) -> Self {
+        self.accessible_label = label.into();
+        self
+    }
+    /// Pure snapshot loader; cached until explicit retry/replacement.
+    pub fn lazy(mut self, loader: impl Fn() -> Result<Vec<Self>, Error> + 'static) -> Self {
+        self.loader = Some(Rc::new(loader));
+        self
+    }
+    /// Expansion requests children through TreeModel::on_load/pending_load.
+    pub fn deferred(mut self) -> Self {
+        self.deferred = true;
+        self
+    }
+    /// Represent an already-running external load in an initial snapshot.
+    pub fn loading(mut self, loading: bool) -> Self {
+        self.loading = loading;
+        self
+    }
+    pub fn failed(mut self, message: impl Into<String>) -> Self {
+        self.error = Some(message.into());
+        self.deferred = true;
+        self
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TreeLoadState {
+    Unloaded,
+    Loading,
+    Loaded,
+    Failed(String),
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TreeItem {
+    pub key: String,
+    pub label: String,
+    pub parent: Option<String>,
+    pub depth: usize,
+    pub enabled: bool,
+    pub expandable: bool,
+    pub expanded: bool,
+    pub loading: bool,
+    pub error: Option<String>,
+    pub child_count: usize,
+    pub accessible_label: String,
+    pub load_state: TreeLoadState,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TreeFailure {
+    pub key: String,
+    pub message: String,
+}
+#[derive(Clone)]
+struct Record {
+    key: String,
+    label: String,
+    parent: Option<String>,
+    depth: usize,
+    enabled: bool,
+    children: Vec<String>,
+    expandable: bool,
+    expanded: bool,
+    accessible_label: String,
+    loader: Option<Loader>,
+    load: TreeLoadState,
+    token: u64,
+    request: Option<u64>,
+}
+impl Record {
+    fn can_expand(&self) -> bool {
+        self.expandable || !self.children.is_empty() || self.load != TreeLoadState::Loaded
+    }
+}
+#[derive(Clone, Default)]
+struct Snapshot {
+    roots: Vec<String>,
+    records: HashMap<String, Record>,
+    revision: u64,
+    failure: Option<TreeFailure>,
+}
+impl PartialEq for Snapshot {
+    fn eq(&self, other: &Self) -> bool {
+        self.revision == other.revision
+    }
+}
+struct Inner {
+    data: State<Rc<Snapshot>>,
+    list: ListModel,
+    on_load: RefCell<Option<LoadHandler>>,
+}
+#[derive(Clone)]
+pub struct TreeModel(Rc<Inner>);
+impl PartialEq for TreeModel {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+impl Eq for TreeModel {}
+/// Main-thread load completion. Clones share one request; stale/duplicate results
+/// are ignored, and holding a request does not retain its tree.
+#[derive(Clone)]
+pub struct TreeLoad {
+    owner: Weak<Inner>,
+    key: String,
+    token: u64,
+    request: u64,
+}
+impl PartialEq for TreeLoad {
+    fn eq(&self, other: &Self) -> bool {
+        self.owner.ptr_eq(&other.owner)
+            && self.token == other.token
+            && self.request == other.request
+    }
+}
+impl Eq for TreeLoad {}
+impl TreeLoad {
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+    pub fn is_current(&self) -> bool {
+        self.owner.upgrade().is_some_and(|owner| {
+            owner
+                .data
+                .get()
+                .records
+                .get(&self.key)
+                .is_some_and(|r| r.token == self.token && r.request == Some(self.request))
+        })
+    }
+    /// Ok(false) means stale/duplicate; Err records an accepted load failure.
+    pub fn complete(&self, result: Result<Vec<TreeNode>, Error>) -> Result<bool, Error> {
+        crate::state::check_write();
+        let Some(owner) = self.owner.upgrade() else {
+            return Ok(false);
+        };
+        TreeModel(owner).complete(self, result)
+    }
+}
+fn message(error: Error) -> Error {
+    if error.0.trim().is_empty() {
+        Error("Unable to load tree children".into())
+    } else {
+        error
+    }
+}
+fn register(
+    nodes: Vec<TreeNode>,
+    parent: Option<String>,
+    depth: usize,
+    records: &mut HashMap<String, Record>,
+) -> Result<Vec<String>, Error> {
+    let roots = nodes.iter().map(|n| n.key.clone()).collect();
+    let mut stack = nodes
+        .into_iter()
+        .rev()
+        .map(|n| (n, parent.clone(), depth))
+        .collect::<Vec<_>>();
+    while let Some((mut node, parent, depth)) = stack.pop() {
+        if node.key.trim().is_empty() || records.contains_key(&node.key) {
+            return Err(Error(format!(
+                "Tree keys must be nonempty and globally unique: {:?}",
+                node.key
+            )));
+        }
+        if node.loading && node.error.is_some() {
+            return Err(Error(format!(
+                "Tree node {} cannot be loading and failed",
+                node.key
+            )));
+        }
+        let load = if let Some(error) = node.error.take() {
+            TreeLoadState::Failed(message(Error(error)).0)
+        } else if node.loading {
+            TreeLoadState::Loading
+        } else if node.deferred || node.loader.is_some() {
+            TreeLoadState::Unloaded
+        } else {
+            TreeLoadState::Loaded
+        };
+        let children = std::mem::take(&mut node.children);
+        let child_keys = children.iter().map(|n| n.key.clone()).collect();
+        let key = node.key.clone();
+        let record = Record {
+            key: key.clone(),
+            label: node.label,
+            parent,
+            depth,
+            enabled: node.enabled,
+            children: child_keys,
+            expandable: node.expandable,
+            expanded: false,
+            accessible_label: node.accessible_label,
+            loader: node.loader,
+            request: if load == TreeLoadState::Loading {
+                Some(super::list::next_token())
+            } else {
+                None
+            },
+            load,
+            token: super::list::next_token(),
+        };
+        records.insert(key.clone(), record);
+        let next_depth = depth
+            .checked_add(1)
+            .ok_or_else(|| Error("Tree is too deep".into()))?;
+        stack.extend(
+            children
+                .into_iter()
+                .rev()
+                .map(|n| (n, Some(key.clone()), next_depth)),
+        );
+    }
+    Ok(roots)
+}
+fn enabled(data: &Snapshot, key: &str) -> bool {
+    let mut current = Some(key);
+    while let Some(key) = current {
+        let Some(record) = data.records.get(key) else {
+            return false;
+        };
+        if !record.enabled {
+            return false;
+        }
+        current = record.parent.as_deref();
+    }
+    true
+}
+fn item(record: &Record, enabled: bool) -> TreeItem {
+    TreeItem {
+        key: record.key.clone(),
+        label: record.label.clone(),
+        parent: record.parent.clone(),
+        depth: record.depth,
+        enabled,
+        expandable: record.can_expand(),
+        expanded: record.expanded,
+        loading: record.load == TreeLoadState::Loading,
+        error: if let TreeLoadState::Failed(error) = &record.load {
+            Some(error.clone())
+        } else {
+            None
+        },
+        child_count: record.children.len(),
+        accessible_label: if record.accessible_label.is_empty() {
+            record.label.clone()
+        } else {
+            record.accessible_label.clone()
+        },
+        load_state: record.load.clone(),
+    }
+}
+fn flatten(data: &Snapshot) -> Vec<TreeItem> {
+    let mut result = vec![];
+    let mut stack = data
+        .roots
+        .iter()
+        .rev()
+        .map(|key| (key.as_str(), true))
+        .collect::<Vec<_>>();
+    while let Some((key, parent_enabled)) = stack.pop() {
+        let record = &data.records[key];
+        let enabled = parent_enabled && record.enabled;
+        result.push(item(record, enabled));
+        if record.expanded {
+            stack.extend(
+                record
+                    .children
+                    .iter()
+                    .rev()
+                    .map(|key| (key.as_str(), enabled)),
+            );
+        }
+    }
+    result
+}
+impl TreeModel {
+    pub fn new() -> Self {
+        Self(Rc::new(Inner {
+            data: State::new(Rc::new(Snapshot::default())),
+            list: ListModel::new(vec![], 36.),
+            on_load: RefCell::new(None),
+        }))
+    }
+    pub fn from_nodes(nodes: Vec<TreeNode>) -> Result<Self, Error> {
+        let tree = Self::new();
+        tree.set_nodes(nodes)?;
+        Ok(tree)
+    }
+    /// Replace with a validated fresh snapshot. Existing requests/lifetimes and
+    /// expansion caches retire; new branches start collapsed.
+    pub fn set_nodes(&self, nodes: Vec<TreeNode>) -> Result<(), Error> {
+        crate::state::check_write();
+        let mut data = Snapshot::default();
+        data.roots = register(nodes, None, 0, &mut data.records)?;
+        self.publish(data)
+    }
+    pub fn set_tree(&self, nodes: &[TreeNode]) -> Result<(), Error> {
+        self.set_nodes(nodes.to_vec())
+    }
+    fn publish(&self, mut data: Snapshot) -> Result<(), Error> {
+        let visible = flatten(&data);
+        if !(visible.len() as f64 * self.0.list.row_height()).is_finite() {
+            return Err(Error("Tree extent must be finite".into()));
+        }
+        let tokens = visible
+            .iter()
+            .map(|i| (i.key.clone(), data.records[&i.key].token))
+            .collect();
+        let rows = visible
+            .into_iter()
+            .map(|i| ListItem::new(i.key, i.label).enabled(i.enabled))
+            .collect();
+        data.revision = super::list::next_token();
+        let old = self.0.data.get();
+        crate::state::batch(|| {
+            self.0.list.replace_items(rows, Some(&tokens))?;
+            self.0.data.set(Rc::new(data));
+            Ok(())
+        })?;
+        drop(old);
+        Ok(())
+    }
+    pub fn known_count(&self) -> usize {
+        self.0.data.get().records.len()
+    }
+    pub fn visible_count(&self) -> usize {
+        self.0.list.len()
+    }
+    pub fn flatten(&self) -> Vec<TreeItem> {
+        flatten(&self.0.data.get())
+    }
+    pub fn item(&self, key: &str) -> Option<TreeItem> {
+        let data = self.0.data.get();
+        data.records.get(key).map(|r| item(r, enabled(&data, key)))
+    }
+    pub fn expanded(&self) -> BTreeSet<String> {
+        self.0
+            .data
+            .get()
+            .records
+            .values()
+            .filter(|r| r.expanded)
+            .map(|r| r.key.clone())
+            .collect()
+    }
+    pub fn last_failure(&self) -> Option<TreeFailure> {
+        self.0.data.get().failure.clone()
+    }
+    pub fn on_load(self, handler: impl Fn(TreeLoad) + 'static) -> Self {
+        crate::state::check_write();
+        let old = self.0.on_load.replace(Some(Rc::new(handler)));
+        drop(old);
+        self
+    }
+    pub fn pending_load(&self, key: &str) -> Option<TreeLoad> {
+        let data = self.0.data.get();
+        let record = data.records.get(key)?;
+        Some(TreeLoad {
+            owner: Rc::downgrade(&self.0),
+            key: key.into(),
+            token: record.token,
+            request: record.request?,
+        })
+    }
+    pub fn begin_load(&self, key: &str) -> Result<TreeLoad, Error> {
+        crate::state::check_write();
+        let mut data = (*self.0.data.get()).clone();
+        if !enabled(&data, key) {
+            return Err(Error(format!("Tree node is missing or disabled: {key}")));
+        }
+        let record = data.records.get_mut(key).unwrap();
+        record.load = TreeLoadState::Loading;
+        record.expanded = true;
+        record.request = Some(super::list::next_token());
+        if data.failure.as_ref().is_some_and(|f| f.key == key) {
+            data.failure = None;
+        }
+        let record = &data.records[key];
+        let request = TreeLoad {
+            owner: Rc::downgrade(&self.0),
+            key: key.into(),
+            token: record.token,
+            request: record.request.unwrap(),
+        };
+        self.publish(data)?;
+        Ok(request)
+    }
+    fn dispatch(&self, request: TreeLoad) -> Result<(), Error> {
+        if !request.is_current() {
+            return Ok(());
+        }
+        let loader = self
+            .0
+            .data
+            .get()
+            .records
+            .get(request.key())
+            .and_then(|r| r.loader.clone());
+        if let Some(loader) = loader {
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                crate::state::read_only(|| loader())
+            }))
+            .unwrap_or_else(|_| Err(Error("Tree loader panicked".into())));
+            request.complete(result)?;
+        } else {
+            let handler = self.0.on_load.borrow().clone();
+            if let Some(handler) = handler {
+                if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    handler(request.clone())
+                }))
+                .is_err()
+                {
+                    let error = Error("Tree load handler panicked".into());
+                    request.complete(Err(error.clone()))?;
+                    return Err(error);
+                }
+                if let Some(record) = self
+                    .0
+                    .data
+                    .get()
+                    .records
+                    .get(request.key())
+                    .filter(|r| r.token == request.token)
+                    && let TreeLoadState::Failed(error) = &record.load
+                {
+                    return Err(Error(error.clone()));
+                }
+            }
+        }
+        Ok(())
+    }
+    pub fn expand(&self, key: &str) -> Result<bool, Error> {
+        crate::state::check_write();
+        let mut data = (*self.0.data.get()).clone();
+        let record = data
+            .records
+            .get(key)
+            .ok_or_else(|| Error(format!("Unknown tree node: {key}")))?;
+        if !enabled(&data, key) || !record.can_expand() {
+            return Ok(false);
+        }
+        if record.load == TreeLoadState::Unloaded {
+            let request = self.begin_load(key)?;
+            self.dispatch(request)?;
+            return Ok(true);
+        }
+        let changed = !record.expanded;
+        let failed = if let TreeLoadState::Failed(error) = &record.load {
+            Some(error.clone())
+        } else {
+            None
+        };
+        if changed {
+            data.records.get_mut(key).unwrap().expanded = true;
+            self.publish(data)?;
+        }
+        if let Some(error) = failed {
+            return Err(Error(error));
+        }
+        Ok(changed)
+    }
+    pub fn collapse(&self, key: &str) -> Result<bool, Error> {
+        crate::state::check_write();
+        let mut data = (*self.0.data.get()).clone();
+        let record = data
+            .records
+            .get_mut(key)
+            .ok_or_else(|| Error(format!("Unknown tree node: {key}")))?;
+        if !record.expanded {
+            return Ok(false);
+        }
+        record.expanded = false;
+        self.publish(data)?;
+        Ok(true)
+    }
+    pub fn toggle(&self, key: &str) -> Result<bool, Error> {
+        if self.item(key).is_some_and(|i| i.expanded) {
+            self.collapse(key)
+        } else {
+            self.expand(key)
+        }
+    }
+    pub fn retry(&self, key: &str) -> Result<bool, Error> {
+        let request = self.begin_load(key)?;
+        self.dispatch(request)?;
+        Ok(true)
+    }
+    fn fail(&self, key: &str, error: Error) -> Result<bool, Error> {
+        let error = message(error);
+        let mut data = (*self.0.data.get()).clone();
+        let record = data.records.get_mut(key).unwrap();
+        record.load = TreeLoadState::Failed(error.0.clone());
+        record.request = None;
+        data.failure = Some(TreeFailure {
+            key: key.into(),
+            message: error.0.clone(),
+        });
+        self.publish(data)?;
+        Err(error)
+    }
+    fn complete(
+        &self,
+        request: &TreeLoad,
+        result: Result<Vec<TreeNode>, Error>,
+    ) -> Result<bool, Error> {
+        if !request.is_current() {
+            return Ok(false);
+        }
+        let nodes = match result {
+            Ok(nodes) => nodes,
+            Err(error) => {
+                return if request.is_current() {
+                    self.fail(request.key(), error)
+                } else {
+                    Ok(false)
+                };
+            }
+        };
+        let mut data = (*self.0.data.get()).clone();
+        let parent = data.records.get_mut(request.key()).unwrap();
+        let mut old = std::mem::take(&mut parent.children);
+        let depth = parent.depth + 1;
+        while let Some(key) = old.pop() {
+            if let Some(record) = data.records.remove(&key) {
+                old.extend(record.children);
+            }
+        }
+        let children = match register(nodes, Some(request.key.clone()), depth, &mut data.records) {
+            Ok(children) => children,
+            Err(error) => {
+                return if request.is_current() {
+                    self.fail(request.key(), error)
+                } else {
+                    Ok(false)
+                };
+            }
+        };
+        if !request.is_current() {
+            return Ok(false);
+        }
+        let parent = data.records.get_mut(request.key()).unwrap();
+        parent.children = children;
+        parent.load = TreeLoadState::Loaded;
+        parent.request = None;
+        if !parent.can_expand() {
+            parent.expanded = false;
+        }
+        if data
+            .failure
+            .as_ref()
+            .is_some_and(|f| f.key == request.key || !data.records.contains_key(&f.key))
+        {
+            data.failure = None;
+        }
+        self.publish(data)?;
+        Ok(true)
+    }
+    /// Publish one branch through checked completion; supersedes its pending load.
+    pub fn set_children(&self, key: &str, nodes: Vec<TreeNode>) -> Result<bool, Error> {
+        let request = self.begin_load(key)?;
+        request.complete(Ok(nodes))
+    }
+    fn note_error(&self, key: &str, error: Error) {
+        let mut data = (*self.0.data.get()).clone();
+        let failure = TreeFailure {
+            key: key.into(),
+            message: error.0,
+        };
+        if data.failure.as_ref() != Some(&failure) {
+            data.failure = Some(failure);
+            self.publish(data).expect("Validated tree error update");
+        }
+    }
+    pub fn view(&self) -> View {
+        let data = self.0.data.get();
+        let tree = self.clone();
+        self.0.list.view_with(move |row| {
+            let record = &data.records[&row.key];
+            let info = item(record, enabled(&data, &row.key));
+            let marker = if info.loading {
+                "◌"
+            } else if info.error.is_some() {
+                "↻"
+            } else if !info.expandable {
+                "•"
+            } else if info.expanded {
+                "▾"
+            } else {
+                "▸"
+            };
+            let status = if info.loading {
+                " — Loading…".into()
+            } else if let Some(error) = &info.error {
+                format!(" — {error} (retry)")
+            } else {
+                String::new()
+            };
+            let action = tree.clone();
+            let key = row.key.clone();
+            let token = record.token;
+            let control = View::button(marker, move || {
+                if action
+                    .0
+                    .data
+                    .get()
+                    .records
+                    .get(&key)
+                    .is_none_or(|r| r.token != token)
+                {
+                    return;
+                }
+                let result = if action.item(&key).is_some_and(|i| i.error.is_some()) {
+                    action.retry(&key)
+                } else {
+                    action.toggle(&key)
+                };
+                if let Err(error) = result
+                    && action
+                        .0
+                        .data
+                        .get()
+                        .records
+                        .get(&key)
+                        .is_some_and(|r| r.token == token)
+                {
+                    action.note_error(&key, error);
+                }
+            })
+            .padding(2.)
+            .width(26)
+            .key("$disclosure")
+            .accessible_label(format!("{}{status}", info.accessible_label));
+            let control = if info.expandable {
+                control
+            } else {
+                View::spacer().width(26).grow(0.)
+            };
+            let label = View::label(format!("{}{status}", info.label))
+                .grow(1.)
+                .accessible_label(format!("{}{status}", info.accessible_label))
+                .label_style(if info.error.is_some() {
+                    crate::LabelStyle::Error
+                } else {
+                    crate::LabelStyle::Standard
+                });
+            View::row(vec![control, label])
+                .align(crate::Align::Center)
+                .margin(Insets {
+                    left: info.depth as f64 * 18.,
+                    ..Default::default()
+                })
+                .tooltip(info.error.unwrap_or_default())
+        })
+    }
+}
+impl Default for TreeModel {
+    fn default() -> Self {
+        Self::new()
+    }
+}

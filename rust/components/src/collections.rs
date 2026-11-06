@@ -2,10 +2,12 @@
 pub(crate) mod input;
 mod list;
 mod pin;
-use crate::{Binding, State, View};
+mod tree;
+use crate::{Binding, View};
 pub use list::*;
 pub use pin::RowPin;
-use std::{cell::RefCell, collections::BTreeSet, rc::Rc};
+pub use tree::*;
+
 /// Editable combo box: the same text binding remains usable for values outside the options.
 pub fn combo_box(
     text: Binding<String>,
@@ -32,79 +34,6 @@ pub fn combo_box(
         .take(100)
         .collect();
     (field, popup.menu(key, items))
-}
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TreeItem {
-    pub key: String,
-    pub label: String,
-    pub children: Vec<TreeItem>,
-}
-#[derive(Clone)]
-pub struct TreeModel {
-    pub expanded: State<BTreeSet<String>>,
-    pub list: ListModel,
-    roots: Rc<RefCell<Vec<TreeItem>>>,
-}
-impl TreeModel {
-    pub fn new() -> Self {
-        Self {
-            expanded: State::new(BTreeSet::new()),
-            list: ListModel::new(vec![], 34.),
-            roots: Rc::new(RefCell::new(Vec::new())),
-        }
-    }
-    /// Flatten only expanded branches. Applications can fetch lazy children before calling this.
-    pub fn set_tree(&self, roots: &[TreeItem]) -> Result<(), crate::Error> {
-        fn visit(
-            items: &[TreeItem],
-            expanded: &BTreeSet<String>,
-            depth: usize,
-            out: &mut Vec<ListItem>,
-        ) {
-            for item in items {
-                let marker = if item.children.is_empty() {
-                    "  "
-                } else if expanded.contains(&item.key) {
-                    "▾ "
-                } else {
-                    "▸ "
-                };
-                out.push(ListItem::new(
-                    &item.key,
-                    format!("{}{}{}", "  ".repeat(depth), marker, item.label),
-                ));
-                if expanded.contains(&item.key) {
-                    visit(&item.children, expanded, depth + 1, out);
-                }
-            }
-        }
-        *self.roots.borrow_mut() = roots.to_vec();
-        let mut rows = Vec::new();
-        visit(roots, &self.expanded.get(), 0, &mut rows);
-        self.list.set_items(rows)
-    }
-    pub fn toggle(&self, key: &str) {
-        self.expanded.update(|keys| {
-            if !keys.insert(key.to_owned()) {
-                keys.remove(key);
-            }
-        });
-        let roots = self.roots.borrow().clone();
-        let _ = self.set_tree(&roots);
-    }
-    pub fn view(&self) -> View {
-        let tree = self.clone();
-        self.list.view_with(move |item| {
-            let key = item.key.clone();
-            let tree = tree.clone();
-            View::button(item.label(), move || tree.toggle(&key))
-        })
-    }
-}
-impl Default for TreeModel {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 #[derive(Clone)]
 pub struct TableModel {

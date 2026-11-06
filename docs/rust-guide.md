@@ -105,6 +105,11 @@ selection and composition survive scrolling. `on_activate_with_model` supplies
 model context without a strong self-capture. See the
 [virtual edit contracts](../rust/components/README.md#completion-m4--virtual-edit-lifetimes).
 
+`cargo run --example m4_tree` demonstrates cached lazy/deferred branches, visible
+load failure/retry and generation-checked results. `TreeNode` is recursive input;
+`TreeItem` is queried metadata. `expand`/`collapse` return results and model replacement
+retires old requests. See the [tree model contracts](../rust/components/README.md#completion-m4--lazy-tree-models).
+
 `view!` supports ordinary expressions, `if`/`else`, keyed `for` loops, custom
 functions returning `View`, and `embed(view)` for an already-built value. Unknown
 properties fail compilation. Use stable keys for reordered items; unkeyed identity

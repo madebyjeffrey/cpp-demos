@@ -218,8 +218,10 @@ Models and mutations stay outside builders. Hold a `list.pin(key)` handle throug
 an active edit to retain its host state while scrolling. Durable application
 values and drafts stay outside builders.
 
-`TreeModel` flattens expanded branches. Applications fetch lazy children and call
-`set_tree`; `toggle` changes expansion. `TableModel` adds keyed cell drafts and
+`TreeNode` describes eager/lazy/deferred branches; `TreeModel` validates all known
+keys and publishes loading/error metadata through checked requests. `TreeItem` is
+a flat metadata query, including hidden known nodes. `expand`/`collapse`/`toggle`
+return results instead of discarding failures. `TableModel` adds keyed cell drafts and
 sorting: `begin_edit` snapshots the original cell, and `commit` rejects a removed
 row/column or an intervening cell change. The example edits in a popup so scrolling
 does not destroy a draft. `combo_box` preserves editable text beyond its suggested
@@ -838,3 +840,79 @@ Evidence: eight portable lifetime/input tests and a 200-jump, 100,000-row test t
 inspects actual host editor storage. Native checks cover offscreen preedit,
 commit/undo and inert retained accessibility editors after coalesced reinsertion.
 The actual VoiceOver/IME candidate-placement and visible GPU audits remain M5/M8.
+
+
+## Completion M4 — lazy tree models
+
+`cargo run --example m4_tree` demonstrates eager branches, a cached lazy loader,
+visible failure/retry, deferred completion and replacement that retires outstanding
+requests. It supports `--light`, `--render file.png` and `--smoke`.
+
+```rust
+use scars_ui::{TreeModel, TreeNode};
+let tree = TreeModel::from_nodes(vec![
+    TreeNode::new("workspace", "Workspace").children(vec![
+        TreeNode::new("local", "Local").children(vec![TreeNode::new("notes", "Notes.md")]),
+        TreeNode::new("remote", "Remote").lazy(|| Ok(vec![TreeNode::new("roadmap", "Roadmap.md")])),
+    ]),
+])?;
+tree.expand("workspace")?;
+```
+
+`TreeNode` is the recursive input; `TreeItem` is flat, queried metadata. This replaces
+the earlier recursive `TreeItem` stub. `from_nodes`/`set_nodes` take owned input;
+`set_tree(&[TreeNode])` is a borrowed convenience. Every known key, including eager
+children of collapsed branches, must be nonempty/non-whitespace and globally unique.
+Validation failure leaves the existing snapshot and rows intact. Traversal and
+metadata indexing are iterative; the tests include a 2,501-node collapsed chain.
+`known_count`, `visible_count`, `flatten`, `item(key)` and `expanded` expose state
+without mutating it. The old public `expanded`/`list` fields are replaced by these
+queries and checked expansion methods, keeping rows synchronized with metadata.
+
+`TreeItem` reports parent, depth, effective enabled state, expandability, expansion,
+loading/error state, child count and accessible label. Disabled ancestors disable
+known descendants. `TreeLoadState::{Unloaded, Loading, Loaded, Failed}` separates
+not-yet-loaded from an empty completed branch. Empty successful loads become leaves
+unless explicitly marked expandable. `loading(true)` represents an already-running
+external request; `failed(message)` seeds a known failure. Accessible labels default
+to the visible label.
+
+`lazy` is a synchronous pure snapshot query, invoked on first expansion and cached
+across collapse/reopen. It must not mutate reactive/model state. Expected errors and
+loader panics become visible `Failed` metadata and return `Err`; invalid returned
+keys fail the load without installing partial children. `last_failure` reports the
+most recent operation failure. Reopening a failed branch returns its cached error;
+`retry` explicitly starts another attempt. Views render failure text and a retry
+control. Building/querying a tree never invokes loaders.
+
+For deferred work, use `TreeNode::deferred()` and `tree.on_load(|request| ...)`.
+Expansion marks Loading before invoking the callback outside model borrows. Call
+`request.complete(Ok(children))` or `complete(Err(error))` on the owning UI thread.
+`TreeLoad` is cloneable, holds weak model ownership and is intentionally not Send;
+background tasks can return plain data to the UI thread for conversion/completion.
+The model does not supply an executor. `pending_load(key)` retrieves a current
+request, and `begin_load(key)` starts/supersedes one for manual dispatch. Dropping a
+handle does not cancel it; `pending_load` can retrieve it again.
+
+Requests include node-lifetime and request generations. Stale/duplicate completion
+returns `Ok(false)` and changes nothing; an accepted failure returns `Err` and records
+its message. Collapse keeps an in-flight request valid so completion can cache
+children without reopening the branch. Retry supersedes an earlier request.
+Existing children stay available during a refresh or failure. `set_children` starts
+a checked branch replacement; successful publication replaces that subtree and
+retires its old requests/lifetimes. Keys may be reused within that replaced subtree,
+but cannot collide with another known branch, including a collapsed one.
+
+`set_nodes` replaces the entire validated snapshot with fresh node lifetimes,
+retiring requests and lazy caches; new branches start collapsed. Use checked branch
+completion to update children while preserving other branches. Visible list rows
+use tree item tokens, so cached host/native objects cannot act on a replacement that
+reuses the same key. Related metadata/row updates publish before external scheduling;
+old loader resources drop outside state borrows and may safely query new state.
+
+Eleven focused tests cover metadata, hidden-key validation, caching/empty results,
+failures/retry, read-only queries, deferred completion, replacement generations,
+reentrant callbacks, scheduler consistency, disclosure rendering and resource teardown.
+Native checks cover retired row proxies after snapshot replacement. Full tree
+keyboard/selection interaction remains M4.4; hierarchical native semantics and the
+actual interactive audit remain M5.

@@ -74,19 +74,11 @@ fn selection_tracks_keys_sorting_and_edit_conflicts() {
 #[test]
 fn tree_only_flattens_expanded_branches() {
     let tree = TreeModel::new();
-    tree.set_tree(&[TreeItem {
-        key: "root".into(),
-        label: "Root".into(),
-        children: vec![TreeItem {
-            key: "child".into(),
-            label: "Child".into(),
-            children: vec![],
-        }],
-    }])
-    .unwrap();
-    assert_eq!(tree.list.len(), 1);
-    tree.toggle("root");
-    assert_eq!(tree.list.len(), 2);
-    tree.toggle("root");
-    assert_eq!(tree.list.len(), 1);
+    tree.set_tree(&[TreeNode::new("root", "Root").children(vec![TreeNode::new("child", "Child")])])
+        .unwrap();
+    assert_eq!(tree.visible_count(), 1);
+    tree.toggle("root").unwrap();
+    assert_eq!(tree.visible_count(), 2);
+    tree.toggle("root").unwrap();
+    assert_eq!(tree.visible_count(), 1);
 }
