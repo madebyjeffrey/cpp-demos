@@ -7,6 +7,7 @@ type WindowEvent = Rc<dyn Fn(&Surface, &Event)>;
 type WindowCloseRequest = Rc<dyn Fn(&Surface) -> bool>;
 type WindowClosed = Rc<dyn Fn(&Surface)>;
 type WindowCommand = Rc<dyn Fn(&Surface, Command)>;
+type WindowView = Rc<dyn Fn(&Surface) -> crate::ui::View>;
 
 /// Configure a window before creating its native resources.
 /// `Application::open_window` owns and shows it; `build` returns an owning Window
@@ -21,7 +22,7 @@ pub struct WindowBuilder {
     close_request: Option<WindowCloseRequest>,
     closed: Option<WindowClosed>,
     menu: Option<(Vec<MenuItem>, WindowCommand)>,
-    view: Option<Rc<dyn Fn() -> crate::ui::View>>,
+    view: Option<WindowView>,
 }
 
 impl Window {
@@ -47,6 +48,14 @@ impl Window {
 impl WindowBuilder {
     /// Mount a reactive component tree. Drawing, input, IME and accessibility are wired internally.
     pub fn view(mut self, builder: impl Fn() -> crate::ui::View + 'static) -> Self {
+        self.view = Some(Rc::new(move |_| builder()));
+        self
+    }
+    /// Build components with their window context, for actions such as native sheets.
+    pub fn view_with_surface(
+        mut self,
+        builder: impl Fn(&Surface) -> crate::ui::View + 'static,
+    ) -> Self {
         self.view = Some(Rc::new(builder));
         self
     }
@@ -179,7 +188,7 @@ impl WindowBuilder {
             on_closed,
         });
         if let Some(view) = self.view {
-            window.set_view(move || view())?;
+            window.set_view_with_surface(move |surface| view(surface))?;
         }
         Ok(window)
     }
@@ -242,7 +251,11 @@ impl Surface {
     }
     /// Request a user-initiated close, honoring the window's close veto and sheets.
     pub fn request_close(&self) {
-        if self.is_open() {
+        if self.state.modal.get() {
+            if let Some(app) = self.state.app.upgrade() {
+                guarded(&app, || request_surface_close(&self.state));
+            }
+        } else if self.is_open() {
             self.state.native.performClose(None);
         }
     }

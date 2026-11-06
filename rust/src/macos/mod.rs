@@ -6,6 +6,7 @@ mod callbacks;
 mod components;
 mod input;
 mod rendering;
+mod sheet;
 mod text;
 mod view;
 use crate::types::*;
@@ -51,6 +52,7 @@ struct AppState {
     options: ApplicationOptions,
     surfaces: RefCell<Vec<Weak<SurfaceState>>>,
     managed_windows: RefCell<Vec<Window>>,
+    managed_dialogs: RefCell<Vec<Dialog>>,
     window_factory: RefCell<Option<WindowFactory>>,
     renderer: rendering::Renderer,
     device: Retained<ProtocolObject<dyn MTLDevice>>,
@@ -83,6 +85,7 @@ struct SurfaceState {
     theme_changed: RefCell<Option<ThemeHandler>>,
     text_input: RefCell<Option<Rc<dyn TextInputClient>>>,
     completion: RefCell<Option<Completion>>,
+    sheet: RefCell<Option<(crate::ui::Alert, crate::ui::AlertSubscription)>>,
     open: Cell<bool>,
     modal: Cell<bool>,
     dirty: Cell<bool>,
@@ -341,6 +344,7 @@ impl Application {
                 options,
                 surfaces: RefCell::new(vec![]),
                 managed_windows: RefCell::new(vec![]),
+                managed_dialogs: RefCell::new(vec![]),
                 window_factory: RefCell::new(None),
                 renderer,
                 device,
@@ -656,6 +660,17 @@ impl Dialog {
             .ok_or_else(|| error("Parent is closed"))?;
         if self.state.modal.get() || parent.native.attachedSheet().is_some() {
             return Err(error("A sheet is already presented for this parent"));
+        }
+        let mounted = parent.components.borrow().clone();
+        if let Some(mounted) = mounted {
+            mounted.host.set_active(false);
+        }
+        deactivate_input(&parent);
+        if !self.is_open() || !parent.open.get() {
+            return Err(error("Dialog closed during presentation"));
+        }
+        if self.state.modal.get() || parent.native.attachedSheet().is_some() {
+            return Err(error("A sheet was presented during parent deactivation"));
         }
         self.state.modal.set(true);
         *self.state.completion.borrow_mut() = Some(Rc::new(completion));
@@ -1168,6 +1183,7 @@ fn create_surface(
             theme_changed: RefCell::new(None),
             text_input: RefCell::new(None),
             completion: RefCell::new(None),
+            sheet: RefCell::new(None),
             open: Cell::new(true),
             modal: Cell::new(false),
             dirty: Cell::new(true),
@@ -1216,11 +1232,22 @@ fn create_surface(
         Ok(state)
     }
 }
+fn request_surface_close(s: &Rc<SurfaceState>) {
+    if !s.open.get() || s.native.attachedSheet().is_some() {
+        return;
+    }
+    let request = s.callbacks.borrow().on_close_request.clone();
+    if request.is_none_or(|f| f()) {
+        close_surface(s, DialogResult::Cancelled);
+    }
+}
 fn close_surface(s: &Rc<SurfaceState>, result: DialogResult) {
     if !s.open.replace(false) {
         return;
     }
-    components::closed(s);
+    let sheet = s.sheet.borrow_mut().take();
+    let was_modal = s.modal.get();
+    let had_key = s.native.isKeyWindow();
     sync_fullscreen_controls(s);
     s.animating.set(false);
     s.previous.set(None);
@@ -1248,6 +1275,28 @@ fn close_surface(s: &Rc<SurfaceState>, result: DialogResult) {
     s.native.setDelegate(None);
     s.native.orderOut(None);
     s.native.close();
+    if was_modal
+        && let Some(parent) = s
+            .parent
+            .upgrade()
+            .filter(|p| p.open.get() && p.native.isVisible() && p.native.attachedSheet().is_none())
+    {
+        if had_key {
+            parent.native.makeKeyWindow();
+        }
+        parent.native.makeFirstResponder(Some(&parent.view));
+        let mounted = parent.components.borrow().clone();
+        if let Some(mounted) = mounted {
+            mounted.host.set_active(parent.native.isKeyWindow());
+        }
+    }
+    if let Some((alert, _)) = &sheet
+        && let Some(app) = s.app.upgrade()
+    {
+        guarded(&app, || alert.dismiss_with(crate::ui::AlertReason::Closed));
+    }
+    drop(sheet);
+    components::closed(s);
     let completion = s.completion.borrow_mut().take();
     let callbacks = std::mem::take(&mut *s.callbacks.borrow_mut());
     let _command = s.on_command.borrow_mut().take();
@@ -1267,6 +1316,14 @@ fn close_surface(s: &Rc<SurfaceState>, result: DialogResult) {
                 .iter()
                 .position(|w| Rc::ptr_eq(&w.state, s))
                 .map(|index| windows.swap_remove(index))
+        };
+        drop(owner);
+        let owner = {
+            let mut dialogs = app.managed_dialogs.borrow_mut();
+            dialogs
+                .iter()
+                .position(|d| Rc::ptr_eq(&d.state, s))
+                .map(|index| dialogs.swap_remove(index))
         };
         drop(owner);
         if let Some(parent) = s.parent.upgrade().filter(|p| p.open.get()) {
@@ -1631,9 +1688,7 @@ define_class!(
         #[unsafe(method(windowShouldClose:))]
         fn should_close(&self, _: &NSWindow) -> bool {
             with_surface(&self.ivars().state.borrow().clone(),|s| {
-                if !s.open.get() || s.native.attachedSheet().is_some() { return; }
-                let request = s.callbacks.borrow().on_close_request.clone();
-                if request.is_none_or(|f| f()) { close_surface(s,DialogResult::Cancelled); }
+                request_surface_close(s);
             }); false // close_surface owns native closure and exactly-once callbacks.
         }
         #[unsafe(method(windowDidBecomeKey:))]

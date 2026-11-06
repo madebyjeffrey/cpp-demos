@@ -69,6 +69,8 @@ pub struct Node {
     pub stepper: Option<crate::StepperInfo>,
     pub split: Option<crate::SplitInfo>,
     pub tabs: Option<crate::TabsInfo>,
+    pub alert: bool,
+    pub alert_role: Option<crate::AlertActionRole>,
     pub wizard: Option<crate::WizardInfo>,
     pub tab_id: Option<String>,
     pub tab_strip: bool,
@@ -392,6 +394,9 @@ impl Host {
         let Some((d, value)) = target else {
             return Ok(false);
         };
+        if let Some((alert, action)) = &d.alert_action {
+            return self.alert_action(id, alert, action);
+        }
         if let Some(action) = &d.wizard_action {
             return self.wizard_action(id, action);
         }
@@ -637,6 +642,8 @@ fn mount(
         stepper,
         split: None,
         tabs,
+        alert: d.alert.is_some(),
+        alert_role: d.alert_role,
         wizard: d.wizard.as_ref().map(|w| w.info.clone()),
         tab_id: d.tab_id.clone(),
         tab_strip: d.tab_strip,

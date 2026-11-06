@@ -186,7 +186,7 @@ windows, utility panels and dialogs do not offer full-screen entry.
 | Native sun/moon titlebar accessory | `WindowBuilder::theme_toggle`, `Surface::toggle_theme` |
 | Per-window menu trees, shortcuts, enabled/checked state and invocation | `Window::set_menu`, `set_command_state`, `invoke_command` |
 | Native first-responder editing actions | `TextInputClient::command`; the application supplies any Edit menu |
-| Parent-owned modeless dialogs and asynchronous modal sheets | `Dialog::new`, `show`, `show_modal`, `dismiss` |
+| Parent-owned dialogs and transactional component sheets | `Dialog::new`, `show_modal`, `dismiss`; `Surface::show_sheet`, `ui::Alert` |
 | User-close vetoes, forced programmatic close and exactly-once closed/completion callbacks | `Callbacks`, `DialogResult` |
 | Pointer, keyboard, modifiers, focus, resize, effective appearance, full-screen and Reduce Motion events | `Event` |
 | Cursor and text clipboard | `set_cursor`, `Application::clipboard_text`, `set_clipboard_text` |
@@ -222,8 +222,11 @@ See [component contracts and examples](components/README.md). GPU-capture diagno
   consults `on_close_request`. Quit checks every veto before closing anything.
 - Closing a parent cancels and closes its dialogs. Modal completion runs once,
   before `on_closed`. Completion may drop its own dialog. A sheet blocks its parent's
-  menu actions while other windows remain interactive. Use `dismiss`
-  or `close` to end a sheet; `hide` returns an error for modal dialogs.
+  menu/input/accessibility actions while other windows remain interactive. Use
+  `dismiss`, `request_close` or `close` to end a sheet; `hide` returns an error for
+  modal dialogs. `Surface::show_sheet(ui::Alert, body_builder)` retains a component
+  sheet automatically and releases its parent before application completion.
+  `view_with_surface` supplies window context to component actions.
 - Builder callbacks take ordinary closures and receive `&Surface` as their first
   argument. The lower-level `Callbacks` struct uses `Rc<dyn Fn(...)>` and can be
   replaced from inside callbacks. Capture `WeakSurface` if a lower-level callback

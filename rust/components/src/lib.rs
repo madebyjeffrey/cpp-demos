@@ -22,6 +22,7 @@
 
 extern crate self as scars_ui;
 
+mod alert;
 mod collections;
 mod deadlines;
 mod draft;
@@ -49,6 +50,7 @@ mod values;
 mod view;
 mod wizard;
 
+pub use alert::{Alert, AlertAction, AlertActionRole, AlertReason, AlertResult, AlertSubscription};
 pub use collections::*;
 pub use draft::{
     Draft, Number, Numeric, StepperInfo, Validation, ValidationStatus, numeric_field, stepper,

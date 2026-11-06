@@ -67,3 +67,8 @@ harness = false
 name = "secure_input"
 path = "tests/secure_input.rs"
 harness = false
+
+[[test]]
+name = "sheets"
+path = "tests/sheets.rs"
+harness = false

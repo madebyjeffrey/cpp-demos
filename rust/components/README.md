@@ -189,11 +189,12 @@ Tab and activation. `on_context` handles a secondary click; `tooltip` displays
 help after a configurable one-shot deadline. `tabs` retains visited keyed pages;
 `wizard` adapts positional steps, while `Wizard` provides validated stable-ID
 navigation; `split_button` combines a primary action with a menu anchor.
-`split_view` uses a dedicated adjustable divider and retained panes. Alert completion
-transactions remain tracked in the completion checklist.
+`split_view` uses a dedicated adjustable divider and retained panes. `Alert` supplies
+a single-use result transaction with default/cancel/destructive actions.
 
-For an actual macOS sheet, attach components with `Dialog::set_view` and use the
-existing `show_modal`/`dismiss` lifetime interface. `Popup::modal` is an in-window
+For an actual macOS sheet, use `surface.show_sheet(alert, body_builder)`. It retains
+the native dialog until completion. `Dialog::set_view` with `show_modal`/`dismiss`
+remains available for lower-level ownership. `Popup::modal` is an in-window
 presentation; it does not create an AppKit sheet or a new native window. Kinetic
 scrolling follows native wheel events without a second synthetic animation loop.
 
@@ -651,3 +652,71 @@ The legacy `wizard(&index_state, pages)` helper remains available, including emp
 page lists, but positional identity is intended for fixed step sets. Native protocol
 checks cover validation feedback, enabled actions, IME commit, callbacks and stale
 accessibility objects. Interactive VoiceOver/IME auditing remains M5.
+
+
+## Completion M3 — alert transactions and native sheets
+
+`cargo run --example m3_alerts` shows a component alert; add `--sheet` for a native
+parent-modal sheet. Both accept `--light`, `--smoke` and `--render file.png` (sheet rendering previews
+the same component content used inside the native sheet).
+
+```rust
+use scars_ui::{Alert, AlertAction, AlertActionRole, View};
+let alert = Alert::new("Save changes?", vec![
+    AlertAction::new("cancel", "Cancel").role(AlertActionRole::Cancel),
+    AlertAction::new("save", "Save").role(AlertActionRole::Default),
+], |result| println!("{:?}", result))?;
+// Retain alert across rebuilds; embed this description in the root layer.
+let view = alert.view(View::label("Your document has unsaved changes."));
+```
+
+Each `Alert` is one transaction. Clones share identity and `result()`; equality
+compares transaction identity, allowing `State<Option<Alert>>`. Create a new alert
+for the next presentation. IDs and labels must be nonempty; IDs must be unique,
+with at most one default and one cancel action. Actions and their enabled state
+are fixed for that transaction. Empty action sets can still dismiss or escape.
+
+`choose(id)` accepts an enabled action; `cancel()` and Escape choose the enabled
+cancel action if present, otherwise complete without an action. `dismiss()` has
+no action. `AlertResult` includes the action ID and `AlertReason`: action, cancel,
+Escape, dismissal, close, owner removal, unmount or destruction. `completed()`
+distinguishes pending from a completed result without an action. Completion runs
+once, after publishing the result, outside host borrows. Reentrant calls, duplicate
+closes and stale controls are inert. Last-handle destruction resolves a pending
+transaction with `Destroyed`; removing mounted content/unmounting resolves its
+observed presentation. Avoid capturing the alert strongly inside its own callback.
+
+Return invokes only the enabled default action; it never falls through to an
+arbitrary destructive/cancel control. Space activates the focused button. Return
+commits marked text first without submitting; multiline editors retain Return for
+newlines. Escape cancels preedit first, then cancels the alert on the next press.
+Action activation commits preedit; the cancel button discards it. Alerts preserve
+their transaction on outside clicks and deactivation. Modal scope traps focus and
+restores the invoking control after removal/layout. Default and destructive actions
+have distinct visuals; native accessibility exposes modal/default/cancel controls.
+
+On macOS, `surface.show_sheet(alert, || body)` supplies the same component content
+inside an application-owned native sheet and returns a `Surface` control handle.
+Discarding that handle keeps the sheet open. Completion releases the native sheet
+and restores parent focus before invoking application code, preserving another
+window's key status when a background sheet completes. Other windows remain
+usable; the parent blocks menu commands, text input and retained accessibility
+actions. Close, parent closure/destruction, application teardown and component
+unmount resolve the same transaction. `sheet.request_close()` honors close policy;
+`close()` forces closure. `hide()` is unavailable while modal. The returned surface
+can be resized; the initial size is 460×300, with a 300×160 minimum.
+
+`WindowBuilder::view_with_surface(|surface| ...)` and
+`Surface::set_view_with_surface` supply window context for component actions such
+as opening sheets, without application-managed weak captures. `AlertSubscription`
+and `observe_completion` support presentation adapters; subscriptions do not retain
+the alert, and completed transactions notify new observers immediately. Adapter
+observers run before application completion.
+
+Checks: seven portable transaction/input/lifetime tests and
+`SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test sheets` cover native actions,
+accessibility roles, marked text, isolation, focus restoration and closure paths.
+`cargo test --test sheets -- --foreground` additionally requires another native
+window to become key and verifies that background completion preserves it. This
+foreground check is explicit and is not counted when unavailable. Interactive
+VoiceOver/IME and visible GPU auditing remain in M5/M8.

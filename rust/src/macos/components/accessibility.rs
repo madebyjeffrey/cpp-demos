@@ -318,6 +318,12 @@ define_class!(
         fn splitters(&self)->Option<Retained<NSArray<AnyObject>>>{
             self.with(|m,_,n|Ok(if n.kind==Kind::Split{Some(NSArray::from_retained_slice(&m.host.snapshot()?.iter().filter(|child|child.parent==Some(n.id) && child.kind==Kind::SplitDivider && !child.hidden).map(|child|any(element(m,child.id))).collect::<Vec<_>>()))}else{None})).flatten()
         }
+        #[unsafe(method(isAccessibilityModal))]
+        fn modal(&self) -> bool { self.node().is_some_and(|n| n.alert) }
+        #[unsafe(method_id(accessibilityDefaultButton))]
+        fn default_button(&self) -> Option<Retained<AnyObject>> { self.alert_button(ui::AlertActionRole::Default) }
+        #[unsafe(method_id(accessibilityCancelButton))]
+        fn cancel_button(&self) -> Option<Retained<AnyObject>> { self.alert_button(ui::AlertActionRole::Cancel) }
         #[unsafe(method_id(accessibilityMinValue))]
         fn min(&self) -> Option<Retained<AnyObject>> {
             self.node()
@@ -537,6 +543,34 @@ impl Element {
                 .into_iter()
                 .find(|n| n.id == self.ivars().id && semantic(n) && m.host.in_scope(n.id));
             node.map(|n| f(m, s, &n)).transpose()
+        })
+        .flatten()
+    }
+    fn alert_button(&self, role: ui::AlertActionRole) -> Option<Retained<AnyObject>> {
+        self.with(|m, _, root| {
+            if !root.alert {
+                return Ok(None);
+            }
+            let nodes = m.host.snapshot()?;
+            Ok(nodes
+                .iter()
+                .find(|n| {
+                    if n.alert_role != Some(role) || !n.enabled || n.hidden {
+                        return false;
+                    }
+                    let mut ancestor = n.parent;
+                    while let Some(id) = ancestor {
+                        let Some(p) = nodes.iter().find(|p| p.id == id) else {
+                            break;
+                        };
+                        if p.kind == Kind::Modal {
+                            return p.id == root.id;
+                        }
+                        ancestor = p.parent;
+                    }
+                    false
+                })
+                .map(|n| any(element(m, n.id))))
         })
         .flatten()
     }

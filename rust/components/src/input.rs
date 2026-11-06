@@ -630,6 +630,9 @@ impl Host {
         if let Some(handled) = self.menu_key(event)? {
             return Ok(handled);
         }
+        if let Some(handled) = self.alert_key(event)? {
+            return Ok(handled);
+        }
         if event.key == Key::Escape
             && let Some(id) = self.active_modal()
         {

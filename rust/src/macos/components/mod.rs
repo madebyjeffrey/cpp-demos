@@ -26,6 +26,9 @@ impl Mounted {
             return None;
         }
         let surface = self.surface.upgrade().filter(|s| s.is_open())?;
+        if surface.state.native.attachedSheet().is_some() {
+            return None;
+        }
         let app = surface.state.app.upgrade()?;
         guarded(&app, || {
             match self.sync(&surface).and_then(|()| f(self, &surface)) {
@@ -117,6 +120,18 @@ impl Mounted {
     }
 }
 impl Surface {
+    /// Attach components with the receiving surface available to each rebuild.
+    pub fn set_view_with_surface(
+        &self,
+        builder: impl Fn(&Surface) -> ui::View + 'static,
+    ) -> Result<ui::Host> {
+        let weak = self.downgrade();
+        self.set_view(move || {
+            weak.upgrade()
+                .map(|surface| builder(&surface))
+                .unwrap_or_else(|| ui::View::fragment(vec![]))
+        })
+    }
     /// Attach components while preserving existing underlay, unhandled-event and lifecycle callbacks.
     /// A failed initial build/layout leaves the previous content installed.
     pub fn set_view(&self, builder: impl Fn() -> ui::View + 'static) -> Result<ui::Host> {
@@ -245,6 +260,9 @@ impl Surface {
         let previous = self.state.components.borrow_mut().take();
         if let Some(m) = previous {
             m.deactivate();
+            if !self.is_open() {
+                return;
+            }
             let callbacks = self.state.callbacks.replace(m.previous.clone());
             drop(callbacks);
             self.set_text_input_client(m.previous_input.clone());

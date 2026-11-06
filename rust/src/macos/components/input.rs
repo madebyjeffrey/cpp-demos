@@ -218,9 +218,17 @@ fn command(host: &ui::Host, selector: &str) -> std::result::Result<bool, ui::Err
         };
         return host.paste_text(&value);
     }
-    if selector == "cancelOperation:" && host.active_modal().is_some() {
+    if matches!(
+        selector,
+        "cancelOperation:" | "insertNewline:" | "insertNewlineIgnoringFieldEditor:"
+    ) && host.active_modal().is_some()
+    {
         return host.key(ui::KeyEvent {
-            key: ui::Key::Escape,
+            key: if selector == "cancelOperation:" {
+                ui::Key::Escape
+            } else {
+                ui::Key::Enter
+            },
             down: true,
             repeat: false,
             modifiers: Default::default(),

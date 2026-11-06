@@ -33,7 +33,7 @@ overall goal complete while an in-scope item remains open.
 | State and descriptions | Reactive bindings, keys, macro conditions/repetition, host identity and inventory mapping | Ergonomic coverage of remaining component behaviors |
 | Layout and basic controls | Inventory, constrained layout, rich text, style coverage and two-axis scrolling verified | Final cross-component visual/semantic audit in M5/M8 |
 | Editing | Shared buffer, visual navigation/gestures, search/password/numeric policies and held steppers | Localization/value-control expansion in M6; final interactive IME audit in M5 |
-| Presentation | Retained splits, hierarchical menus/split actions, configured portals/help, nested focus scopes, retained tabs and validated wizard flows | Alert and sheet completion transactions |
+| Presentation | Retained splits/tabs/wizards, hierarchical menus, configured portals, transactional alerts and native sheets | Final interactive and visible desktop audits in M5/M8 |
 | Collections | Fixed-height virtualization, keyed selection, basic trees/tables, cell conflict checks | Lazy tree lifecycle, cell/column interactions, richer selection and semantics |
 | Values and tooling | Typed drafts, sRGB/hex, calendar, ISO/zoned editing, picking/width overrides | Complete value-control policies and inspector/Lab coverage |
 | Verification | Core/CPU tests and native input/accessibility protocol tests | Interactive audits, final visible GPU/full-screen runs and repeatable checks |
@@ -176,13 +176,13 @@ Completion record:
 - [x] **M3.3 Overlay policy:** configurable placement, sizing, viewport fitting, focus preservation and dismissal callbacks for popovers/tooltips/context menus, including nested scopes and owner removal.
 - [x] **M3.4 Tabs:** stable page identity, enabled tabs, keyboard navigation and restoration of editor history, selection, scroll and focus after switching pages. Application model state alone does not satisfy this item.
 - [x] **M3.5 Wizards:** stable step IDs, validation that can block navigation, back/review policy, finish/cancel/change callbacks and valid behavior for empty/changed step sets.
-- [ ] **M3.6 Alerts and sheets:** an explicit result/completion transaction with default/cancel/destructive actions; exactly-once completion through action, Escape, dismiss, close and destruction. Demonstrate native parent-sheet isolation and focus restoration.
+- [x] **M3.6 Alerts and sheets:** an explicit result/completion transaction with default/cancel/destructive actions; exactly-once completion through action, Escape, dismiss, close and destruction. Demonstrate native parent-sheet isolation and focus restoration.
 
 Evidence: extend the workspace example with a nested menu, retained tab editor and
 confirmation sheet; focused interaction/lifecycle tests. Main implementation:
 [presentation](../rust/components/src/presentation.rs), [native mounting](../rust/src/macos/components/mod.rs).
 
-Completion record (in progress):
+Completion record:
 
 - M3.1: dedicated `Split`/divider nodes replace the ratio-slider composition;
   `split_view(&ratio, first, second)` remains supported. `Split::new`/`bound`,
@@ -253,7 +253,7 @@ Completion record (in progress):
   Control-Tab pass. Workspace tests, strict Clippy and portable compilation pass;
   dark/light `m3_tabs` previews inspected and native smoke passes. Final interactive
   auditing remains M5.
-- M3.5: `Wizard`/`WizardStep` provide stable-ID flow definitions, pure reactive
+- M3.5 (`eb69c35`): `Wizard`/`WizardStep` provide stable-ID flow definitions, pure reactive
   validation, guarded Next/Finish and independent Back/review/final-validation
   policies. Finish/cancel/change callbacks run outside host borrows and only accepted
   binding transitions report changes; normalized/rejected writes and reentrancy are
@@ -270,7 +270,29 @@ Completion record (in progress):
   accepted-change and finish/cancel callbacks pass. Workspace tests, strict Clippy,
   portable compilation, dark/light inspected `m3_wizard` previews and native smoke
   pass. Final interactive auditing remains M5.
-- M3.6 remains open.
+- M3.6: single-use `Alert`/`AlertResult` transactions validate stable action IDs
+  and default/cancel/destructive roles. Result publication precedes exactly-once
+  completion; action, Escape, programmatic dismissal, close, owner removal, unmount
+  and destruction share that gate. Return only invokes the enabled default; marked
+  text commits first without submission, and multiline editing keeps Return.
+- `Surface::show_sheet(alert, body_builder)` retains a native parent-modal dialog,
+  releases it before application completion, blocks parent commands/input/retained
+  accessibility actions and restores the native responder and logical focus.
+  `view_with_surface` supplies component action context without weak-handle setup.
+  Native default/cancel accessibility attributes and stale-object guards are covered.
+- Evidence: seven portable transaction/input/lifetime tests; dedicated native sheet
+  checks cover IME, actions, isolation, actual native-responder restoration, Escape,
+  dismissal, unmount, close, parent destruction and application teardown. Existing
+  native component protocol tests pass. Workspace tests, strict Clippy and portable
+  compilation pass. `m3_alerts` demonstrates overlays and `--sheet` demonstrates
+  native sheets; dark/light overlay and sheet-content previews inspected, native
+  sheet smoke passes.
+- Verification limits: the foreground key-window audit could not establish another
+  key window; it is **unverified**, not a pass. Re-run
+  `SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test sheets -- --foreground` on an active
+  desktop in M8. The broader native desktop suite also stopped at its visible Metal
+  frame prerequisite (`active=false`, occlusion 8192). M5 interactive audits and
+  M8 visible rendering/activation evidence remain open.
 
 
 ## M4 — Collections and structured editing

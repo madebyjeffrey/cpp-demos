@@ -88,6 +88,12 @@ See the [tab contracts](../rust/components/README.md#completion-m3--retained-tab
 `Wizard` owns step policy and callbacks; `wizard_view(&model, pages)` retains page
 content. See the [wizard contracts](../rust/components/README.md#completion-m3--validated-wizards).
 
+`cargo run --example m3_alerts` demonstrates single-use alert transactions; add
+`--sheet` for a native parent-modal sheet. `Alert::view` supplies an overlay and
+`surface.show_sheet(alert, body_builder)` owns the native dialog through completion.
+Use `view_with_surface` when component actions need window context. See the
+[alert contracts](../rust/components/README.md#completion-m3--alert-transactions-and-native-sheets).
+
 `view!` supports ordinary expressions, `if`/`else`, keyed `for` loops, custom
 functions returning `View`, and `embed(view)` for an already-built value. Unknown
 properties fail compilation. Use stable keys for reordered items; unkeyed identity

@@ -405,13 +405,18 @@ impl Renderer {
                 }
                 Kind::Panel | Kind::GroupBox => bg = bg.or(Some(theme.panel)),
                 Kind::Button | Kind::Tab | Kind::Toggle | Kind::Segment | Kind::CollectionRow => {
-                    bg = bg.or(Some(if n.value.selected() || n.pressed {
-                        theme.selected
-                    } else if n.hovered {
-                        theme.border
-                    } else {
-                        theme.panel
-                    }))
+                    bg = bg.or(Some(
+                        if n.value.selected()
+                            || n.pressed
+                            || n.alert_role == Some(AlertActionRole::Default)
+                        {
+                            theme.selected
+                        } else if n.hovered {
+                            theme.border
+                        } else {
+                            theme.panel
+                        },
+                    ))
                 }
                 Kind::TextField => bg = bg.or(Some(theme.field)),
                 _ => (),
@@ -426,7 +431,17 @@ impl Renderer {
                 | Kind::Toggle
                 | Kind::Segment
                 | Kind::TextField
-                | Kind::GroupBox => round(canvas, b.inset(0.5), n.style.radius, theme.border, true),
+                | Kind::GroupBox => round(
+                    canvas,
+                    b.inset(0.5),
+                    n.style.radius,
+                    match n.alert_role {
+                        Some(AlertActionRole::Default) => n.accent,
+                        Some(AlertActionRole::Destructive) => 0xffe85555,
+                        _ => theme.border,
+                    },
+                    true,
+                ),
                 Kind::CheckBox | Kind::Radio => {
                     let r = Rect::new(b.x + 2., b.y + (b.height - 18.) / 2., 18., 18.);
                     let selected = n.value.selected();
