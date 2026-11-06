@@ -168,6 +168,7 @@ pub(super) struct TableData {
     options: State<TableOptions>,
     sort: State<Vec<SortDescriptor>>,
     cells: State<Cells>,
+    selection_version: Cell<u64>,
     on_sort: RefCell<Option<SortHandler>>,
     notifying: Cell<bool>,
     pub active: State<Option<Rc<super::table_edit::EditSession>>>,
@@ -189,6 +190,32 @@ pub struct CellEdit {
     pub(super) value_token: u64,
 }
 impl TableModel {
+    fn set_cells(&self, cells: Cells) {
+        crate::state::check_write();
+        if self.0.cells.with(|old| old.selected != cells.selected) {
+            self.0
+                .selection_version
+                .set(self.0.selection_version.get().wrapping_add(1));
+        }
+        self.0.cells.set(cells);
+    }
+    pub fn version(&self) -> crate::CollectionVersion {
+        let list = self.0.list.version();
+        let _ = self.0.cells.version();
+        crate::CollectionVersion {
+            identity: list.identity,
+            content: list
+                .content
+                .wrapping_add(self.0.columns.version())
+                .wrapping_add(self.0.sort.version()),
+            selection: if self.options().selection_mode == TableSelectionMode::Rows {
+                list.selection
+            } else {
+                self.0.selection_version.get()
+            },
+        }
+    }
+
     /// Positional convenience for simple string tables; columns get `column-N` IDs.
     pub fn new(headers: Vec<String>, rows: Vec<ListItem>) -> Self {
         let columns: Vec<_> = headers
@@ -255,6 +282,7 @@ impl TableModel {
             options: State::new(options),
             sort: State::new(vec![]),
             cells: State::new(Cells::default()),
+            selection_version: Cell::new(0),
             on_sort: RefCell::new(None),
             notifying: Cell::new(false),
             active: State::new(None),
@@ -638,7 +666,7 @@ impl TableModel {
         if cells.anchor.as_ref().is_some_and(|c| !self.enabled(c)) {
             cells.anchor = None;
         }
-        self.0.cells.set(cells);
+        self.set_cells(cells);
     }
     pub fn selection(&self) -> TableSelection {
         if self.options().selection_mode == TableSelectionMode::Rows {
@@ -724,7 +752,7 @@ impl TableModel {
                     cells.anchor = Some(anchor.clone());
                 }
                 cells.selected = selection.cells;
-                self.0.cells.set(cells);
+                self.set_cells(cells);
             }
         });
         Ok(())
@@ -760,7 +788,7 @@ impl TableModel {
             let mut cells = self.0.cells.get();
             cells.selected.clear();
             cells.anchor = None;
-            self.0.cells.set(cells);
+            self.set_cells(cells);
             self.prune_cells();
         });
     }
@@ -768,7 +796,7 @@ impl TableModel {
         self.0.list.clear_selection();
         let mut c = self.0.cells.get();
         c.selected.clear();
-        self.0.cells.set(c);
+        self.set_cells(c);
     }
     pub fn select_row(&self, key: &str, operation: ListSelection) -> bool {
         if self.options().selection_mode != TableSelectionMode::Rows {
@@ -829,7 +857,7 @@ impl TableModel {
         s.cursor = Some(cell.clone());
         crate::state::batch(|| {
             self.0.list.focus_key(&cell.row);
-            self.0.cells.set(s);
+            self.set_cells(s);
         });
         true
     }
@@ -853,7 +881,7 @@ impl TableModel {
                 }
             }
         }
-        self.0.cells.set(cells);
+        self.set_cells(cells);
         true
     }
     pub fn begin_edit(&self, key: &str, column: usize) -> Option<CellEdit> {

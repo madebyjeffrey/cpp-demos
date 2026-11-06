@@ -16,7 +16,7 @@ pub(super) enum Part {
     Cell(TableCell, u64, u64),
 }
 impl Part {
-    fn identity(&self, root: NodeId) -> (NodeId, u8, u64, u64) {
+    pub(super) fn identity(&self, root: NodeId) -> (NodeId, u8, u64, u64) {
         match self {
             Self::Headers => (root, 4, 0, 0),
             Self::Row(_, r) => (root, 0, *r, 0),
@@ -25,7 +25,7 @@ impl Part {
             Self::Cell(_, r, c) => (root, 3, *r, *c),
         }
     }
-    fn valid(&self, t: &TableModel) -> bool {
+    pub(super) fn valid(&self, t: &TableModel) -> bool {
         match self {
             Self::Headers => true,
             Self::Row(k, r) => t.row_token(k) == Some(*r),
@@ -50,6 +50,7 @@ pub(super) fn entry(owner: Weak<Mounted>, root: NodeId, part: Part) -> Retained<
     {
         return any(v);
     }
+    let spec = super::notification_state::Target::Table(root, part.clone());
     let a = Entry::alloc(MainThreadMarker::new().unwrap()).set_ivars(EntryIvars {
         owner: owner.clone(),
         root,
@@ -60,6 +61,7 @@ pub(super) fn entry(owner: Weak<Mounted>, root: NodeId, part: Part) -> Retained<
         m.table_cache
             .borrow_mut()
             .insert(identity, objc2::rc::Weak::from_retained(&value));
+        m.prime_notification(spec);
     }
     any(value)
 }
@@ -178,6 +180,9 @@ impl Drop for EntryIvars {
             && let Ok(mut c) = m.table_cache.try_borrow_mut()
         {
             c.remove(&self.part.identity(self.root));
+            m.forget_notification(super::notification_state::Key::Table(
+                self.part.identity(self.root),
+            ));
         }
     }
 }
@@ -228,6 +233,9 @@ define_class!(
     }
 );
 impl Entry {
+    pub(super) fn target(&self) -> super::notification_state::Target {
+        super::notification_state::Target::Table(self.ivars().root, self.ivars().part.clone())
+    }
     fn with<T>(
         &self,
         f: impl FnOnce(&Mounted, &Surface, &Node, &Node, &TableModel, &[Node]) -> T,

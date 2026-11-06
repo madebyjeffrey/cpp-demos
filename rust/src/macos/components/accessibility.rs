@@ -5,7 +5,7 @@ fn any<T: Message>(value: Retained<T>) -> Retained<AnyObject> {
     // SAFETY: Upcast a live Objective-C object to id.
     unsafe { Retained::cast_unchecked(value) }
 }
-fn semantic(n: &Node) -> bool {
+pub(super) fn semantic(n: &Node) -> bool {
     if n.table_root.is_some() {
         return !n.hidden;
     }
@@ -92,6 +92,7 @@ pub(super) fn element(m: &Mounted, id: NodeId) -> Retained<Element> {
     // SAFETY: NSAccessibilityElement's designated NSObject initializer; ivars are initialized.
     let element: Retained<Element> = unsafe { msg_send![super(allocated), init] };
     m.cache.borrow_mut().insert(id, element.clone());
+    m.prime_notification(super::notification_state::Target::Node(id));
     element
 }
 pub(super) fn list(
@@ -122,28 +123,36 @@ pub(crate) fn children(s: &Rc<SurfaceState>) -> Option<Retained<NSArray<AnyObjec
 }
 pub(crate) fn focused(s: &Rc<SurfaceState>) -> Option<Retained<AnyObject>> {
     let m = s.components.borrow().clone()?;
-    let owner = Rc::downgrade(&m);
-    m.run(|m, _| {
-        Ok(m.host.focused().map(|id| {
-            let nodes = m.host.snapshot().unwrap_or_default();
-            if let Some(value) = super::table_accessibility::logical(m, id, true) {
-                return value;
-            }
-            if let Some(node) = nodes.iter().find(|n| n.id == id)
-                && let Some(tree) = &node.tree_model
-                && let Some(info) = tree.cursor().and_then(|key| tree.row(&key))
-            {
-                return any(super::collection_accessibility::row(
-                    owner.clone(),
-                    node.id,
-                    info.item.key,
-                    info.token,
-                ));
-            }
-            super::collection_accessibility::logical(m, id).unwrap_or_else(|| any(element(m, id)))
-        }))
-    })
-    .flatten()
+    m.run(|m, _| Ok(focused_element(m))).flatten()
+}
+pub(super) fn focused_element(m: &Mounted) -> Option<Retained<AnyObject>> {
+    let id = m.host.focused()?;
+    let nodes = m.host.snapshot().ok()?;
+    let n = nodes.iter().find(|n| {
+        n.id == id && n.focused && !n.hidden && super::control_accessibility::readable(m, n, &nodes)
+    })?;
+    if let Some(value) = super::table_accessibility::logical(m, id, true) {
+        return Some(value);
+    }
+    if let Some(tree) = &n.tree_model
+        && let Some(info) = tree.cursor().and_then(|key| tree.row(&key))
+    {
+        let owner = m
+            .surface
+            .upgrade()?
+            .state
+            .components
+            .borrow()
+            .as_ref()
+            .map(Rc::downgrade)?;
+        return Some(any(super::collection_accessibility::row(
+            owner,
+            n.id,
+            info.item.key,
+            info.token,
+        )));
+    }
+    Some(super::collection_accessibility::logical(m, id).unwrap_or_else(|| any(element(m, id))))
 }
 pub(crate) fn hit_test(s: &Rc<SurfaceState>, point: NSPoint) -> Option<Retained<AnyObject>> {
     let m = s.components.borrow().clone()?;
@@ -306,7 +315,7 @@ define_class!(
         fn children(&self) -> Option<Retained<NSArray<AnyObject>>> {
             self.table_array("AXChildren",0,usize::MAX).or_else(||self.with(|m, _, n| {
                 if let Some(model) = &n.collection {
-                    let range = if n.tree_model.is_some(){0..model.len()}else{model.visible_range()};
+                    let range = 0..model.len();
                     Ok(super::collection_accessibility::rows(
                         self.ivars().owner.clone(),
                         n,
@@ -336,12 +345,13 @@ define_class!(
         fn contents(&self)->Option<Retained<NSArray<AnyObject>>>{self.tab_elements(2)}
         #[unsafe(method_id(accessibilityRows))]
         fn rows(&self)->Option<Retained<NSArray<AnyObject>>>{self.table_array("AXRows",0,usize::MAX).or_else(||self.rows_all())}
+        #[unsafe(method_id(accessibilityVisibleChildren))] fn visible_children(&self)->Option<Retained<NSArray<AnyObject>>>{self.rows_visible(0,usize::MAX)}
         #[unsafe(method_id(accessibilityVisibleRows))]
         fn visible_rows(&self)->Option<Retained<NSArray<AnyObject>>>{self.table_array("AXVisibleRows",0,usize::MAX).or_else(||self.rows_visible(0,usize::MAX))}
         #[unsafe(method_id(accessibilitySelectedRows))]
         fn selected_rows(&self)->Option<Retained<NSArray<AnyObject>>>{self.table_array("AXSelectedRows",0,usize::MAX).or_else(||self.collection_selected(0,usize::MAX))}
         #[unsafe(method(setAccessibilitySelectedRows:))]
-        fn set_selected_rows(&self,values:Option<&NSArray<AnyObject>>){if self.node().is_some_and(|n|n.table_root.is_some()){self.table_selection(values,false)}else{self.set_tree_selection(values)}}
+        fn set_selected_rows(&self,values:Option<&NSArray<AnyObject>>){if self.node().is_some_and(|n|n.table_root.is_some()){self.table_selection(values,false)}else{self.set_collection_selection(values)}}
         #[unsafe(method_id(accessibilityHeader))] fn header(&self)->Option<Retained<AnyObject>>{self.with(|_,_,n|Ok(n.table_root.as_ref().map(|_|super::table_accessibility::entry(self.ivars().owner.clone(),n.id,super::table_accessibility::Part::Headers)))).flatten()}
         #[unsafe(method_id(accessibilitySelectedColumns))] fn selected_columns(&self)->Option<Retained<NSArray<AnyObject>>>{self.with(|_,_,n|Ok(n.table_root.as_ref().map(|_|NSArray::new()))).flatten()}
         #[unsafe(method(setAccessibilitySelectedColumns:))] fn set_selected_columns(&self,_values:Option<&NSArray<AnyObject>>){}
@@ -559,7 +569,7 @@ define_class!(
                     b"setAccessibilitySelectedColumns:"=>false,
                     b"setAccessibilitySelectedRows:" if n.table_root.is_some()=>n.enabled&&n.table_root.as_ref().is_some_and(|t|t.options().selection_mode==ui::TableSelectionMode::Rows),
                     b"setAccessibilitySelectedCells:"=>n.enabled&&n.table_root.as_ref().is_some_and(|t|t.options().selection_mode==ui::TableSelectionMode::Cells),
-                    b"setAccessibilitySelectedRows:"=>n.enabled&&n.tree_model.is_some(),
+                    b"setAccessibilitySelectedRows:"=>n.enabled&&n.collection.is_some()&&n.combo_popup.is_none(),
                     b"accessibilityPerformPress" => {
                         n.enabled
                             && (!n.read_only||matches!(n.kind,Kind::Button|Kind::TextField))
@@ -597,7 +607,7 @@ define_class!(
             if matches!(name.as_str(), "AXChildren" | "AXRows") {
                 self.node().and_then(|n|n.collection).map_or_else(||self.accessibilityChildren().map_or(0,|v|v.len()),|m|m.len())
             } else if name=="AXSelectedRows"||name=="AXSelectedChildren" {self.node().and_then(|n|n.collection).map_or_else(||self.accessibilitySelectedChildren().map_or(0,|a|a.len()),|m|m.selection_count())}
-            else if name=="AXVisibleRows" {self.node().and_then(|n|n.collection).map_or(0,|m|super::collection_accessibility::viewport(&m).len())}
+            else if name=="AXVisibleRows"||name=="AXVisibleChildren" {self.node().and_then(|n|n.collection).map_or(0,|m|super::collection_accessibility::viewport(&m).len())}
             else {
                 0
             }
@@ -613,7 +623,7 @@ define_class!(
             self.table_array(&name,index,count).or_else(||self.control_range(&name,index,count)).or_else(||{if matches!(name.as_str(), "AXChildren" | "AXRows") {
                 self.row_array(index, count)
             } else if name=="AXSelectedRows"||name=="AXSelectedChildren" {self.collection_selected(index,count)}
-            else if name=="AXVisibleRows" {self.rows_visible(index,count)}
+            else if name=="AXVisibleRows"||name=="AXVisibleChildren" {self.rows_visible(index,count)}
             else {
                 None
             }})

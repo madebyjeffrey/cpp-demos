@@ -92,3 +92,8 @@ harness = false
 name = "accessibility_lifecycle"
 path = "tests/accessibility_lifecycle.rs"
 harness = false
+
+[[test]]
+name = "accessibility_notifications"
+path = "tests/accessibility_notifications.rs"
+harness = false

@@ -1695,6 +1695,8 @@ define_class!(
         fn became_key(&self, _: &NSNotification) { with_surface(&self.ivars().state.borrow().clone(),|s| { activate_menu(s); emit(s,Event::Focus(true)); update_pause(s); }); }
         #[unsafe(method(windowDidResignKey:))]
         fn resigned_key(&self, _: &NSNotification) { with_surface(&self.ivars().state.borrow().clone(),|s| { emit(s,Event::Focus(false)); deactivate_input(s); }); }
+        #[unsafe(method(windowDidMove:))]
+        fn moved(&self,_:&NSNotification){with_surface(&self.ivars().state.borrow().clone(),|s|components::geometry_changed(s));}
         #[unsafe(method(windowDidResize:))]
         fn resized(&self, _: &NSNotification) { with_surface(&self.ivars().state.borrow().clone(),|s| { if sync_size(s) { render(s,true); } update_pause(s); }); }
         #[unsafe(method(windowDidChangeBackingProperties:))]

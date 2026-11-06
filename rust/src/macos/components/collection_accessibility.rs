@@ -35,6 +35,7 @@ pub(super) fn row(owner: Weak<Mounted>, parent: NodeId, key: String, token: u64)
     {
         return value;
     }
+    let spec = super::notification_state::Target::Row(parent, key.clone(), token);
     let allocated = Row::alloc(MainThreadMarker::new().unwrap()).set_ivars(RowIvars {
         owner: owner.clone(),
         parent,
@@ -46,24 +47,33 @@ pub(super) fn row(owner: Weak<Mounted>, parent: NodeId, key: String, token: u64)
         m.row_cache
             .borrow_mut()
             .insert(identity, objc2::rc::Weak::from_retained(&value));
+        m.prime_notification(spec);
     }
     value
 }
 
 pub(super) fn logical(m: &Mounted, id: NodeId) -> Option<Retained<AnyObject>> {
     let nodes = m.host.snapshot().ok()?;
+    let original = nodes.iter().find(|n| n.id == id)?;
+    if original.key.as_deref() == Some("$retry") {
+        return None;
+    }
     let mut current = Some(id);
     while let Some(id) = current {
-        let node = nodes.iter().find(|n| n.id == id)?;
-        if node.tree_model.is_some() {
+        let n = nodes.iter().find(|n| n.id == id)?;
+        if n.collection.is_some() {
             return None;
         }
-        if let Some(item) = &node.tree_item {
-            let parent = node.parent?;
-            let root = nodes
-                .iter()
-                .find(|n| n.id == parent && n.tree_model.is_some())?;
-            let token = root.tree_model.as_ref()?.row(&item.key)?.token;
+        if n.kind == ui::Kind::CollectionRow
+            && let Some(root) = n
+                .parent
+                .and_then(|p| nodes.iter().find(|n| n.id == p && n.collection.is_some()))
+        {
+            if root.tree_model.is_none() && n.id != original.id {
+                return None;
+            }
+            let key = n.key.as_ref()?;
+            let token = root.collection.as_ref()?.item_token(key)?;
             let owner = m
                 .surface
                 .upgrade()?
@@ -72,9 +82,9 @@ pub(super) fn logical(m: &Mounted, id: NodeId) -> Option<Retained<AnyObject>> {
                 .borrow()
                 .as_ref()
                 .map(Rc::downgrade)?;
-            return Some(any(row(owner, root.id, item.key.clone(), token)));
+            return Some(any(row(owner, root.id, key.clone(), token)));
         }
-        current = node.parent;
+        current = n.parent;
     }
     None
 }
@@ -99,6 +109,7 @@ impl Drop for RowIvars {
             && let Ok(mut cache) = owner.row_cache.try_borrow_mut()
         {
             cache.remove(&(self.parent, self.token));
+            owner.forget_notification(super::notification_state::Key::Row(self.parent, self.token));
         }
     }
 }
@@ -145,9 +156,9 @@ define_class!(
                 .unwrap_or(false)
         }
         #[unsafe(method(isAccessibilityFocused))]
-        fn focused(&self)->bool{self.with(|m,_,node,model,item|model.cursor().as_deref()==Some(item.key.as_str())&&m.host.snapshot().is_ok_and(|nodes|nodes.iter().any(|n|n.focused&&(n.id==node.id||n.tree_item.as_ref().is_some_and(|i|i.key==item.key)&&n.parent==Some(node.id))))).unwrap_or(false)}
+        fn focused(&self)->bool{self.with(|m,_,node,model,item|model.cursor().as_deref()==Some(item.key.as_str())&&m.host.snapshot().is_ok_and(|nodes|nodes.iter().any(|n|n.focused&&(n.id==node.id||n.kind==ui::Kind::CollectionRow&&n.key.as_deref()==Some(item.key.as_str())&&n.parent==Some(node.id))))).unwrap_or(false)}
         #[unsafe(method(setAccessibilitySelected:))]
-        fn select(&self,value:bool){self.with(|m,_,node,_,item|{if let Some(tree)=&node.tree_model {let mut keys=tree.selected();if value {if tree.tree_options().selection==ui::ListSelectionMode::Single{keys.clear();}keys.insert(item.key.clone());}else{keys.remove(&item.key);}let _=m.host.set_tree_selection(node.id,&keys.into_iter().collect::<Vec<_>>());}});}
+        fn select(&self,value:bool){self.with(|m,_,node,model,item|{let mut keys=model.selected();if value{if model.list_options().selection==ui::ListSelectionMode::Single{keys.clear();}keys.insert(item.key.clone());}else{keys.remove(&item.key);}let _=m.host.set_collection_selection(node.id,&keys.into_iter().collect::<Vec<_>>());});}
         #[unsafe(method(isAccessibilityDisclosed))]
         fn disclosed(&self)->bool{self.tree_info().is_some_and(|r|r.item.expanded)}
         #[unsafe(method(isAccessibilityExpanded))]
@@ -171,13 +182,14 @@ define_class!(
         #[unsafe(method_id(accessibilityChildren))]
         fn children(&self)->Option<Retained<NSArray<AnyObject>>>{self.with(|m,_,node,_,item|{
             let nodes=m.host.snapshot().unwrap_or_default();let realized=nodes.iter().find(|n|n.parent==Some(node.id)&&n.key.as_deref()==Some(item.key.as_str()));
+            if node.tree_model.is_none(){return realized.map_or_else(NSArray::new,|r|super::accessibility::list(m,Some(r.id)).unwrap_or_else(|_|NSArray::new()))}
             let retry=realized.and_then(|root|nodes.iter().find(|n|n.key.as_deref()==Some("$retry")&&within(&nodes,n.id,root.id)));
             let values:Vec<_>=retry.map(|n|vec![any(element(m,n.id))]).unwrap_or_default();NSArray::from_retained_slice(&values)
         })}
         #[unsafe(method(isAccessibilitySelectorAllowed:))]
         unsafe fn allowed(&self,selector:objc2::runtime::Sel)->bool{self.with(|_,_,node,_,item|{
             let info=node.tree_model.as_ref().and_then(|t|t.row(&item.key));let enabled=node.enabled&&item.enabled;
-            match selector.name().to_bytes(){b"setAccessibilityDisclosed:"|b"setAccessibilityExpanded:"=>enabled&&info.as_ref().is_some_and(|r|r.item.expandable),b"isAccessibilityDisclosed"|b"isAccessibilityExpanded"|b"accessibilityDisclosedRows"=>info.as_ref().is_some_and(|r|r.item.expandable),b"accessibilityPerformConfirm"=>enabled&&info.is_some_and(|r|r.activatable),b"setAccessibilitySelected:"=>enabled&&info.is_some(),b"accessibilityPerformPress"|b"setAccessibilityFocused:"=>enabled,_=>true}
+            match selector.name().to_bytes(){b"setAccessibilityDisclosed:"|b"setAccessibilityExpanded:"=>enabled&&info.as_ref().is_some_and(|r|r.item.expandable),b"isAccessibilityDisclosed"|b"isAccessibilityExpanded"|b"accessibilityDisclosedRows"=>info.as_ref().is_some_and(|r|r.item.expandable),b"accessibilityPerformConfirm"=>enabled&&info.is_some_and(|r|r.activatable),b"setAccessibilitySelected:"=>enabled&&node.combo_popup.is_none()&&node.table_model.is_none(),b"accessibilityPerformPress"|b"setAccessibilityFocused:"=>enabled,_=>true}
         }).unwrap_or(false)}
         #[unsafe(method_id(accessibilityParent))]
         fn parent(&self) -> Option<Retained<AnyObject>> {
@@ -216,7 +228,7 @@ define_class!(
         fn focus(&self, value: bool) {
             if value {
                 self.with(|m,_,node,model,item|{
-                    if node.tree_model.is_some(){m.host.select_collection_item_with(node.id,model.index_of(&item.key).unwrap(),ui::ListSelection::Focus).unwrap_or(false)}else{m.host.select_collection_item(node.id,model.index_of(&item.key).unwrap(),false).unwrap_or(false)}
+                    m.host.select_collection_item_with(node.id,model.index_of(&item.key).unwrap(),ui::ListSelection::Focus).unwrap_or(false)
                 });
             }
         }
@@ -225,10 +237,17 @@ define_class!(
         #[unsafe(method(accessibilityArrayAttributeCount:))]
         fn count_attribute(&self,attribute:&NSString)->usize {if attribute.to_string()=="AXDisclosedRows"{self.with(|_,_,node,_,item|node.tree_model.as_ref().map_or(0,|t|t.disclosed_count(&item.key))).unwrap_or(0)}else if attribute.to_string()=="AXChildren"{self.accessibilityChildren().map_or(0,|a|a.len())}else{0}}
         #[unsafe(method_id(accessibilityArrayAttributeValues:index:maxCount:))]
-        fn range_attribute(&self,attribute:&NSString,index:usize,count:usize)->Option<Retained<NSArray<AnyObject>>>{if attribute.to_string()=="AXDisclosedRows"{self.disclosed_array(index,count)}else{None}}
+        fn range_attribute(&self,attribute:&NSString,index:usize,count:usize)->Option<Retained<NSArray<AnyObject>>>{if attribute.to_string()=="AXDisclosedRows"{self.disclosed_array(index,count)}else if attribute.to_string()=="AXChildren"{self.accessibilityChildren().map(|a|NSArray::from_retained_slice(&a.iter().skip(index).take(count).collect::<Vec<_>>()))}else{None}}
     }
 );
 impl Row {
+    pub(super) fn target(&self) -> super::notification_state::Target {
+        super::notification_state::Target::Row(
+            self.ivars().parent,
+            self.ivars().key.clone(),
+            self.ivars().token,
+        )
+    }
     pub(super) fn selection_key(
         &self,
         m: &Mounted,
@@ -342,9 +361,9 @@ impl Element {
         })
         .flatten()
     }
-    pub(super) fn set_tree_selection(&self, values: Option<&NSArray<AnyObject>>) {
+    pub(super) fn set_collection_selection(&self, values: Option<&NSArray<AnyObject>>) {
         self.with(|m, _, node| {
-            if node.tree_model.is_none() {
+            if node.collection.is_none() {
                 return Ok(false);
             }
             let Some(model) = &node.collection else {
@@ -362,7 +381,9 @@ impl Element {
                     keys.push(key);
                 }
             }
-            Ok(m.host.set_tree_selection(node.id, &keys).unwrap_or(false))
+            Ok(m.host
+                .set_collection_selection(node.id, &keys)
+                .unwrap_or(false))
         });
     }
     pub(super) fn row_array(

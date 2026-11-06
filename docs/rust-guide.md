@@ -198,5 +198,6 @@ rich inline paragraphs, constrained reflow and both-axis scrolling with draggabl
 bars. Split views have draggable, keyboard-adjustable dividers with collapse and
 retained pane state. Color controls currently expose sRGB channels. These interfaces do not claim full C++ behavior or pixel parity.
 The [completion checklist](rust-completion-checklist.md) tracks remaining work,
-including localized editing, combined native notifications and an actual VoiceOver/IME audit.
+including localized editing and an actual VoiceOver/IME audit. Native notification
+targets, bounded snapshots and lifecycle contracts have dedicated AppKit tests.
 Variable-height virtualization is a separate extension.

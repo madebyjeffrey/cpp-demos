@@ -1088,6 +1088,12 @@ impl TreeModel {
     pub fn row_snapshot(&self) -> crate::ListSnapshot {
         self.0.list.snapshot()
     }
+    pub fn version(&self) -> crate::CollectionVersion {
+        crate::CollectionVersion {
+            content: self.0.data.version(),
+            ..self.0.list.version()
+        }
+    }
     pub fn set_selection(&self, keys: &[String]) -> Result<(), Error> {
         crate::state::check_write();
         let selected = keys.iter().cloned().collect::<BTreeSet<_>>();

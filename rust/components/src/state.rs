@@ -152,6 +152,7 @@ pub(crate) fn read_only<T>(query: impl FnOnce() -> T) -> T {
 
 struct CellState<T> {
     value: RefCell<T>,
+    version: Cell<u64>,
     observers: RefCell<Vec<(Weak<Observer>, u64)>>,
 }
 impl<T> Dependency for CellState<T> {
@@ -180,6 +181,7 @@ impl<T: 'static> State<T> {
     pub fn new(value: T) -> Self {
         Self(Rc::new(CellState {
             value: RefCell::new(value),
+            version: Cell::new(0),
             observers: RefCell::new(Vec::new()),
         }))
     }
@@ -200,6 +202,10 @@ impl<T: 'static> State<T> {
         });
         read(&self.0.value.borrow())
     }
+    pub(crate) fn version(&self) -> u64 {
+        self.with(|_| ());
+        self.0.version.get()
+    }
     /// Publish a changed value. Equal writes do not invalidate hosts.
     pub fn set(&self, value: T)
     where
@@ -213,6 +219,7 @@ impl<T: 'static> State<T> {
             }
             std::mem::replace(&mut *previous, value)
         };
+        self.0.version.set(self.0.version.get().wrapping_add(1));
         let observers = self.0.observers.borrow().clone();
         let mut wakes = Vec::new();
         for (weak, epoch) in observers {

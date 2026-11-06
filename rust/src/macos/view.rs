@@ -14,6 +14,12 @@ define_class!(
     pub(super) struct ContentView;
     unsafe impl NSObjectProtocol for ContentView {}
     impl ContentView {
+        #[unsafe(method_id(scarsAccessibilityEvents))]
+        fn accessibility_events(&self)->Retained<NSArray<NSString>>{components::post_events()}
+        #[unsafe(method(scarsClearAccessibilityEvents))]
+        fn clear_accessibility_events(&self){components::clear_events()}
+        #[unsafe(method(scarsAccessibilitySnapshotCount))]
+        fn accessibility_snapshot_count(&self)->usize{with_surface(&self.weak(),|s|components::snapshot_count(s)).unwrap_or(0)}
         #[unsafe(method(scarsAccessibilityPostCount))]
         fn accessibility_posts(&self)->u64{components::post_count()}
 

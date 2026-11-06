@@ -1300,12 +1300,12 @@ selection, menu paths and cancellation scope/policy. Run native protocol/action 
 with `SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test control_accessibility --locked --offline`.
 They cover real roles/subroles, value/selection setters, validation/help, bounds,
 stepper links, tabs/split contents, menu identity/hierarchy, dialogs and color wells.
-Combined notifications and actual interactive VoiceOver/IME sessions remain M5.4/M5.5.
+Combined lifecycle/notification evidence is recorded below; interactive VoiceOver/IME sessions remain M5.5.
 
 The native mappings follow Apple's [accessibility protocol](https://developer.apple.com/documentation/appkit/nsaccessibilityprotocol)
 and [role/subrole definitions](https://developer.apple.com/documentation/appkit/nsaccessibility-swift.struct/subrole/toggle).
 
-## M5.4 progress — native identity and posting lifecycle
+## M5.4 — native identity and notifications
 
 A queried generic accessibility element is retained for its mounted node's lifetime,
 including hidden retained tab pages. The cache prunes retired node IDs, rather than
@@ -1323,20 +1323,31 @@ APIs in logical points. Native tests move/resize a real window, round-trip frame
 coordinates, verify UTF-16 emoji ranges and reject split surrogate ranges. The recorded
 run used actual backing scale 1; it does not establish the separate scale-2 audit.
 
-Posting now runs on a coalesced main-runloop task instead of the draw callback.
-Invalidation and native events schedule one weak-owner task; retired mounts and
-closed/sheet-blocked surfaces skip it. The native lifecycle suite verifies two model
-writes produce one AppKit post call while the window is hidden and draw count stays
-zero, idle ticks do not repost, and unmount cancels pending work. The internal
-`scarsAccessibilityPostCount` diagnostic counts calls to the real AppKit function;
-it does not prove receipt by an external accessibility client.
+Posting runs on a coalesced main-runloop task independently of drawing. Semantic
+snapshots contain mounted nodes and only the logical rows/cells an AX client has
+requested. Constant-space model stamps distinguish content and selection changes;
+focus-only movement preserves multiselection. Released logical proxies leave no
+snapshot entries. A 100,000-row test keeps fewer than 200 entries.
 
-Run `SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test accessibility_lifecycle --locked --offline`.
-The existing `m5_semantics` example demonstrates retained tab editing and scoped alert
-transitions without application-side native plumbing.
+AppKit receives value/title, text selection/composition, logical focus, row/cell/
+child selection, disclosure, row-count, geometry and destruction notifications.
+Layout posts include the standard changed-elements payload. Same-length password
+edits produce value changes without storing plaintext in notification snapshots or
+traces. Removed targets receive destruction once; hidden retained pages preserve
+identity. Unmount/close cancel pending posts. Custom list controls retain their own
+focus, text APIs and logical row parent.
 
-M5.4 remains open: granular selection/value/disclosure/row-count/destroyed notifications,
-logical focus targets, layout-change payloads and precise text/selection change
-classification still need implementation and evidence. Virtual datasets must not be
-fully enumerated for notification snapshots. External VoiceOver/IME sessions remain
-M5.5. Posting follows Apple's [notification API](https://developer.apple.com/documentation/appkit/nsaccessibility-swift.struct/notification/layoutchanged).
+Run these native contracts from `rust/`:
+
+```sh
+SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test accessibility_lifecycle --test accessibility_notifications --locked --offline
+cargo run --example m5_semantics --locked --offline
+```
+
+The example demonstrates retained tab editing and scoped alerts without native
+application plumbing. The lifecycle test verifies posts with zero draw callbacks;
+the notification suite checks exact names/targets, payload presence, bounded
+snapshots, idle quiescence and teardown. Internal diagnostics count calls to the
+real AppKit API; they do not establish external-client receipt. Actual VoiceOver/
+IME sessions at both backing scales remain M5.5. Layout payloads follow Apple's
+[notification API](https://developer.apple.com/documentation/appkit/nsaccessibility-swift.struct/notification/layoutchanged).

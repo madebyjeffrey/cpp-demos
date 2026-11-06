@@ -39,6 +39,7 @@ pub(super) fn next_token() -> u64 {
 }
 type Activation = Rc<dyn Fn(String)>;
 pub(super) struct Model {
+    id: u64,
     pub(super) items: State<Rc<Vec<ListItem>>>,
     index: RefCell<HashMap<String, usize>>,
     pub selected: State<BTreeSet<String>>,
@@ -57,6 +58,13 @@ pub(super) struct Model {
 }
 #[derive(Clone)]
 pub struct ListModel(pub(super) Rc<Model>);
+/// Constant-space change stamps for observers; querying never clones a selection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CollectionVersion {
+    pub identity: u64,
+    pub content: u64,
+    pub selection: u64,
+}
 impl PartialEq for ListModel {
     fn eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.0, &other.0)
@@ -64,6 +72,13 @@ impl PartialEq for ListModel {
 }
 impl Eq for ListModel {}
 impl ListModel {
+    pub fn version(&self) -> CollectionVersion {
+        CollectionVersion {
+            identity: self.0.id,
+            content: self.0.items.version(),
+            selection: self.0.selected.version(),
+        }
+    }
     /// Immutable row order/lifetimes without realizing controls or cloning the dataset.
     pub fn snapshot(&self) -> ListSnapshot {
         ListSnapshot {
@@ -77,6 +92,7 @@ impl ListModel {
             "Invalid row height"
         );
         let model = Self(Rc::new(Model {
+            id: next_token(),
             items: State::new(Rc::new(Vec::new())),
             index: RefCell::new(HashMap::new()),
             selected: State::new(BTreeSet::new()),
@@ -308,6 +324,27 @@ impl ListModel {
     }
     pub fn selected(&self) -> BTreeSet<String> {
         self.0.selected.get()
+    }
+    pub fn set_selection(&self, keys: &[String]) -> Result<(), crate::Error> {
+        crate::state::check_write();
+        let selected = keys.iter().cloned().collect::<BTreeSet<_>>();
+        if self.list_options().selection == ListSelectionMode::Single && selected.len() > 1
+            || selected.iter().any(|key| {
+                self.index_of(key)
+                    .and_then(|i| self.item(i))
+                    .is_none_or(|i| !i.enabled)
+            })
+        {
+            return Err(crate::Error("Collection selection must contain current enabled rows and respect the selection mode".into()));
+        }
+        crate::state::batch(|| {
+            self.restore_selection(
+                selected,
+                keys.last().cloned().or_else(|| self.cursor()),
+                keys.first().cloned().or_else(|| self.anchor()),
+            );
+        });
+        Ok(())
     }
     pub fn cursor(&self) -> Option<String> {
         self.0.cursor.get()

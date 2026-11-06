@@ -466,7 +466,7 @@ Implement semantics alongside M1–M4; this milestone closes their combined audi
 - [x] **M5.1 Tree semantics:** hierarchy, disclosure level, expanded/loading state and expand/collapse actions for logical offscreen items, with correct parent and selection relationships.
 - [x] **M5.2 Table semantics:** columns, cells, headers, row/cell selection, editing and sort information; indexed queries must remain bounded and avoid creating the full table.
 - [x] **M5.3 Control/presentation semantics:** correct menu, tab, split, alert, validation, help and value roles/states/actions, rather than exposing every composition merely as generic groups/buttons.
-- [ ] **M5.4 Lifecycle/notifications:** stable logical identity, native focus/selection/value/layout notifications and coordinate conversion; retained objects become inert after removal, unmount or close, including nested presentations.
+- [x] **M5.4 Lifecycle/notifications:** stable logical identity, native focus/selection/value/layout notifications and coordinate conversion; retained objects become inert after removal, unmount or close, including nested presentations.
 - [ ] **M5.5 Interactive audit:** record actual VoiceOver and IME sessions covering navigation, editing, popup/sheet transitions, password reveal and candidate placement at both backing scales. Fix issues found; keep unavailable checks open.
 
 Evidence: semantic snapshot tests, native protocol/action tests and a short manual
@@ -549,28 +549,46 @@ Completion record:
   tabs, selected children and splitters match their direct getters in native tests.
   Actual interactive/foreground and combined notification audits remain M5.4/M5.5/M8.
 
-M5.4 progress (unchecked):
+- M5.4: generic proxies survive hidden retained pages, use globally unique native
+  identifiers and retire on actual removal/unmount/close. Nested dialogs preserve
+  owner identity while suppressing inactive actions. Hit testing shares readable
+  modal scope; custom list controls retain logical row parentage and their own focus.
+- Main-runloop posting is coalesced independently of drawing. Bounded snapshots and
+  constant-space collection stamps distinguish same-count row/cell selection,
+  logical focus, content, disclosure, row counts, text values/ranges/composition,
+  title/geometry and destruction. Layout changes carry the standard changed-element
+  payload. Same-length password edits are detected without retained plaintext in
+  snapshots/traces. Retired targets receive destruction once; pending work cancels
+  on teardown. Released logical proxies remove their snapshot entries.
+- Evidence: three portable version tests, dedicated native lifecycle/notification
+  suites, existing native component/control/tree/table/sheet regressions, workspace
+  tests, strict Clippy, formatting, inventory mapping and portable Linux compilation
+  pass. A 100,000-row native list stays below 200 snapshot entries; 200 transient
+  range queries return that count to baseline. Native move/resize and UTF-16 emoji
+  coordinate round trips pass at actual backing scale 1. `m5_semantics` supplies the
+  runnable example; existing dark/light previews apply. The earlier identity/posting
+  checkpoint is `4df142a`. This proves AppKit emission, not external-client receipt.
 
-- Generic proxies now survive hidden retained pages and use globally unique native
-  identifiers; actual node retirement, unmount and close make held objects inert.
-  Nested dialogs preserve owner identity while suppressing inactive actions.
-  Hit testing rejects controls outside the active readable scope. Logical row/cell
-  objects also supply standard role descriptions.
-- AppKit frame conversion is verified on a real moved/resized window at actual
-  backing scale 1, including UTF-16 emoji rectangles and invalid surrogate ranges.
-  Retained proxies do not keep application callbacks alive after host teardown.
-- Posting is coalesced on the main runloop independently of drawing. The native
-  lifecycle test observes actual AppKit post calls with zero draw callbacks, checks
-  idle quiescence and cancellation after unmount. This proves emission, not receipt
-  by VoiceOver. `m5_semantics` remains the runnable example for tabs and dialogs.
-- Evidence: the dedicated native lifecycle suite and existing component/control/
-  tree/table native suites pass. Workspace tests, strict Clippy, formatting and
-  inventory mapping and native settings-example smoke pass.
-- Remaining closure: precise logical focus/selection/value targets and typed row/cell
-  selection, disclosure, row-count and destruction notifications; layout-change
-  payloads; distinct text-versus-selection diffs, including same-length secure edits.
-  Snapshot cost must stay bounded by mounted/observed objects rather than the full
-  virtual dataset. Actual external-client/backing-scale sessions remain M5.5.
+M5.5 interactive audit remains open. The current readiness probe reports an active
+screen and display-link callbacks, but no application/key-window ownership:
+
+```text
+active-displays=1 display-error=0 front=com.utmapp.UTM app-active=0 key-window=0 visible=1 callbacks=72 ready=0
+```
+
+Repeat on a foreground desktop at actual backing scales 1 and 2, recording scale,
+input source, actions and observed speech/candidate behavior:
+
+| Session | Runnable example | Required observation | Status |
+| --- | --- | --- | --- |
+| Navigation, selection and disclosure | `m4_tree`, `m4_table` | VoiceOver announces actual logical focus, selection, expansion and sort | Pending |
+| Editing, validation and password reveal | `m2_fields`, `m4_table_edit` | Speech reflects edits/errors without exposing masked secrets | Pending |
+| Popup and nested presentation transitions | `m5_semantics`, `m4_combo`, native sheets | Correct focus restoration, readable scope and announcement | Pending |
+| Actual input-method composition | `m2_editor`, `m4_table_edit`, native sheets | Candidate window follows caret through move/resize/scroll; commit/cancel work | Pending |
+
+Run examples with `cargo run --example NAME --locked --offline` from `rust/`.
+The sheet foreground harness is `SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test sheets --locked --offline -- --foreground`.
+Protocol composition tests and synthetic raster scales do not close this audit.
 
 ## M6 — Localization and complete value controls
 

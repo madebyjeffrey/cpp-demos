@@ -10,6 +10,37 @@ pub(crate) fn selection(modifiers: Modifiers) -> ListSelection {
     }
 }
 impl Host {
+    pub fn set_collection_selection(&self, parent: NodeId, keys: &[String]) -> Result<bool, Error> {
+        self.refresh()?;
+        if self.tree(parent).is_some() {
+            return self.set_tree_selection(parent, keys);
+        }
+        let Some(model) = self.list(parent) else {
+            return Ok(false);
+        };
+        // Tables and combo acceptance keep their own selection policy.
+        if self.table(parent).is_some()
+            || self
+                .0
+                .mounted
+                .borrow()
+                .nodes
+                .iter()
+                .any(|n| n.id == parent && n.combo_popup.is_some())
+        {
+            return Ok(false);
+        }
+        let inside = self
+            .focused()
+            .is_some_and(|id| Self::within(&self.0.mounted.borrow().nodes, id, parent));
+        model.set_selection(keys)?;
+        if inside && let Some(key) = model.cursor() {
+            model.reveal(model.index_of(&key).unwrap());
+            self.0.interaction.borrow_mut().pending_row = Some((parent, key));
+        }
+        self.redraw();
+        Ok(true)
+    }
     pub(crate) fn list(&self, id: NodeId) -> Option<ListModel> {
         self.0
             .mounted

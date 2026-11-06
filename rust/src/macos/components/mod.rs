@@ -5,7 +5,14 @@ mod collection_accessibility;
 mod control_accessibility;
 mod input;
 mod notification_dispatch;
-pub(crate) use notification_dispatch::post_count;
+mod notification_state;
+pub(crate) use notification_dispatch::{clear_events, post_count, post_events};
+pub(crate) fn snapshot_count(s: &SurfaceState) -> usize {
+    s.components
+        .borrow()
+        .as_ref()
+        .map_or(0, |m| m.notifications.borrow().snapshot.items.len())
+}
 mod row_array;
 mod table_accessibility;
 mod table_array;
@@ -27,9 +34,8 @@ pub(super) struct Mounted {
     >,
     table_cache: RefCell<table_accessibility::Cache>,
     notifications_pending: Cell<bool>,
-    generation: Cell<u64>,
-    focus: Cell<Option<ui::NodeId>>,
-    value: RefCell<String>,
+    notifications: RefCell<notification_state::Notifications>,
+    retired: RefCell<Vec<Retained<accessibility::Element>>>,
 }
 impl Mounted {
     pub fn run<T>(
@@ -75,7 +81,18 @@ impl Mounted {
             .into_iter()
             .map(|n| n.id)
             .collect::<std::collections::HashSet<_>>();
-        self.cache.borrow_mut().retain(|id, _| live.contains(id));
+        let dead = self
+            .cache
+            .borrow()
+            .keys()
+            .filter(|id| !live.contains(id))
+            .copied()
+            .collect::<Vec<_>>();
+        for id in dead {
+            if let Some(element) = self.cache.borrow_mut().remove(&id) {
+                self.retired.borrow_mut().push(element);
+            }
+        }
         Ok(())
     }
     fn deactivate(&self) {
@@ -88,6 +105,7 @@ impl Mounted {
         if let Some(surface) = self.surface.upgrade() {
             surface.set_cursor(Cursor::Arrow);
         }
+        self.notify_destroyed();
         self.cache.borrow_mut().clear();
         self.row_cache.borrow_mut().clear();
         self.table_cache.borrow_mut().clear();
@@ -129,9 +147,8 @@ impl Surface {
             row_cache: RefCell::new(Default::default()),
             table_cache: RefCell::new(Default::default()),
             notifications_pending: Cell::new(false),
-            generation: Cell::new(0),
-            focus: Cell::new(None),
-            value: RefCell::new(String::new()),
+            notifications: RefCell::new(Default::default()),
+            retired: RefCell::new(vec![]),
         });
         let weak = Rc::downgrade(&mounted);
         host.on_invalidate(move || {
@@ -249,6 +266,11 @@ impl Surface {
             let _ = self.set_redraw_delay(None);
             self.request_redraw();
         }
+    }
+}
+pub(super) fn geometry_changed(s: &SurfaceState) {
+    if let Some(m) = s.components.borrow().clone() {
+        m.queue_notifications();
     }
 }
 pub(super) fn closed(s: &SurfaceState) {

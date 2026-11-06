@@ -131,6 +131,7 @@ pub(super) fn description(n: &Node) -> Option<Retained<NSString>> {
 impl Element {
     pub(super) fn control_array(&self, name: &str) -> Option<Retained<NSArray<AnyObject>>> {
         match name {
+            "AXVisibleChildren" => self.accessibilityVisibleChildren(),
             "AXTabs" => self.accessibilityTabs(),
             "AXContents" => self.accessibilityContents(),
             "AXSplitters" => self.accessibilitySplitters(),
