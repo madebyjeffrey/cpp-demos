@@ -214,8 +214,9 @@ Configure `.multiple()` or `ListOptions::selection`; shared clones see option ch
 Shift extends a range; Command toggles one row; Command-Shift adds a range. Arrows
 skip disabled rows, Home/End jump to enabled edges and Page keys use viewport rows.
 Return/double-click activate through `on_activate`; ordinary selection does not.
-Models and mutations stay outside builders. Active row edit retention is tracked
-separately in M4.2; durable application values should live outside the viewport.
+Models and mutations stay outside builders. Hold a `list.pin(key)` handle through
+an active edit to retain its host state while scrolling. Durable application
+values and drafts stay outside builders.
 
 `TreeModel` flattens expanded branches. Applications fetch lazy children and call
 `set_tree`; `toggle` changes expansion. `TableModel` adds keyed cell drafts and
@@ -778,9 +779,62 @@ input. Navigation uses `select_collection_item_with` to select/reveal/focus;
 `select_collection_item` retains the boolean compatibility shorthand. Reordering
 keeps focused logical keys visible. Wheel scrolling can unrealize the focused row
 without snapping back: focus remains in the collection and the next navigation
-reveals its logical target. Active embedded editor retention remains M4.2.
+reveals its logical target. Explicit active editor retention is described below.
 
 Seven focused portable tests cover selection, pointer/keyboard routing, typeahead,
 reordering, callback replacement and bounded 100,000-row realization. Native tests
 cover Shift-arrow skipping, typeahead, activation, Select All, indexed offscreen
 proxies and proxy identity after reordering. Final interactive auditing remains M5.
+
+
+## Completion M4 — virtual edit lifetimes
+
+`cargo run --example m4_list_edit` demonstrates one active edit across 100,000 rows.
+Use First/Last rows and Back to edit to move away and return; undo and selection
+stay with the pinned editor. Save/Cancel release it. The example supports `--light`,
+`--render file.png` and `--smoke`.
+
+`let edit = list.pin(key)?` returns a cloneable `RowPin`. Keep it while the row is
+being edited; dropping the last clone releases its retention slot. Each distinct
+row consumes one slot, including pins currently onscreen. `ListOptions::max_pinned_rows`
+defaults to one; pinning another row returns an error until a slot is released.
+Increasing the limit supports simultaneous edits; lowering it below the active
+pin count fails without changing options. Duplicate pins/clones share one slot.
+
+Pinned rows are realized alongside the viewport/overscan indices, with spacer
+geometry preserving their logical positions and the full scroll extent. A pin
+keeps the row's normally described, keyed descendants mounted; it does not freeze
+a description. Text selection, preedit, bounded undo/redo history and focus survive
+scrolling offscreen and back. Changing a descendant's key/kind or externally
+replacing its value still follows ordinary control reset rules. Typing/focusing
+reveals the caret; merely scrolling does not pull the row back into view.
+`visible_range()` remains the viewport/overscan range; `realized_indices()` includes
+pins and `pinned_keys()` reports retained logical keys. Realization is bounded by
+viewport/overscan rows plus the configured maximum pin count.
+
+`RowPin::key`, `token` and `is_valid` identify/check the edited item. Removal or
+disabling invalidates its pins immediately. Reinserting/re-enabling does not revive
+an old pin, and dropping an old handle cannot release a newer edit. Pins use weak
+model ownership, so they do not keep a discarded dataset alive. Creation remains
+outside view construction; last-handle cleanup safely defers during description
+replacement and runs on builder unwinding too. A pin retains controls; application
+code owns commit/cancel and source conflict policy.
+
+Every realized row's host identity includes its item lifetime token. Sorting and
+ordinary data replacement preserve tokens; removing and reinserting a key creates
+a new one, even when both mutations occur before the next frame. Descendant editor
+IDs, undo buffers, focus/capture and native accessibility objects follow that
+lifetime. A different `ListModel` cannot reuse an old editor with the same key.
+After releasing an offscreen pin, its controls and host editor storage are pruned;
+logical keyboard navigation remains in the collection. Native accessibility caches
+also prune during synchronization when no drawing frame is delivered.
+
+`on_activate_with_model(|list, key| ...)` supplies model context for starting an edit
+without a strong self-capture in the activation callback. Retain the returned pin
+in application state, describe its editor with `view_with`, then release it from
+Save/Cancel. The example keeps this ownership inside ordinary `State<Option<RowPin>>`.
+
+Evidence: eight portable lifetime/input tests and a 200-jump, 100,000-row test that
+inspects actual host editor storage. Native checks cover offscreen preedit,
+commit/undo and inert retained accessibility editors after coalesced reinsertion.
+The actual VoiceOver/IME candidate-placement and visible GPU audits remain M5/M8.

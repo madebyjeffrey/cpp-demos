@@ -50,7 +50,19 @@ impl Mounted {
             });
         let size = surface.content_size();
         self.host
-            .layout(ui::Size::new(size.width, size.height), &self.renderer)
+            .layout(ui::Size::new(size.width, size.height), &self.renderer)?;
+        self.prune_cache()
+    }
+    fn prune_cache(&self) -> std::result::Result<(), ui::Error> {
+        let live = self
+            .host
+            .snapshot()?
+            .into_iter()
+            .filter(|n| !n.hidden)
+            .map(|n| n.id)
+            .collect::<std::collections::HashSet<_>>();
+        self.cache.borrow_mut().retain(|id, _| live.contains(id));
+        Ok(())
     }
     fn notify(&self, surface: &Surface) {
         let generation = self.host.generation();
@@ -72,11 +84,7 @@ impl Mounted {
                 }
             })
             .unwrap_or_default();
-        self.cache.borrow_mut().retain(|id, _| {
-            self.host
-                .snapshot()
-                .is_ok_and(|nodes| nodes.iter().any(|n| n.id == *id && !n.hidden))
-        });
+        let _ = self.prune_cache();
         // SAFETY: Main-thread native objects and AppKit's exported notification names.
         unsafe {
             if self.generation.replace(generation) != generation {

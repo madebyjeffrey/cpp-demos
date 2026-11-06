@@ -100,6 +100,7 @@ impl std::error::Error for Error {}
 #[derive(Clone, Hash, PartialEq, Eq)]
 enum Segment {
     Key(String),
+    Row(String, u64),
     Index(usize),
 }
 type Path = Vec<(Segment, Kind)>;
@@ -341,6 +342,7 @@ impl Host {
         drop(old);
         self.reconcile_capture();
         self.reconcile_fields();
+        crate::state::flush_cleanups();
         Ok(true)
     }
     pub fn snapshot(&self) -> Result<Vec<Node>, Error> {
@@ -553,6 +555,9 @@ fn mount(
     }
     let segment = match &d.key {
         Some(k) if k.is_empty() => return Err(Error("Keys must not be empty".into())),
+        Some(k) if d.collection_row.is_some() => {
+            Segment::Row(k.clone(), d.collection_row.as_ref().unwrap().2)
+        }
         Some(k) => Segment::Key(k.clone()),
         None => Segment::Index(index),
     };

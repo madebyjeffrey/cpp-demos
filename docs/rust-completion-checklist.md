@@ -34,7 +34,7 @@ overall goal complete while an in-scope item remains open.
 | Layout and basic controls | Inventory, constrained layout, rich text, style coverage and two-axis scrolling verified | Final cross-component visual/semantic audit in M5/M8 |
 | Editing | Shared buffer, visual navigation/gestures, search/password/numeric policies and held steppers | Localization/value-control expansion in M6; final interactive IME audit in M5 |
 | Presentation | Retained splits/tabs/wizards, hierarchical menus, configured portals, transactional alerts and native sheets | Final interactive and visible desktop audits in M5/M8 |
-| Collections | Configurable list realization, keyed anchor/range/additive selection, activation/typeahead, basic trees/tables | Virtual edit retention, lazy tree lifecycle, cell/column interactions and final semantics |
+| Collections | Configurable list realization/selection, activation/typeahead, bounded pinned edits and distinct row lifetimes | Lazy tree/combo lifecycle, cell/column interactions and final semantics |
 | Values and tooling | Typed drafts, sRGB/hex, calendar, ISO/zoned editing, picking/width overrides | Complete value-control policies and inspector/Lab coverage |
 | Verification | Core/CPU tests and native input/accessibility protocol tests | Interactive audits, final visible GPU/full-screen runs and repeatable checks |
 
@@ -298,7 +298,7 @@ Completion record:
 ## M4 — Collections and structured editing
 
 - [x] **M4.1 List interaction:** anchor/range and additive selection, disabled-row skipping, activation/typeahead, configurable overscan and keyboard reveal while logical keys survive sorting and replacement.
-- [ ] **M4.2 Virtual edit lifetime:** bounded realization/retention on large data; retain or explicitly pin active row edits through scrolling, and make removed/reinserted item lifetimes distinct.
+- [x] **M4.2 Virtual edit lifetime:** bounded realization/retention on large data; retain or explicitly pin active row edits through scrolling, and make removed/reinserted item lifetimes distinct.
 - [ ] **M4.3 Tree model:** integrated lazy loading with expandable/loading/error metadata and safe model replacement; validate keys across collapsed branches and do not silently discard expansion errors.
 - [ ] **M4.4 Tree interaction:** left/right expand/collapse and parent/child navigation, activation, selection and focus retention when branches change or disappear.
 - [ ] **M4.5 Combo box:** separate query and selection, selection/free-text modes, filtering, loading/empty states, keyboard highlight/accept/cancel and accessible popup relationships; replace the fixed suggestion cap with bounded realization where needed.
@@ -311,7 +311,7 @@ Main implementation: [collections](../rust/components/src/collections.rs).
 
 Completion record (in progress):
 
-- M4.1: `ListOptions`/`ListSelection` cover configurable overscan/preferred rows,
+- M4.1 (`e1adbcc`): `ListOptions`/`ListSelection` cover configurable overscan/preferred rows,
   replace/toggle/range/add-range/focus-only operations, a stable anchor and cursor,
   select-all/clear, disabled-row skipping and activation callbacks. Shared model
   options replace the previous configure-before-cloning restriction. Atomic item
@@ -327,8 +327,28 @@ Completion record (in progress):
   activation, Select All and retained indexed proxies through sorting pass.
   Workspace tests, strict Clippy and portable compilation pass. `m4_list` provides
   a 100,000-row example; inspected dark/light previews and native smoke pass.
-  Active row editor retention/lifetime separation remains M4.2; M5/M8 interactive
-  and visible desktop audits remain open.
+  Active row editor retention/lifetime separation is covered in M4.2 below; M5/M8
+  interactive and visible desktop audits remain open.
+
+- M4.2: `ListModel::pin`/`RowPin` retain explicitly active edits alongside the
+  viewport/overscan range. The configurable limit defaults to one distinct row;
+  clones share a slot, invalid/over-limit requests fail and last-handle release
+  prunes offscreen controls. Geometry preserves the full indexed scroll extent.
+  Pins invalidate on removal/disable and weak ownership does not retain datasets.
+- Host identity includes the item token, so removed/reinserted keys and replacement
+  models receive new editor/AX lifetimes even when updates coalesce before a frame.
+  Reordering preserves live editor IDs, selection, history and preedit. Caret reveal
+  synchronizes host/model offsets; plain wheel scrolling does not snap back.
+  Resource cleanup defers across pure construction and safely runs on unwinding.
+  `on_activate_with_model` avoids strong self-captures in edit-start callbacks.
+- Evidence: eight focused portable pin/lifetime/input tests and one internal test
+  checking actual editor-map bounds across 200 jumps through 100,000 rows. Existing
+  list/tab/scroll/foundation/wizard regressions pass. Native component checks retain
+  offscreen preedit, commit/undo and reject stale retained AX editors after
+  reinsertion. Native caches prune without needing a visible draw frame.
+  Workspace tests, strict Clippy and portable compilation pass; `m4_list_edit`
+  provides the runnable example, inspected dark/light previews and native smoke.
+  Actual interactive VoiceOver/IME placement and visible GPU audits remain M5/M8.
 
 ## M5 — Accessibility semantics and native behavior
 

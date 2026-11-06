@@ -834,6 +834,100 @@ fn main() {
         let pressed: bool = msg_send![&*row, accessibilityPerformPress];
         assert!(!pressed);
     }
+    // Explicit pinning retains the real native editor across virtualization;
+    // removed/reinserted keys retire both its host ID and retained AX object.
+    let edit_rows = || {
+        (0..1000)
+            .map(|i| ui::ListItem::new(i.to_string(), format!("Editable {i}")))
+            .collect::<Vec<_>>()
+    };
+    let editable = ui::ListModel::new(edit_rows(), 56.);
+    let edit_pin = editable.pin("0").unwrap();
+    let draft = State::new("draft".to_string());
+    let edit_host = window
+        .set_view({
+            let editable = editable.clone();
+            let draft = draft.clone();
+            move || {
+                editable
+                    .view_with(|item| {
+                        if item.key == "0" {
+                            ui::View::text_field("Pinned draft", draft.binding())
+                                .key("pinned-editor")
+                        } else {
+                            ui::View::label(item.label())
+                        }
+                    })
+                    .height(280)
+            }
+        })
+        .unwrap();
+    let editor = edit_host
+        .snapshot()
+        .unwrap()
+        .iter()
+        .find(|n| n.key.as_deref() == Some("pinned-editor"))
+        .unwrap()
+        .id;
+    edit_host.focus(editor).unwrap();
+    edit_host.set_active(true);
+    edit_host.set_text(editor, "edited").unwrap();
+    edit_host
+        .select_text(
+            editor,
+            ui::Selection {
+                anchor: 2,
+                caret: 4,
+            },
+        )
+        .unwrap();
+    unsafe {
+        let element: Retained<AnyObject> = msg_send![native, accessibilityFocusedUIElement];
+        let marked = NSString::from_str("日本");
+        let _: () = msg_send![native,setMarkedText:&*marked,selectedRange:NSRange::new(2,0),replacementRange:NSRange::new(isize::MAX as usize,0)];
+        edit_host
+            .layout(ui::Size::new(400., 280.), &renderer)
+            .unwrap();
+        let parent = edit_host.snapshot().unwrap()[0].id;
+        edit_host
+            .scroll_to(parent, ui::Point { x: 0., y: 5600. })
+            .unwrap();
+        edit_host
+            .layout(ui::Size::new(400., 280.), &renderer)
+            .unwrap();
+        let has_marked: bool = msg_send![native, hasMarkedText];
+        assert!(has_marked);
+        assert_eq!(editable.offset(), 5600.);
+        assert_eq!(edit_host.focused(), Some(editor));
+        let _: () = msg_send![native, unmarkText];
+        assert!(draft.get().contains("日本"));
+        let _: () = msg_send![native,doCommandBySelector:objc2::sel!(undo:)];
+        assert_eq!(draft.get(), "edited");
+        let _: () = msg_send![native,doCommandBySelector:objc2::sel!(undo:)];
+        assert_eq!(draft.get(), "draft");
+        editable
+            .set_items(edit_rows().into_iter().filter(|r| r.key != "0").collect())
+            .unwrap();
+        editable.set_items(edit_rows()).unwrap();
+        assert!(!edit_pin.is_valid());
+        let is_element: bool = msg_send![&*element, isAccessibilityElement];
+        assert!(!is_element);
+        let stale = NSString::from_str("stale");
+        let _: () = msg_send![&*element,setAccessibilityValue:&*stale];
+        assert_eq!(draft.get(), "draft");
+        assert!(!edit_host.set_text(editor, "stale").unwrap());
+        let fresh = edit_host
+            .snapshot()
+            .unwrap()
+            .iter()
+            .find(|n| n.key.as_deref() == Some("pinned-editor"))
+            .unwrap()
+            .id;
+        assert_ne!(fresh, editor);
+        edit_host.focus(fresh).unwrap();
+        assert!(!edit_host.text_input().unwrap().unwrap().can_undo);
+    }
+    window.clear_view();
     window.show();
     app.quit_after(std::time::Duration::from_millis(200));
     app.run().unwrap();

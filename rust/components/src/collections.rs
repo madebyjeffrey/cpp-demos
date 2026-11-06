@@ -1,8 +1,10 @@
 //! Portable collection models.
 pub(crate) mod input;
 mod list;
+mod pin;
 use crate::{Binding, State, View};
 pub use list::*;
+pub use pin::RowPin;
 use std::{cell::RefCell, collections::BTreeSet, rc::Rc};
 /// Editable combo box: the same text binding remains usable for values outside the options.
 pub fn combo_box(

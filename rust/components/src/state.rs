@@ -43,6 +43,7 @@ pub(crate) trait Dependency {
 
 thread_local! {
     static TRACKING: RefCell<Vec<Vec<Rc<dyn Dependency>>>> = const { RefCell::new(Vec::new()) };
+    static CLEANUPS: RefCell<Vec<Box<dyn FnOnce()>>> = const { RefCell::new(Vec::new()) };
 }
 
 /// A stack guard restores dependency tracking even when a builder unwinds.
@@ -63,6 +64,25 @@ impl Drop for Tracking {
         TRACKING.with(|t| {
             t.borrow_mut().pop();
         });
+        flush_cleanups();
+    }
+}
+/// Resource teardown may occur as descriptions are replaced or unwind. Defer it
+/// until pure queries finish, rather than mutating a model inside construction.
+pub(crate) fn cleanup(action: impl FnOnce() + 'static) {
+    if TRACKING.with(|t| t.borrow().is_empty()) {
+        action();
+    } else {
+        CLEANUPS.with(|q| q.borrow_mut().push(Box::new(action)));
+    }
+}
+pub(crate) fn flush_cleanups() {
+    if !TRACKING.with(|t| t.borrow().is_empty()) {
+        return;
+    }
+    let pending = CLEANUPS.with(|q| std::mem::take(&mut *q.borrow_mut()));
+    for action in pending {
+        action();
     }
 }
 pub(crate) fn check_write() {
@@ -86,6 +106,7 @@ pub(crate) fn read_only<T>(query: impl FnOnce() -> T) -> T {
             }
         }
     });
+    flush_cleanups();
     result
 }
 

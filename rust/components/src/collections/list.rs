@@ -48,6 +48,8 @@ pub(super) struct Model {
     activating: Cell<bool>,
     revision: Cell<u64>,
     tokens: RefCell<HashMap<String, u64>>,
+    pub(super) pins: State<std::collections::BTreeMap<String, u64>>,
+    pub(super) leases: RefCell<HashMap<String, std::rc::Weak<super::pin::Lease>>>,
 }
 #[derive(Clone)]
 pub struct ListModel(pub(super) Rc<Model>);
@@ -80,6 +82,8 @@ impl ListModel {
             activating: Cell::new(false),
             revision: Cell::new(0),
             tokens: RefCell::new(HashMap::new()),
+            pins: State::new(Default::default()),
+            leases: RefCell::new(HashMap::new()),
         }));
         model.set_items(items).expect("Unique collection keys");
         model
@@ -96,6 +100,11 @@ impl ListModel {
     }
     pub fn set_options(&self, options: ListOptions) -> Result<(), crate::Error> {
         crate::state::check_write();
+        if options.max_pinned_rows < self.0.pins.with(|pins| pins.len()) {
+            return Err(crate::Error(
+                "Release pinned rows before reducing the retention limit".into(),
+            ));
+        }
         if options.visible_rows == 0
             || !(options.visible_rows as f64 * self.0.height).is_finite()
             || options.typeahead_timeout.is_zero()
@@ -125,6 +134,15 @@ impl ListModel {
         let old = self.0.activate.replace(Some(Rc::new(callback)));
         drop(old);
         self
+    }
+    /// Supply model context without a strong self-capture in an activation handler.
+    pub fn on_activate_with_model(self, callback: impl Fn(&ListModel, String) + 'static) -> Self {
+        let weak = Rc::downgrade(&self.0);
+        self.on_activate(move |key| {
+            if let Some(owner) = weak.upgrade() {
+                callback(&ListModel(owner), key);
+            }
+        })
     }
     pub fn activate(&self, key: &str) -> bool {
         crate::state::check_write();
@@ -198,11 +216,23 @@ impl ListModel {
         let anchor = self
             .anchor()
             .filter(|k| index.get(k).is_some_and(|i| items[*i].enabled));
+        let pins = self
+            .0
+            .pins
+            .get()
+            .into_iter()
+            .filter(|(key, _)| index.get(key).is_some_and(|i| items[*i].enabled))
+            .collect();
+        self.0
+            .leases
+            .borrow_mut()
+            .retain(|key, _| index.get(key).is_some_and(|i| items[*i].enabled));
         *self.0.index.borrow_mut() = index;
         if *self.0.items.get() != items {
             self.0.revision.set(self.0.revision.get().wrapping_add(1));
         }
         self.0.items.set(Rc::new(items));
+        self.0.pins.set(pins);
         self.0.selected.set(selected);
         self.0.cursor.set(cursor);
         self.0.anchor.set(anchor);
@@ -417,21 +447,28 @@ impl ListModel {
     }
     pub fn view_with(&self, row: impl Fn(&ListItem) -> View) -> View {
         let items = self.0.items.get();
-        let range = self.visible_range();
+        let indices = self.realized_indices();
         self.0.selected.with(|_| ());
-        let mut children = vec![
-            View::spacer()
-                .grow(0.)
-                .height(range.start as f64 * self.0.height)
-                .shrink(0.),
-        ];
-        for item in &items[range.clone()] {
+        let mut children = vec![];
+        let mut end = 0;
+        for index in indices {
+            if index > end {
+                children.push(
+                    View::spacer()
+                        .grow(0.)
+                        .height((index - end) as f64 * self.0.height)
+                        .shrink(0.),
+                );
+            }
+            end = index + 1;
+            let item = &items[index];
             let model = self.clone();
             let key = item.key.clone();
             let select = self.clone();
             let target = key.clone();
             let row = View::column(vec![row(item)])
                 .height(self.0.height)
+                .shrink(0.)
                 .padding(6.)
                 .key(&key)
                 .enabled(item.enabled);
@@ -468,7 +505,7 @@ impl ListModel {
         children.push(
             View::spacer()
                 .grow(0.)
-                .height((items.len() - range.end) as f64 * self.0.height)
+                .height((items.len() - end) as f64 * self.0.height)
                 .shrink(0.),
         );
         let mut view = View::scroll(children)
@@ -499,6 +536,8 @@ pub struct ListOptions {
     pub visible_rows: usize,
     pub overscan_rows: usize,
     pub typeahead_timeout: Duration,
+    /// Maximum distinct pinned rows, including pins currently in the viewport.
+    pub max_pinned_rows: usize,
 }
 impl Default for ListOptions {
     fn default() -> Self {
@@ -507,6 +546,7 @@ impl Default for ListOptions {
             visible_rows: 5,
             overscan_rows: 2,
             typeahead_timeout: Duration::from_secs(1),
+            max_pinned_rows: 1,
         }
     }
 }

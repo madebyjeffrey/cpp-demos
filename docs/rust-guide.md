@@ -99,6 +99,12 @@ typeahead, activation and configurable overscan across 100,000 rows. `ListOption
 sets realization policy and `select_with` makes range/additive operations explicit.
 See the [list contracts](../rust/components/README.md#completion-m4--list-interaction).
 
+`cargo run --example m4_list_edit` demonstrates retained row edits. Hold a
+`list.pin(key)` handle while editing and release it on Save/Cancel; host undo,
+selection and composition survive scrolling. `on_activate_with_model` supplies
+model context without a strong self-capture. See the
+[virtual edit contracts](../rust/components/README.md#completion-m4--virtual-edit-lifetimes).
+
 `view!` supports ordinary expressions, `if`/`else`, keyed `for` loops, custom
 functions returning `View`, and `embed(view)` for an already-built value. Unknown
 properties fail compilation. Use stable keys for reordered items; unkeyed identity

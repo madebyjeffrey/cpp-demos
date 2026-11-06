@@ -220,6 +220,7 @@ impl Host {
         let m = self.0.mounted.borrow();
         let mut current = m.nodes.iter().find(|n| n.id == id).and_then(|n| n.parent);
         let mut changed = false;
+        let mut collections = vec![];
         while let Some(id) = current {
             let Some(n) = m.nodes.iter().find(|n| n.id == id) else {
                 break;
@@ -242,10 +243,16 @@ impl Host {
                 rect.y -= next.y - current.y;
                 changed |= next != current;
                 self.0.scroll.borrow_mut().insert(id, next);
+                if let Some(model) = &n.collection {
+                    collections.push((model.clone(), next.y, info.viewport.height));
+                }
             }
             current = n.parent;
         }
         drop(m);
+        for (model, offset, height) in collections {
+            model.set_viewport(offset, height);
+        }
         if changed {
             self.redraw();
         }

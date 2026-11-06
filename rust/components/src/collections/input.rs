@@ -55,13 +55,23 @@ impl Host {
         Ok(true)
     }
     pub(crate) fn remember_collection_focus(&self, id: NodeId) {
-        let data = self
-            .0
-            .mounted
-            .borrow()
-            .descriptions
-            .get(&id)
-            .and_then(|d| d.collection_row.clone());
+        let data = {
+            let m = self.0.mounted.borrow();
+            let mut current = Some(id);
+            let mut result = None;
+            while let Some(id) = current {
+                if let Some(data) = m
+                    .descriptions
+                    .get(&id)
+                    .and_then(|d| d.collection_row.clone())
+                {
+                    result = Some(data);
+                    break;
+                }
+                current = m.nodes.iter().find(|n| n.id == id).and_then(|n| n.parent);
+            }
+            result
+        };
         if let Some((model, key, token, _)) = data
             && model.item_token(&key) == Some(token)
         {
@@ -105,22 +115,42 @@ impl Host {
         let Some(prior) = prior else {
             return;
         };
-        let Some((model, key, token, revision)) = old
-            .descriptions
-            .get(&prior)
-            .and_then(|d| d.collection_row.clone())
-        else {
+        let mut row = Some(prior);
+        let mut data = None;
+        while let Some(id) = row {
+            if let Some(value) = old
+                .descriptions
+                .get(&id)
+                .and_then(|d| d.collection_row.clone())
+            {
+                data = Some((id, value));
+                break;
+            }
+            row = old.nodes.iter().find(|n| n.id == id).and_then(|n| n.parent);
+        }
+        let Some((row, (model, key, token, revision))) = data else {
             return;
         };
         let Some(parent) = old
             .nodes
             .iter()
-            .find(|n| n.id == prior)
+            .find(|n| n.id == row)
             .and_then(|n| n.parent)
         else {
             return;
         };
         if self.list(parent).as_ref() != Some(&model) {
+            return;
+        }
+        if row != prior {
+            if self.focused().is_none() {
+                self.0.interaction.borrow_mut().focus = Some(parent);
+            } else if model.revision() != revision
+                && model.item_token(&key) == Some(token)
+                && let Some(editor) = self.0.editors.borrow_mut().get_mut(&prior)
+            {
+                editor.reveal = true;
+            }
             return;
         }
         if model.revision() != revision {
