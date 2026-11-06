@@ -5,6 +5,7 @@ use crate::{
 use std::collections::HashMap;
 mod flow;
 mod menu;
+mod overlay;
 mod split;
 
 impl Host {
@@ -26,6 +27,7 @@ impl Host {
             return Err(Error("Invalid viewport".into()));
         }
         self.refresh()?;
+        let generation = self.generation();
         let previous_offsets = self.0.scroll.borrow().clone();
         self.0.viewport.set(size);
         let theme = self.theme();
@@ -94,6 +96,8 @@ impl Host {
             layouts: HashMap::new(),
             measure,
             theme,
+            viewport: size,
+            portal: None,
             inherited: HashMap::new(),
             reflowed: HashMap::new(),
             baselines: HashMap::new(),
@@ -115,6 +119,31 @@ impl Host {
             tree.reflow(root, size.width, Some(size.height), &mut mounted.nodes)?;
             tree.arrange(
                 root,
+                Rect::new(0., 0., size.width, size.height),
+                Rect::new(0., 0., size.width, size.height),
+                size,
+                &mut mounted.nodes,
+            )?;
+        }
+        // Portals are measured/arranged after their anchors, outside owner clips.
+        let mut portals: Vec<_> = mounted
+            .nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, n)| n.kind == Kind::Modal)
+            .map(|(i, _)| i)
+            .collect();
+        portals.sort_by_key(|i| mounted.nodes[*i].style.z_index);
+        for i in portals {
+            let parent = mounted.nodes[i]
+                .parent
+                .and_then(|id| mounted.nodes.iter().find(|n| n.id == id))
+                .map_or(text, |n| n.text_style);
+            tree.measure_node(i, size, parent, &mut mounted.nodes)?;
+            tree.reflow(i, size.width, Some(size.height), &mut mounted.nodes)?;
+            tree.portal = Some(mounted.nodes[i].id);
+            tree.arrange(
+                i,
                 Rect::new(0., 0., size.width, size.height),
                 Rect::new(0., 0., size.width, size.height),
                 size,
@@ -214,6 +243,8 @@ impl Host {
         for (model, offset, height) in collections {
             model.set_viewport(offset, height);
         }
+        self.reconcile_overlays()?;
+        self.advance_overlays_at(std::time::Instant::now());
         self.reconcile_split_capture();
         self.reconcile_capture();
         self.reconcile_fields();
@@ -221,7 +252,6 @@ impl Host {
             self.reveal_rect(id, rect);
         }
         self.update_drag_deadline(std::time::Instant::now());
-        self.reconcile_modal()?;
         self.reconcile_menu()?;
         if let Some(id) = self.0.autofocus.take().filter(|id| self.in_scope(*id)) {
             self.focus(id)?;
@@ -258,7 +288,7 @@ impl Host {
                 .cloned();
             inspector.selected.set(node.map(crate::Inspection::from));
         }
-        Ok(previous_offsets != *self.0.scroll.borrow())
+        Ok(previous_offsets != *self.0.scroll.borrow() || generation != self.generation())
     }
     /// Scene order includes z-order while preserving each sibling subtree as a unit.
     pub fn scene(&self) -> Result<Vec<Node>, Error> {
@@ -278,13 +308,21 @@ impl Host {
         ) {
             if let Some(list) = children.get(&parent) {
                 for i in list {
-                    out.push(nodes[*i].clone());
-                    visit(Some(nodes[*i].id), nodes, children, out);
+                    if nodes[*i].kind != Kind::Modal {
+                        out.push(nodes[*i].clone());
+                        visit(Some(nodes[*i].id), nodes, children, out);
+                    }
                 }
             }
         }
         let mut result = Vec::new();
         visit(None, &nodes, &children, &mut result);
+        let mut portals: Vec<_> = nodes.iter().filter(|n| n.kind == Kind::Modal).collect();
+        portals.sort_by_key(|n| n.style.z_index);
+        for portal in portals {
+            result.push(portal.clone());
+            visit(Some(portal.id), &nodes, &children, &mut result);
+        }
         Ok(result)
     }
 }
@@ -294,6 +332,8 @@ struct Tree<'a> {
     layouts: HashMap<NodeId, TextLayout>,
     measure: &'a dyn Measure,
     theme: crate::Theme,
+    viewport: Size,
+    portal: Option<NodeId>,
     inherited: HashMap<NodeId, (u32, crate::Density)>,
     scroll: HashMap<NodeId, crate::Point>,
     reflowed: HashMap<NodeId, (f64, Option<f64>)>,
@@ -396,10 +436,10 @@ impl Tree<'_> {
             nodes[i].text = n.text.to_uppercase();
         }
         nodes[i].text_style = text;
-        let width = s
-            .width
-            .resolve(available.width)
-            .unwrap_or(available.width)
+        let width = n
+            .overlay
+            .and_then(|o| o.width)
+            .unwrap_or_else(|| s.width.resolve(available.width).unwrap_or(available.width))
             .min(s.max_width)
             .max(s.min_width);
         let inner = (width - s.padding.horizontal()).max(0.);
@@ -592,8 +632,16 @@ impl Tree<'_> {
         nodes: &mut [Node],
     ) -> Result<(), Error> {
         let n = nodes[i].clone();
+        if n.kind == Kind::Modal && self.portal != Some(n.id) {
+            return Ok(());
+        }
         let s = n.style;
-        let mut bounds = bounds;
+        let mut bounds = if n.kind == Kind::Modal {
+            Rect::new(0., 0., self.viewport.width, self.viewport.height)
+        } else {
+            bounds
+        };
+        let clip = if n.kind == Kind::Modal { bounds } else { clip };
         if s.position == Position::Relative {
             bounds.x += s
                 .left
@@ -665,30 +713,8 @@ impl Tree<'_> {
         if n.menu_root {
             return self.arrange_menu(i, bounds, nodes);
         }
-        if let Some(anchor) = &n.anchor
-            && let Some(target) = nodes.iter().find(|n| n.key.as_ref() == Some(anchor))
-        {
-            let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
-            let width = children
-                .iter()
-                .map(|c| self.desired[&nodes[*c].id].width)
-                .fold(0., f64::max);
-            let height = children
-                .iter()
-                .map(|c| self.desired[&nodes[*c].id].height)
-                .sum::<f64>();
-            content.x = target
-                .bounds
-                .x
-                .clamp(bounds.x, (bounds.x + bounds.width - width).max(bounds.x));
-            content.y =
-                if target.bounds.y + target.bounds.height + height > bounds.y + bounds.height {
-                    (target.bounds.y - height).max(bounds.y)
-                } else {
-                    target.bounds.y + target.bounds.height + 6.
-                };
-            content.width = width.min(bounds.width);
-            content.height = height.min(bounds.height);
+        if n.anchor.is_some() {
+            return self.arrange_popover(i, bounds, nodes);
         }
         let children = self.children.get(&Some(n.id)).cloned().unwrap_or_default();
         if n.kind == Kind::Split {

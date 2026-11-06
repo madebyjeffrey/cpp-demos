@@ -35,11 +35,15 @@ impl Host {
         let _ = self.refresh();
         self.reconcile_fields();
         self.update_repeat();
-        self.0
+        let deadline = self
+            .0
             .deadlines
             .borrow()
             .iter()
             .map(|d| d.at.saturating_duration_since(Instant::now()))
+            .min();
+        deadline
+            .into_iter()
             .chain(self.tooltip_delay())
             .chain(self.drag_delay())
             .chain(self.field_delay())
@@ -50,6 +54,7 @@ impl Host {
         self.run_due_at(Instant::now());
     }
     pub fn run_due_at(&self, now: Instant) {
+        self.advance_overlays_at(now);
         self.run_drag_due(now);
         self.run_search_due(now);
         self.run_repeat_due(now);

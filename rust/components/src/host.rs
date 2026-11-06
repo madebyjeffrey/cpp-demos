@@ -52,12 +52,16 @@ pub struct Node {
     pub menu_item: Option<crate::MenuItemInfo>,
     pub menu_panel: bool,
     pub(crate) menu_path: Vec<String>,
+    pub overlay: Option<crate::OverlayOptions>,
+    pub overlay_owner: Option<NodeId>,
+    pub overlay_point: Option<crate::Point>,
     pub anchor: Option<String>,
     pub scroll: Option<crate::ScrollInfo>,
     pub(crate) scroll_axes: crate::ScrollAxes,
     pub(crate) scrollbars: bool,
     pub collection: Option<crate::ListModel>,
     pub label: String,
+    pub help: String,
     pub focused: bool,
     pub pressed: bool,
     pub hovered: bool,
@@ -116,6 +120,25 @@ pub(crate) struct Inner {
     pub fields: RefCell<HashMap<NodeId, crate::fields::FieldState>>,
     pub splits: RefCell<HashMap<NodeId, crate::SplitPane>>,
     pub editors: RefCell<HashMap<NodeId, crate::editing::Editor>>,
+    pub scopes: RefCell<Vec<crate::overlay::Scope>>,
+    pub closed_overlays: RefCell<HashSet<NodeId>>,
+    pub tooltip: RefCell<crate::tooltip::TooltipState>,
+}
+impl Drop for Inner {
+    fn drop(&mut self) {
+        for scope in self.scopes.get_mut().drain(..).rev() {
+            if !scope.closed.replace(true) {
+                (scope.data.close)(crate::DismissReason::Unmounted);
+            }
+        }
+        let tip = self.tooltip.get_mut();
+        if tip.visible
+            && let Some(close) = tip.data.as_ref().and_then(|d| d.close.clone())
+        {
+            tip.visible = false;
+            close(crate::DismissReason::Unmounted);
+        }
+    }
 }
 /// Reactive descriptions, layout and input in logical points. The host is !Send/!Sync.
 /// Call layout with a pure renderer before geometric input/semantic queries.
@@ -133,6 +156,9 @@ impl Host {
             viewport: Cell::new(Size::default()),
             interaction: RefCell::new(Default::default()),
             editors: RefCell::new(HashMap::new()),
+            scopes: RefCell::new(vec![]),
+            closed_overlays: RefCell::new(HashSet::new()),
+            tooltip: RefCell::new(Default::default()),
             deadlines: RefCell::new(Vec::new()),
             fields: RefCell::new(HashMap::new()),
             splits: RefCell::new(HashMap::new()),
@@ -281,8 +307,14 @@ impl Host {
         let i = self.0.interaction.borrow();
         let editors = self.0.editors.borrow();
         let mut nodes = self.0.mounted.borrow().nodes.clone();
+        let closed = self.0.closed_overlays.borrow();
+        let closed_nodes: HashSet<_> = nodes
+            .iter()
+            .filter(|n| closed.iter().any(|id| Self::within(&nodes, n.id, *id)))
+            .map(|n| n.id)
+            .collect();
         for n in &mut nodes {
-            n.hidden |= n.layout_hidden;
+            n.hidden |= n.layout_hidden || closed_nodes.contains(&n.id);
             n.revealed = self
                 .0
                 .fields
@@ -323,6 +355,9 @@ impl Host {
         let Some((d, value)) = target else {
             return Ok(false);
         };
+        if d.kind == Kind::Modal {
+            return self.dismiss_overlay(id, crate::DismissReason::Action);
+        }
         if let Some(handled) = self.activate_menu_item(id)? {
             return Ok(handled);
         }
@@ -529,11 +564,15 @@ fn mount(
         menu_item: d.menu_item.clone(),
         menu_panel: d.menu_panel,
         menu_path: d.menu_path.clone(),
+        overlay: d.overlay.as_ref().map(|d| d.options),
+        overlay_owner: if d.overlay_parent { parent } else { None },
+        overlay_point: d.overlay.as_ref().and_then(|d| d.point),
         anchor: d.anchor.clone(),
         scroll: None,
         scroll_axes: d.scroll_axes,
         scrollbars: d.scrollbars,
         collection: d.collection.clone(),
+        help: d.tooltip.clone(),
         label: if d.accessible.is_empty() {
             d.text.clone()
         } else {
@@ -571,6 +610,25 @@ fn mount(
     Ok(())
 }
 pub(crate) fn validate(d: &Description) -> Result<(), Error> {
+    if let Some(data) = &d.overlay {
+        crate::overlay::validate(data.options)?;
+        if data
+            .point
+            .is_some_and(|p| !p.x.is_finite() || !p.y.is_finite())
+        {
+            return Err(Error("Overlay anchor point must be finite".into()));
+        }
+    }
+    let tip = d.tooltip_options;
+    if [tip.max_width, tip.gap, tip.margin]
+        .iter()
+        .any(|v| !v.is_finite() || *v < 0.)
+        || std::time::Instant::now().checked_add(tip.delay).is_none()
+    {
+        return Err(Error(
+            "Tooltip options must be finite and nonnegative".into(),
+        ));
+    }
     if let Some(menu) = &d.menu {
         crate::menu::validate(menu)?;
     }

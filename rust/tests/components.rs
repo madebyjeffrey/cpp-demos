@@ -465,6 +465,83 @@ fn main() {
         window.clear_view();
         assert!(!menu.open.get());
     }
+    let reasons = State::new(Vec::new());
+    let popup = ui::Popup::new()
+        .options(ui::OverlayOptions {
+            width: Some(240.),
+            margin: 8.,
+            ..Default::default()
+        })
+        .on_dismiss(reasons.handler(|s, r| s.update(|v| v.push(r))));
+    let context = ui::Menu::new();
+    let draft = State::new("before".to_owned());
+    let overlay_host = window
+        .set_view({
+            let popup = popup.clone();
+            let context = context.clone();
+            let draft = draft.clone();
+            move || {
+                ui::View::layer(vec![
+                    popup.button("Open", "open"),
+                    popup.popover(
+                        "open",
+                        ui::View::text_field("Draft", draft.binding())
+                            .key("draft")
+                            .tooltip("Editor help")
+                            .context_menu(&context, vec![ui::MenuAction::new("Copy draft", || {})]),
+                    ),
+                ])
+            }
+        })
+        .unwrap();
+    overlay_host.set_active(true);
+    popup.show();
+    unsafe {
+        let _: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        let field = overlay_host
+            .snapshot()
+            .unwrap()
+            .into_iter()
+            .find(|n| n.key.as_deref() == Some("draft"))
+            .unwrap();
+        assert_eq!(overlay_host.focused(), Some(field.id));
+        let focused: Retained<AnyObject> = msg_send![native, accessibilityFocusedUIElement];
+        let help: Retained<NSString> = msg_send![&*focused, accessibilityHelp];
+        assert_eq!(help.to_string(), "Editor help");
+        let marked = NSString::from_str("日本");
+        let _: () = msg_send![native,setMarkedText:&*marked,selectedRange:NSRange::new(2,0),replacementRange:NSRange::new(isize::MAX as usize,0)];
+        let _: () = msg_send![native,doCommandBySelector:objc2::sel!(cancelOperation:)];
+        assert!(popup.open.get());
+        assert!(overlay_host.text_input().unwrap().unwrap().marked.is_none());
+        assert_eq!(draft.get(), "before");
+        let characters = NSString::from_str("\u{f70d}");
+        let event=app_kit::NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(app_kit::NSEventType::KeyDown,foundation::NSPoint::ZERO,app_kit::NSEventModifierFlags::Shift,0.,window.native_window().windowNumber(),None,&characters,&characters,false,109).unwrap();
+        let _: () = msg_send![native,keyDown:&*event];
+        assert!(context.open.get());
+        overlay_host
+            .key(ui::KeyEvent {
+                key: ui::Key::Escape,
+                down: true,
+                repeat: false,
+                modifiers: Default::default(),
+            })
+            .unwrap();
+        let _: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        assert_eq!(overlay_host.focused(), Some(field.id));
+        assert!(popup.open.get());
+        let _: () = msg_send![native,doCommandBySelector:objc2::sel!(cancelOperation:)];
+        let _: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        assert!(!popup.open.get());
+        assert_eq!(reasons.get(), vec![ui::DismissReason::Escape]);
+        popup.show();
+        let _: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        window.clear_view();
+        assert!(!popup.open.get());
+        assert_eq!(
+            reasons.get(),
+            vec![ui::DismissReason::Escape, ui::DismissReason::Unmounted]
+        );
+    }
     let list = ui::ListModel::new(
         (0..100_000)
             .map(|i| ui::ListItem::new(i.to_string(), format!("Row {i}")))

@@ -38,6 +38,7 @@ pub enum Key {
     Backspace,
     Delete,
     A,
+    F10,
     Unknown,
 }
 #[derive(Clone, Copy, Debug)]
@@ -60,8 +61,8 @@ pub(crate) struct Interaction {
     pub text_origin: std::ops::Range<usize>,
     pub text_clicks: u32,
     pub modal: Option<NodeId>,
-    pub restore_focus: Option<NodeId>,
-    pub hover_since: std::time::Instant,
+    pub swallow_up: bool,
+    pub tooltip_hover: Option<NodeId>,
     pub pointer: Point,
     pub pending_row: Option<(NodeId, String)>,
 }
@@ -80,8 +81,8 @@ impl Default for Interaction {
             text_origin: 0..0,
             text_clicks: 1,
             modal: None,
-            restore_focus: None,
-            hover_since: std::time::Instant::now(),
+            swallow_up: false,
+            tooltip_hover: None,
             pointer: Point::default(),
             pending_row: None,
         }
@@ -89,56 +90,55 @@ impl Default for Interaction {
 }
 impl Host {
     pub fn active_modal(&self) -> Option<NodeId> {
-        self.0
-            .mounted
-            .borrow()
-            .nodes
-            .iter()
-            .rev()
-            .find(|n| n.kind == Kind::Modal && !n.hidden && !n.layout_hidden)
-            .map(|n| n.id)
+        self.scope_nodes().last().map(|n| n.id)
     }
     pub fn in_scope(&self, id: NodeId) -> bool {
+        let nodes = &self.0.mounted.borrow().nodes;
+        if self
+            .0
+            .closed_overlays
+            .borrow()
+            .iter()
+            .any(|scope| Self::within(nodes, id, *scope))
+        {
+            return false;
+        }
         let Some(modal) = self.active_modal() else {
             return true;
         };
-        let m = self.0.mounted.borrow();
-        let mut current = Some(id);
-        while let Some(id) = current {
-            if id == modal {
-                return true;
-            }
-            current = m.nodes.iter().find(|n| n.id == id).and_then(|n| n.parent);
+        if Self::within(nodes, id, modal) {
+            return true;
         }
-        false
-    }
-    pub(crate) fn reconcile_modal(&self) -> Result<(), Error> {
-        let active = self.active_modal();
-        let (changed, restore) = {
-            let mut i = self.0.interaction.borrow_mut();
-            if i.modal == active {
-                (false, None)
-            } else {
-                let restore = if active.is_none() {
-                    i.restore_focus.take()
-                } else {
-                    if i.modal.is_none() {
-                        i.restore_focus = i.focus;
-                    }
-                    None
-                };
-                i.modal = active;
-                (true, restore)
-            }
-        };
-        if changed {
-            if let Some(id) = restore {
-                self.focus(id)?;
-            } else if active.is_some() {
-                self.focus_next(false)?;
-            }
-        }
-        Ok(())
+        let preserve = self
+            .0
+            .mounted
+            .borrow()
+            .descriptions
+            .get(&modal)
+            .and_then(|d| d.overlay.as_ref())
+            .is_some_and(|d| d.options.focus == crate::OverlayFocus::Preserve);
+        preserve
+            && (self
+                .0
+                .scopes
+                .borrow()
+                .iter()
+                .find(|s| s.id == modal)
+                .and_then(|s| s.previous)
+                == Some(id)
+                || nodes
+                    .iter()
+                    .find(|n| n.id == modal)
+                    .and_then(|n| {
+                        n.overlay_owner
+                            .and_then(|id| nodes.iter().find(|n| n.id == id))
+                            .or_else(|| {
+                                n.anchor.as_ref().and_then(|key| {
+                                    nodes.iter().find(|n| n.key.as_ref() == Some(key))
+                                })
+                            })
+                    })
+                    .is_some_and(|owner| Self::within(nodes, id, owner.id)))
     }
     fn reveal(&self, id: NodeId) {
         let bounds = self
@@ -152,27 +152,6 @@ impl Host {
         if let Some(bounds) = bounds {
             self.reveal_rect(id, bounds);
         }
-    }
-    pub(crate) fn tooltip_delay(&self) -> Option<std::time::Duration> {
-        let i = self.0.interaction.borrow();
-        let id = i.hovered?;
-        let m = self.0.mounted.borrow();
-        let d = m.descriptions.get(&id)?;
-        if d.tooltip.is_empty() {
-            return None;
-        }
-        let wait = std::time::Duration::from_millis(600).saturating_sub(i.hover_since.elapsed());
-        (!wait.is_zero()).then_some(wait)
-    }
-    pub fn tooltip(&self) -> Option<(String, Point)> {
-        let i = self.0.interaction.borrow();
-        if i.hover_since.elapsed() < std::time::Duration::from_millis(600) {
-            return None;
-        }
-        let id = i.hovered?;
-        let m = self.0.mounted.borrow();
-        let d = m.descriptions.get(&id)?;
-        (!d.tooltip.is_empty() && self.in_scope(id)).then(|| (d.tooltip.clone(), i.pointer))
     }
     pub fn select_collection_item(
         &self,
@@ -230,7 +209,18 @@ impl Host {
             .then(|| self.focused())
             .flatten();
         if !active {
-            self.dismiss_menu();
+            let ids: Vec<_> = self
+                .0
+                .scopes
+                .borrow()
+                .iter()
+                .filter(|s| s.data.options.dismiss_on_deactivate)
+                .map(|s| s.id)
+                .collect();
+            for id in ids {
+                let _ = self.dismiss_overlay(id, crate::DismissReason::Deactivated);
+            }
+            self.dismiss_tooltip(crate::DismissReason::Deactivated, true);
             let _ = self.unmark_text(true);
             self.cancel_field_work();
         }
@@ -269,6 +259,9 @@ impl Host {
         }
         let previous = self.0.interaction.borrow_mut().focus.replace(id);
         if previous != Some(id) {
+            self.0.interaction.borrow_mut().tooltip_hover = None;
+            self.dismiss_tooltip(crate::DismissReason::Outside, false);
+            self.0.tooltip.borrow_mut().owner = None;
             let mut i = self.0.interaction.borrow_mut();
             i.pressed = None;
             i.scroll_drag = None;
@@ -283,6 +276,7 @@ impl Host {
         if previous != Some(id) && self.0.interaction.borrow().active {
             self.blur_action(previous);
         }
+        self.advance_overlays_at(std::time::Instant::now());
         self.redraw();
         Ok(true)
     }
@@ -379,6 +373,12 @@ impl Host {
             self.redraw();
             return Ok(true);
         }
+        if self.context_pointer(event)? {
+            return Ok(true);
+        }
+        if self.overlay_pointer(event)? {
+            return Ok(true);
+        }
         if self.menu_pointer(event)? {
             return Ok(true);
         }
@@ -389,6 +389,7 @@ impl Host {
             return Ok(true);
         }
         if event.kind == PointerKind::Cancel {
+            self.0.interaction.borrow_mut().swallow_up = false;
             self.0.interaction.borrow_mut().pressed = None;
             self.0.interaction.borrow_mut().drag_tick = None;
             self.0.interaction.borrow_mut().repeat = None;
@@ -402,12 +403,36 @@ impl Host {
         };
         {
             let mut i = self.0.interaction.borrow_mut();
-            if i.hovered != hit {
-                i.hover_since = std::time::Instant::now();
-            }
             i.hovered = hit;
             i.pointer = event.position;
         }
+        let tooltip_hit = if event.kind == PointerKind::Leave {
+            None
+        } else {
+            self.scene()?
+                .into_iter()
+                .rev()
+                .find(|n| {
+                    !n.help.is_empty()
+                        && n.enabled
+                        && !n.hidden
+                        && n.bounds.contains(event.position)
+                        && n.clip.contains(event.position)
+                        && self.in_scope(n.id)
+                })
+                .map(|n| n.id)
+        };
+        let previous_hover = std::mem::replace(
+            &mut self.0.interaction.borrow_mut().tooltip_hover,
+            tooltip_hit,
+        );
+        if previous_hover != tooltip_hit
+            && matches!(event.kind, PointerKind::Move | PointerKind::Leave)
+        {
+            self.dismiss_tooltip(crate::DismissReason::Outside, false);
+            self.0.tooltip.borrow_mut().owner = None;
+        }
+        self.advance_overlays_at(std::time::Instant::now());
         if event.kind == PointerKind::Down && event.button == 1 {
             let action = {
                 let m = self.0.mounted.borrow();
@@ -420,6 +445,7 @@ impl Host {
                             && !n.layout_hidden
                             && self.in_scope(n.id)
                             && n.clip.contains(event.position)
+                            && n.bounds.contains(event.position)
                     })
                     .find_map(|n| m.descriptions.get(&n.id).and_then(|d| d.context.clone()))
             };
@@ -484,7 +510,7 @@ impl Host {
                         .iter()
                         .any(|n| n.parent == Some(modal) && n.bounds.contains(event.position));
                     if !inside {
-                        self.activate(modal)?;
+                        self.dismiss_overlay(modal, crate::DismissReason::Outside)?;
                     }
                 } else {
                     self.blur();
@@ -555,6 +581,9 @@ impl Host {
         self.update_drag_deadline(std::time::Instant::now());
         self.update_repeat();
         self.redraw();
+        if event.kind == PointerKind::Down {
+            self.dismiss_tooltip(crate::DismissReason::Outside, true);
+        }
         Ok(handled)
     }
     fn slider_pointer(&self, id: NodeId, p: Point) -> Result<bool, Error> {
@@ -583,13 +612,38 @@ impl Host {
             self.redraw();
             return Ok(true);
         }
+        if event.key == Key::F10
+            && event.modifiers.shift
+            && let Some(id) = self.focused()
+        {
+            return self.show_context_menu(id, None);
+        }
+        if event.key == Key::Escape && self.text_input()?.is_some_and(|i| i.marked.is_some()) {
+            return self.unmark_text(false);
+        }
+        if event.key == Key::Escape && self.0.tooltip.borrow().visible {
+            self.dismiss_tooltip(crate::DismissReason::Escape, true);
+            return Ok(true);
+        }
         if let Some(handled) = self.menu_key(event)? {
             return Ok(handled);
         }
         if event.key == Key::Escape
             && let Some(id) = self.active_modal()
         {
-            return self.activate(id);
+            let dismiss = self
+                .0
+                .mounted
+                .borrow()
+                .descriptions
+                .get(&id)
+                .and_then(|d| d.overlay.as_ref())
+                .is_none_or(|d| d.options.dismiss_on_escape);
+            return if dismiss {
+                self.dismiss_overlay(id, crate::DismissReason::Escape)
+            } else {
+                Ok(true)
+            };
         }
         if event.key == Key::Tab {
             return self.focus_next(event.modifiers.shift);

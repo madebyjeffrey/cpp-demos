@@ -132,6 +132,25 @@ impl TextInputClient for Client {
             .unwrap_or(0)
     }
     fn intercept_key(&self, key: &KeyEvent) -> bool {
+        if key.down && key.key == Key::F10 && key.modifiers.shift {
+            return self
+                .owner
+                .upgrade()
+                .and_then(|m| {
+                    m.run(|m, _| {
+                        m.host.key(ui::KeyEvent {
+                            key: ui::Key::F10,
+                            down: true,
+                            repeat: key.repeat,
+                            modifiers: ui::Modifiers {
+                                shift: true,
+                                ..Default::default()
+                            },
+                        })
+                    })
+                })
+                .unwrap_or(false);
+        }
         if key.down && key.modifiers.command {
             let command = match key.key {
                 Key::C => "copy:",
@@ -178,6 +197,31 @@ fn command(host: &ui::Host, selector: &str) -> std::result::Result<bool, ui::Err
                 .unwrap_or_default()
         };
         return host.paste_text(&value);
+    }
+    if selector == "cancelOperation:" && host.active_modal().is_some() {
+        return host.key(ui::KeyEvent {
+            key: ui::Key::Escape,
+            down: true,
+            repeat: false,
+            modifiers: Default::default(),
+        });
+    }
+    if matches!(selector, "moveUp:" | "moveDown:")
+        && host.active_modal().is_some_and(|id| {
+            host.snapshot()
+                .is_ok_and(|nodes| nodes.iter().any(|n| n.id == id && n.menu_root))
+        })
+    {
+        return host.key(ui::KeyEvent {
+            key: if selector == "moveUp:" {
+                ui::Key::Up
+            } else {
+                ui::Key::Down
+            },
+            down: true,
+            repeat: false,
+            modifiers: Default::default(),
+        });
     }
     let extend = selector.contains("AndModifySelection");
     let command = match selector
@@ -300,6 +344,7 @@ pub(super) fn event(m: &Mounted, event: &Event) -> std::result::Result<bool, ui:
                 Key::Backspace => ui::Key::Backspace,
                 Key::DeleteForward => ui::Key::Delete,
                 Key::A => ui::Key::A,
+                Key::F10 => ui::Key::F10,
                 _ => ui::Key::Unknown,
             };
             m.host.key(ui::KeyEvent {

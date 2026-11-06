@@ -116,6 +116,9 @@ pub(crate) struct Description {
     pub field_action: Option<crate::fields::FieldAction>,
     pub stepper: Option<crate::draft::StepperData>,
     pub split: Option<crate::split::SplitData>,
+    pub overlay: Option<crate::overlay::OverlayData>,
+    pub overlay_parent: bool,
+    pub context_menu: Option<crate::Menu>,
     pub menu: Option<crate::menu::MenuData>,
     pub menu_item: Option<crate::MenuItemInfo>,
     pub menu_panel: bool,
@@ -123,6 +126,8 @@ pub(crate) struct Description {
     pub anchor: Option<String>,
     pub collection: Option<crate::ListModel>,
     pub tooltip: String,
+    pub tooltip_options: crate::TooltipOptions,
+    pub tooltip_close: Option<crate::overlay::DismissCallback>,
     pub rich: Option<Vec<crate::rich_text::Run>>,
     pub scroll_axes: crate::ScrollAxes,
     pub scrollbars: bool,
@@ -154,6 +159,9 @@ impl View {
             field_action: None,
             stepper: None,
             split: None,
+            overlay: None,
+            overlay_parent: false,
+            context_menu: None,
             menu: None,
             menu_item: None,
             menu_panel: false,
@@ -161,6 +169,8 @@ impl View {
             anchor: None,
             collection: None,
             tooltip: String::new(),
+            tooltip_options: Default::default(),
+            tooltip_close: None,
             rich: None,
             scroll_axes: crate::ScrollAxes::Vertical,
             scrollbars: true,
@@ -201,7 +211,7 @@ impl View {
             .background(0x99000000)
             .align(Align::Center)
             .justify(Justify::Center);
-        Rc::make_mut(&mut v.0).action = Some(Rc::new(dismiss));
+        Rc::make_mut(&mut v.0).overlay = Some(crate::overlay::OverlayData::new(move |_| dismiss()));
         v
     }
     pub fn popover(

@@ -4,6 +4,8 @@ use crate::{Menu, MenuAction, OptionItem, State, View};
 pub struct Popup {
     pub open: State<bool>,
     menu: Menu,
+    options: crate::OverlayOptions,
+    close: Option<crate::overlay::DismissCallback>,
 }
 impl Popup {
     pub fn new() -> Self {
@@ -11,7 +13,43 @@ impl Popup {
         Self {
             open: menu.open.clone(),
             menu,
+            options: Default::default(),
+            close: None,
         }
+    }
+    pub fn options(mut self, options: crate::OverlayOptions) -> Self {
+        self.options = options;
+        self
+    }
+    pub fn on_dismiss(mut self, callback: impl Fn(crate::DismissReason) + 'static) -> Self {
+        self.close = Some(std::rc::Rc::new(callback));
+        self
+    }
+    pub fn button(&self, label: impl Into<String>, anchor: impl Into<String>) -> View {
+        let popup = self.clone();
+        View::button(label, move || popup.toggle()).key(anchor.into())
+    }
+    fn attach(&self, mut view: View) -> View {
+        let popup = self.clone();
+        let presented = self.clone();
+        let generation = self.menu.generation();
+        let data = crate::overlay::OverlayData {
+            options: self.options,
+            point: None,
+            presented: Some(std::rc::Rc::new(move || {
+                presented.open.get() && presented.menu.generation() == generation
+            })),
+            close: std::rc::Rc::new(move |reason| {
+                if popup.menu.generation() == generation {
+                    popup.dismiss();
+                }
+                if let Some(close) = &popup.close {
+                    close(reason);
+                }
+            }),
+        };
+        std::rc::Rc::make_mut(&mut view.0).overlay = Some(data);
+        view.key(self.menu.presentation_key())
     }
     pub fn show(&self) {
         self.menu.show()
@@ -28,7 +66,7 @@ impl Popup {
         }
         let close = self.clone();
         let button = self.clone();
-        View::modal(
+        self.attach(View::modal(
             vec![
                 View::panel(vec![
                     View::label(title).font_size(22.).bold(true),
@@ -39,17 +77,23 @@ impl Popup {
                 .width(400),
             ],
             move || close.dismiss(),
-        )
+        ))
     }
     pub fn popover(&self, anchor: impl Into<String>, body: View) -> View {
         if !self.open.get() {
             return View::fragment(vec![]);
         }
         let close = self.clone();
-        View::popover(anchor, vec![body], move || close.dismiss())
+        self.attach(View::popover(
+            anchor,
+            vec![View::scroll(vec![body]).scrollbars(true)],
+            move || close.dismiss(),
+        ))
     }
     pub fn menu(&self, anchor: impl Into<String>, items: Vec<MenuAction>) -> View {
-        self.menu.view(anchor, items)
+        let mut menu = self.menu.clone().options(self.options);
+        menu.close = self.close.clone();
+        menu.view(anchor, items)
     }
 }
 /// Tabs compose ordinary views. Only the selected page is mounted.

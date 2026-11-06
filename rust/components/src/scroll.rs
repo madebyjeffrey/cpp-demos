@@ -224,6 +224,9 @@ impl Host {
             let Some(n) = m.nodes.iter().find(|n| n.id == id) else {
                 break;
             };
+            if n.kind == crate::Kind::Modal {
+                break;
+            }
             if let Some(info) = n.scroll {
                 let current = self.0.scroll.borrow().get(&id).copied().unwrap_or_default();
                 // Geometry belongs to the last layout; account for pending offsets first.

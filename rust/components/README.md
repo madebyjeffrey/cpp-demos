@@ -484,3 +484,63 @@ the retained choice. With no available leaf the primary button is disabled.
 `selected()` reports the retained path. `split_button` still supports a fixed
 primary callback. Native accessibility exposes menu/item roles, checked values,
 shortcut help and expanded branches; final interactive VoiceOver auditing is M5.
+
+## Completion M3 — overlay policy
+
+`cargo run --example m3_overlay` demonstrates placement, nested scopes, retained
+editing, configurable help and attached context menus. Models stay outside builders:
+
+```rust
+let popup = Popup::new()
+    .options(OverlayOptions {
+        placement: OverlayPlacement::Right,
+        width: Some(300.), max_height: 240., margin: 8.,
+        ..Default::default()
+    })
+    .on_dismiss(|reason| println!("Closed: {reason:?}"));
+// In the builder:
+View::layer(vec![
+    popup.button("Details…", "details"),
+    popup.popover("details", View::label("Popover content")),
+])
+```
+
+`OverlayOptions` selects Below/Above/Left/Right, intrinsic or explicit width,
+maximum height, gap and viewport margin. Placement flips to the opposite side
+when it offers more room, then clamps. Popover bodies scroll inside their fitted
+size. Portals paint above regular content and escape owner clipping. Focusing an
+overlay control never scrolls the owner's ancestors. Fully clipped, hidden,
+disabled or removed owners dismiss the presentation without scrolling back.
+
+Content focus is the default and traps Tab in the top scope. `OverlayFocus::Preserve`
+keeps the invoking control/editor focused; explicitly focusing a control inside is
+still allowed. Closing nested content restores its prior control, then closing the
+parent restores the original one. Closing a parent also clears descendant models.
+Escape cancels marked text before dismissing an overlay. Outside presses consume
+the entire click. Outside/Escape/deactivation dismissal can each be disabled;
+`dismiss_on_deactivate: false` keeps content for reactivation. Inactive hosts do
+not regain focus through dismissal.
+
+`on_dismiss` receives a `DismissReason` once per observed presentation: action,
+Escape, outside press, programmatic close, owner loss, deactivation or unmount.
+Callbacks run outside construction and host borrows. They can remove the owner or
+reopen the model. `dismiss(); show()` starts a fresh presentation even when the
+changes coalesce before rebuilding. Raw `View::modal`/`popover` use the same lifetime
+and scope machinery; `overlay_options` configures raw popover placement and
+dismissal policy. Dialog sizing and completion transactions are covered separately.
+
+Attach a context menu with `view.context_menu(&menu, items)`; no separate overlay
+is needed. Secondary-click, Control-click and Shift-F10 on the owner or a descendant
+invoke its nearest menu. `Host::show_context_menu(id, point)` also supports explicit
+invocation; `None` places it by the owner. `Menu::options`/`on_dismiss` configure its
+presentation and `show_at` supplies a pointer position. Keys applied after attachment
+remain valid because attached menus track the owner node directly.
+
+`tooltip(text).tooltip_options(TooltipOptions { .. })` configures delay, maximum
+width, placement, gap and margin. Help works on hover or keyboard focus, including
+noninteractive labels. Click/Escape suppress help until focus or hover changes;
+it never adds a focus stop. `on_tooltip_dismiss` reports closure after visible help.
+Owner loss/deactivation/unmount cancel it; pending and shown help settle without
+continuous frames. `advance_overlays_at` supports deterministic clocks and
+`tooltip_presentation` exposes fitted logical-point geometry. Native accessibility
+exposes help before the tooltip appears. Final interactive auditing remains M5.

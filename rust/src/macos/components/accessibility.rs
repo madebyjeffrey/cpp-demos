@@ -168,7 +168,7 @@ define_class!(
         }
         #[unsafe(method_id(accessibilityHelp))]
         fn help(&self) -> Option<Retained<NSString>> {
-            self.node().and_then(|n| n.menu_item.filter(|m| !m.shortcut.is_empty()).map(|m| ns(&m.shortcut)))
+            self.node().and_then(|n| n.menu_item.filter(|m| !m.shortcut.is_empty()).map(|m| ns(&m.shortcut)).or_else(||(!n.help.is_empty()).then(||ns(&n.help))))
         }
         #[unsafe(method(isAccessibilityExpanded))]
         fn expanded(&self) -> bool {

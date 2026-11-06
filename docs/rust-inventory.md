@@ -52,9 +52,9 @@ wrapping a row of independent labels alone does not close that behavior.
 | `PasswordField`, `PasswordFieldOptions` | Explicit reveal/undo, readonly/grapheme limits, uncached sensitive painting and clipboard/AX restrictions implemented; actual native ownership transitions tested | M2.5 |
 | `NumericField`, `Stepper`, `NumericOptions`, `NumericStatus`, `NumericValidation` | Exact `Numeric<T>`/`Draft<T>`, `Validation`/`ValidationStatus`, precision/blur/submit/cancel and standalone repeating `stepper` implemented; localized grammar and shared typed-control expansion remain | M2.6, M6.1–M6.2, M6.6 |
 | `MenuButton`, `MenuItem`, `MenuItemKind`, `Action` | `Menu`/`MenuAction` tree: separator/check/radio/submenu, shortcut hints, disabled navigation/typeahead; legacy `Popup::menu` supported | M3.2 |
-| `SelectionDropdown` | Existing dropdown/button+overlay composition; richer menu navigation and semantics pending | M3.2, M5.3 |
+| `SelectionDropdown` | Dropdown uses stable option IDs with full menu navigation/check/radio/submenu support; combined native semantic audit remains | M3.2, M5.3 |
 | `SplitActionButton` | Retained `SplitAction`: selected leaf key path, primary invocation and unavailable-choice fallback; fixed `split_button` helper retained | M3.2 |
-| `OverlayPlacement`, `PopoverFocus`, `TooltipOptions`, `PopoverOptions` | Basic anchored/clamped popover, modal scope and delayed tooltip; configurable placement/focus/dismissal/size/help policies partial | M3.3, M5.3 |
+| `OverlayPlacement`, `PopoverFocus`, `TooltipOptions`, `PopoverOptions` | `OverlayOptions`/`OverlayPlacement`/`OverlayFocus` and `TooltipOptions`: fitted/scrolled portals, nested focus return, explicit dismissal reasons, help and owner lifetimes | M3.3, M5.3 |
 | `SplitView`, `SplitViewOptions`, `SplitPane` | `Split` model and retained panes, draggable dividers, both axes/minima, collapse/restoration, keyboard/cursor/capture policy and native split semantics implemented | M3.1 |
 | `Tab`, `TabView` | Segmented selection mounts only active view; retained host-owned state/focus and enabled/key behavior incomplete | M3.4 |
 | `Wizard`, `WizardStep`, `WizardOptions`, `WizardNavigation` | Simple index/back/next composition; validation, stable steps, review, finish/cancel/change policies missing | M3.5 |
@@ -90,7 +90,7 @@ Every public C++ `View` modifier is listed, including those with existing Rust n
 | `position`, `left`, `top`, `right`, `bottom`, `z_index` | Flow/relative/absolute/anchors/z-order implemented with constrained layout and subtree hit-order coverage | M1.2–M1.3 |
 | `content_mode` | Existing image constructor mode (`content_mode:` in macro); no need for a second stateful modifier | M7.3 |
 | `expanded` | Tree expansion state exists separately; public disclosure annotation and semantics partial | M4.3–M4.4, M5.1/M5.3 |
-| `tooltip`, `popover`, `context_menu` | Existing `tooltip`, `Popup` compositions and `on_context`; full options and menu-tree contracts pending | M3.2–M3.3 |
+| `tooltip`, `popover`, `context_menu` | Configurable `tooltip`/`Popup` and attached `View::context_menu`: nearest-owner pointer/keyboard invocation, hierarchy, scope and lifetime policies; legacy `on_context` supported | M3.2–M3.3 |
 | `description` | Private immutable Rust description, public owned host snapshots; deliberate information hiding | M7.1 |
 | `labeled` free annotation helper | Explicit accessible labels exist; annotation/name association remains part of Lab/semantics coverage | M5.3, M7.3 |
 
@@ -102,7 +102,7 @@ Every public C++ `View` modifier is listed, including those with existing Rust n
 | `Host` construction/options/theme/text-layout assignment/refresh | Rust host constructor, `set_theme`, `layout(..., Measure)` and refresh; native connection provided by window mounting | M1, M7.3 |
 | `Host` pointer/key/clipboard/editing/focus/cursor and text-input queries | Existing core dispatch and native adapter; input/geometry/secure/notification completion assigned above | M1.5, M2, M5 |
 | `Host` layout/scroll/list/tree/table/logical queries and actions | Snapshots/models exist; bounded logical semantics and full query/action behavior must be completed without forcing native types into the core | M1.4, M4, M5 |
-| `Host` menu/popover/tooltip/alert presentation, scheduling and invalidation | Existing popup/deadline/mount mechanisms; lifetime, exactly-once completion and idle/cancel contracts require closure | M3, M8.4 |
+| `Host` menu/popover/tooltip/alert presentation, scheduling and invalidation | Menus/popovers/tooltips have scoped lifetimes and dismissal callbacks; alert result transactions and final idle/cancel regression evidence remain | M3.6, M8.4 |
 | `Host` inspection/picking/layout overrides/previews | Existing picking and width UI; full developer tool contracts and diagnostic previews pending | M7, M8.2 |
 
 Run `python3 scripts/check_rust_inventory.py` after changing the reference or matrix.

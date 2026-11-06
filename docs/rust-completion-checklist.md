@@ -33,7 +33,7 @@ overall goal complete while an in-scope item remains open.
 | State and descriptions | Reactive bindings, keys, macro conditions/repetition, host identity and inventory mapping | Ergonomic coverage of remaining component behaviors |
 | Layout and basic controls | Inventory, constrained layout, rich text, style coverage and two-axis scrolling verified | Final cross-component visual/semantic audit in M5/M8 |
 | Editing | Shared buffer, visual navigation/gestures, search/password/numeric policies and held steppers | Localization/value-control expansion in M6; final interactive IME audit in M5 |
-| Presentation | Retained splits, hierarchical menus/split actions and popup focus scopes | Configurable overlay policy, retained tab state and presentation transactions |
+| Presentation | Retained splits, hierarchical menus/split actions, configured portals/help and nested focus scopes | Retained tab state, wizard policy and presentation transactions |
 | Collections | Fixed-height virtualization, keyed selection, basic trees/tables, cell conflict checks | Lazy tree lifecycle, cell/column interactions, richer selection and semantics |
 | Values and tooling | Typed drafts, sRGB/hex, calendar, ISO/zoned editing, picking/width overrides | Complete value-control policies and inspector/Lab coverage |
 | Verification | Core/CPU tests and native input/accessibility protocol tests | Interactive audits, final visible GPU/full-screen runs and repeatable checks |
@@ -173,7 +173,7 @@ Completion record:
 
 - [x] **M3.1 Split views:** draggable dividers, both orientations, pane limits, collapse/restore and keyboard adjustment; resize cursors, capture cancellation and accessible split semantics.
 - [x] **M3.2 Menus and split actions:** separators, checked/radio items, nested submenus, shortcut labels, disabled-item navigation, typeahead and complete open/close/activation behavior; a split action can retain its chosen primary action.
-- [ ] **M3.3 Overlay policy:** configurable placement, sizing, viewport fitting, focus preservation and dismissal callbacks for popovers/tooltips/context menus, including nested scopes and owner removal.
+- [x] **M3.3 Overlay policy:** configurable placement, sizing, viewport fitting, focus preservation and dismissal callbacks for popovers/tooltips/context menus, including nested scopes and owner removal.
 - [ ] **M3.4 Tabs:** stable page identity, enabled tabs, keyboard navigation and restoration of editor history, selection, scroll and focus after switching pages. Application model state alone does not satisfy this item.
 - [ ] **M3.5 Wizards:** stable step IDs, validation that can block navigation, back/review policy, finish/cancel/change callbacks and valid behavior for empty/changed step sets.
 - [ ] **M3.6 Alerts and sheets:** an explicit result/completion transaction with default/cancel/destructive actions; exactly-once completion through action, Escape, dismiss, close and destruction. Demonstrate native parent-sheet isolation and focus restoration.
@@ -213,7 +213,30 @@ Completion record (in progress):
   expanded empty branches and inert closed/unmounted elements pass. Workspace
   tests, strict Clippy, portable compilation, dark/light inspected previews and
   native `m3_menu --smoke` pass. The existing `Popup::menu` stays compatible.
-- M3.3–M3.6 remain open.
+- M3.3: shared `OverlayOptions`/placement fitting for popovers, menus and tooltips;
+  intrinsic/explicit width, bounded scrolling, gap/margins, content/preserved focus
+  and independent outside/Escape/deactivation policies. Portals escape owner clips
+  and paint above ordinary content. Nested scopes restore individual prior controls;
+  parent closure clears descendants and clipped-owner dismissal preserves scrolling.
+- Presentation lifetimes report one dismissal reason, including direct binding
+  changes, hidden/disabled/clipped/removed owners, deactivation and host/native
+  unmount. Callbacks may remove/reopen content; coalesced dismiss/show has a fresh
+  identity. Escape cancels preedit first. Outside presses consume their release.
+  Attached context menus resolve the actual nearest owner for secondary/Control
+  click and Shift-F10, including editor responders and later key modifiers.
+- Configurable tooltips support hover/focus/noninteractive owners, wrapping/fitting,
+  suppression, accessible help before display and dismissal callbacks. Delayed work
+  cancels when invalid and settles when shown; geometry uses logical window points.
+- Evidence: twelve focused portable overlay tests plus existing menu/presentation
+  coverage and a Skia pixel regression proving nested portals cover owner scrollbars;
+  native marked-text Escape, help, editor Shift-F10, nested return focus,
+  fast open/dismiss and exactly-once unmount callbacks pass. Workspace tests,
+  strict Clippy, portable compilation and example smoke pass; dark/light
+  `m3_overlay` previews inspected. An additional secure-input rerun could not
+  satisfy its awake foreground-desktop prerequisite; it is unavailable evidence,
+  not a pass. The prior M2 ownership check remains recorded, and M8 still requires
+  final native regression evidence. Interactive auditing remains M5.
+- M3.4–M3.6 remain open.
 
 
 ## M4 — Collections and structured editing

@@ -129,3 +129,50 @@ fn scrollbar_paints_above_content_but_below_later_siblings() {
         &[255, 0, 0]
     );
 }
+#[test]
+fn nested_portal_paints_above_its_owners_scrollbar() {
+    let renderer = renderer();
+    let popup = Popup::new().options(OverlayOptions {
+        width: Some(200.),
+        ..Default::default()
+    });
+    popup.show();
+    let host = Host::new(move || {
+        View::scroll(vec![
+            View::layer(vec![
+                View::button("Anchor", || {}).key("anchor"),
+                popup.popover("anchor", View::label("").height(80).background(0xff00ff00)),
+            ])
+            .height(50)
+            .shrink(0.),
+            View::spacer().height(400).shrink(0.),
+        ])
+        .height(100)
+        .key("scroll")
+    });
+    host.layout(Size::new(200., 150.), &renderer).unwrap();
+    let bar = host
+        .scroll_info(keyed(&host, "scroll").id)
+        .unwrap()
+        .unwrap()
+        .bars()
+        .next()
+        .unwrap();
+    let mut surface = skia::surfaces::raster_n32_premul((200, 150)).unwrap();
+    renderer.paint(&host, surface.canvas(), 0.).unwrap();
+    let mut pixels = vec![0; 200 * 150 * 4];
+    assert!(surface.read_pixels(
+        &skia::ImageInfo::new(
+            (200, 150),
+            skia::ColorType::RGBA8888,
+            skia::AlphaType::Unpremul,
+            None
+        ),
+        &mut pixels,
+        800,
+        (0, 0)
+    ));
+    let x = (bar.track.x + 3.) as usize;
+    let p = (70 * 200 + x) * 4;
+    assert_eq!(&pixels[p..p + 3], &[0, 255, 0]);
+}

@@ -97,6 +97,11 @@ struct Typeahead {
 #[derive(Clone)]
 pub struct Menu {
     pub open: State<bool>,
+    id: u64,
+    presentation: State<u64>,
+    options: crate::OverlayOptions,
+    point: State<Option<crate::Point>>,
+    pub(crate) close: Option<crate::overlay::DismissCallback>,
     path: State<Vec<String>>,
     typing: Rc<RefCell<Typeahead>>,
 }
@@ -109,11 +114,44 @@ impl Menu {
     pub fn new() -> Self {
         Self {
             open: State::new(false),
+            id: {
+                static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            },
+            presentation: State::new(0),
+            options: Default::default(),
+            point: State::new(None),
+            close: None,
             path: State::new(vec![]),
             typing: Rc::default(),
         }
     }
+    pub(crate) fn generation(&self) -> u64 {
+        self.presentation.get()
+    }
+    pub(crate) fn presentation_key(&self) -> String {
+        format!("$overlay-{}-{}", self.id, self.presentation.get())
+    }
+    pub(crate) fn identity(&self) -> u64 {
+        self.id
+    }
+    pub fn options(mut self, options: crate::OverlayOptions) -> Self {
+        self.options = options;
+        self
+    }
+    pub fn on_dismiss(mut self, callback: impl Fn(crate::DismissReason) + 'static) -> Self {
+        self.close = Some(Rc::new(callback));
+        self
+    }
+    pub fn show_at(&self, point: crate::Point) {
+        self.show();
+        self.point.set(Some(point));
+    }
     pub fn show(&self) {
+        if !self.open.get() {
+            self.presentation.update(|n| *n = n.wrapping_add(1));
+        }
+        self.point.set(None);
         self.path.set(vec![]);
         self.typing.replace(Typeahead::default());
         self.open.set(true);
@@ -163,7 +201,26 @@ impl Menu {
             children = sub;
         }
         let close = self.clone();
-        let mut view = View::popover(anchor, panels, move || close.dismiss());
+        let mut view =
+            View::popover(anchor, panels, move || close.dismiss()).key(self.presentation_key());
+        let close = self.clone();
+        let presented = self.clone();
+        let generation = self.generation();
+        Rc::make_mut(&mut view.0).overlay = Some(crate::overlay::OverlayData {
+            options: self.options,
+            point: self.point.get(),
+            presented: Some(Rc::new(move || {
+                presented.open.get() && presented.generation() == generation
+            })),
+            close: Rc::new(move |reason| {
+                if close.generation() == generation {
+                    close.dismiss();
+                }
+                if let Some(callback) = &close.close {
+                    callback(reason);
+                }
+            }),
+        });
         Rc::make_mut(&mut view.0).menu = Some(MenuData {
             model: self.clone(),
             items,
@@ -385,7 +442,11 @@ impl Host {
             menu.model.path.set(info.path.clone());
             self.menu_focus(info.path.len(), false)?;
         } else {
-            menu.model.dismiss();
+            if let Some(id) = self.active_modal() {
+                self.dismiss_overlay(id, crate::DismissReason::Action)?;
+            } else {
+                menu.model.dismiss();
+            }
             if let Some(select) = menu.select {
                 select(info.path);
             }
@@ -462,8 +523,17 @@ impl Host {
                     self.focus(n.id)?;
                 }
             }
-            Key::Escape | Key::Tab => {
-                menu.model.dismiss();
+            Key::Escape => {
+                if menu.model.options.dismiss_on_escape
+                    && let Some(id) = self.active_modal()
+                {
+                    self.dismiss_overlay(id, crate::DismissReason::Escape)?;
+                }
+            }
+            Key::Tab => {
+                if let Some(id) = self.active_modal() {
+                    self.dismiss_overlay(id, crate::DismissReason::Escape)?;
+                }
             }
             Key::Enter | Key::Space => {
                 if !event.repeat
@@ -546,20 +616,6 @@ impl Host {
             menu.model.dismiss();
             return Ok(true);
         }
-        if event.kind == PointerKind::Down {
-            let inside = self
-                .0
-                .mounted
-                .borrow()
-                .nodes
-                .iter()
-                .any(|n| n.menu_panel && n.bounds.contains(event.position));
-            if !inside {
-                menu.model.dismiss();
-                self.redraw();
-                return Ok(true);
-            }
-        }
         let dragging = self.0.interaction.borrow().pressed.is_some_and(|id| {
             self.0
                 .mounted
@@ -605,18 +661,40 @@ impl Host {
         };
         let anchor_valid = {
             let m = self.0.mounted.borrow();
-            let anchor = self
-                .active_modal()
-                .and_then(|id| m.descriptions.get(&id))
-                .and_then(|d| d.anchor.as_ref());
-            anchor.is_some_and(|key| {
-                m.nodes.iter().any(|n| {
-                    n.key.as_ref() == Some(key) && n.enabled && !n.hidden && !n.layout_hidden
+            self.active_modal()
+                .and_then(|id| m.nodes.iter().find(|n| n.id == id))
+                .is_some_and(|root| {
+                    root.overlay_owner
+                        .and_then(|id| m.nodes.iter().find(|n| n.id == id))
+                        .or_else(|| {
+                            root.anchor.as_ref().and_then(|key| {
+                                m.nodes.iter().find(|n| n.key.as_ref() == Some(key))
+                            })
+                        })
+                        .is_some_and(|n| n.enabled && !n.hidden && !n.layout_hidden)
                 })
-            })
         };
-        if !anchor_valid || !self.0.interaction.borrow().active {
-            menu.model.dismiss();
+        if !anchor_valid {
+            if let Some(id) = self.active_modal() {
+                self.dismiss_overlay(id, crate::DismissReason::OwnerRemoved)?;
+            }
+            return Ok(());
+        }
+        if !self.0.interaction.borrow().active {
+            return Ok(());
+        }
+        if menu.model.options.focus == crate::OverlayFocus::Preserve
+            && self.focused().is_some_and(|id| {
+                self.in_scope(id)
+                    && !self
+                        .0
+                        .mounted
+                        .borrow()
+                        .nodes
+                        .iter()
+                        .any(|n| n.id == id && n.menu_item.is_some())
+            })
+        {
             return Ok(());
         }
         let path = menu.model.path.get();
@@ -637,10 +715,5 @@ impl Host {
             self.menu_focus(valid, false)?;
         }
         Ok(())
-    }
-    pub(crate) fn dismiss_menu(&self) {
-        if let Some(menu) = self.current_menu() {
-            menu.model.dismiss();
-        }
     }
 }

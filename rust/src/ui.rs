@@ -367,7 +367,7 @@ impl Renderer {
         for n in host.scene()? {
             while scrollbars
                 .last()
-                .is_some_and(|(depth, ..)| *depth >= n.depth)
+                .is_some_and(|(depth, ..)| n.kind == Kind::Modal || *depth >= n.depth)
             {
                 let (_, clip, info, enabled) = scrollbars.pop().unwrap();
                 draw_scrollbars(
@@ -744,35 +744,15 @@ impl Renderer {
                 },
             );
         }
-        if let Some((text, p)) = host.tooltip() {
-            let style = TextStyle {
-                size: 13.,
-                color: theme.text,
-                bold: false,
-                wrap: true,
-                ..TextStyle::default()
-            };
-            let shaped = self.shaped(&text, style, 260.);
-            let size = canvas.base_layer_size();
-            let x =
-                p.x.min((size.width as f64 - shaped.layout.size.width - 20.).max(0.));
-            let y = (p.y + 20.).min((size.height as f64 - shaped.layout.size.height - 16.).max(0.));
-            round(
-                canvas,
-                Rect::new(
-                    x,
-                    y,
-                    shaped.layout.size.width + 16.,
-                    shaped.layout.size.height + 12.,
-                ),
-                5.,
-                theme.panel,
-                false,
-            );
-            shaped
+        if let Some(tip) = host.tooltip_presentation(self)? {
+            canvas.save();
+            canvas.clip_rect(skrect(tip.bounds), None, true);
+            round(canvas, tip.bounds, 5., theme.panel, false);
+            self.shaped(&tip.text, tip.style, tip.text_bounds.width)
                 .paragraph
                 .borrow()
-                .paint(canvas, ((x + 8.) as f32, (y + 6.) as f32));
+                .paint(canvas, (tip.text_bounds.x as f32, tip.text_bounds.y as f32));
+            canvas.restore();
         }
         Ok(())
     }

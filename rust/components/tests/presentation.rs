@@ -100,7 +100,7 @@ fn popover_positions_against_anchor_and_stays_in_viewport() {
         .find(|n| n.kind == Kind::Panel)
         .unwrap();
     assert_eq!(panel.bounds.x, 140.);
-    assert_eq!(panel.bounds.y, 60.);
+    assert_eq!(panel.bounds.y, 54.); // The configured six-point gap also applies when flipped above.
 }
 #[test]
 fn dropdown_keeps_distinct_option_ids_when_labels_match() {

@@ -75,6 +75,11 @@ models outside builders as well.
 that remembers its selected primary action. `Menu::button` hides trigger callback
 plumbing; `Menu::view` provides the overlay. See the [menu contracts](../rust/components/README.md#completion-m3--menu-trees-and-split-actions).
 
+`cargo run --example m3_overlay` demonstrates configurable popovers, tooltips and
+attached context menus. `Popup::options` controls placement, sizing and focus;
+`view.context_menu(&menu, items)` attaches a menu without a separate overlay.
+See the [overlay contracts](../rust/components/README.md#completion-m3--overlay-policy).
+
 `view!` supports ordinary expressions, `if`/`else`, keyed `for` loops, custom
 functions returning `View`, and `embed(view)` for an already-built value. Unknown
 properties fail compilation. Use stable keys for reordered items; unkeyed identity
