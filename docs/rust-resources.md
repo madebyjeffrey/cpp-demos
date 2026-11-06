@@ -85,11 +85,11 @@ Run it through the native validation entry point once the Mac is awake/unlocked:
 python3 scripts/check_rust.py --suite native --offline
 ```
 
-This new visible resource check is compiled but **has not run**: the current
-desktop readiness probe reports the login window and zero active displays.
-M8.4 stays open until its visible idle-frame checks pass. No process-wide OS
-wakeup, interactive VoiceOver/IME or visible Metal pass is inferred from the
-portable or hidden-window results.
+The visible resource checks passed on the awake macOS desktop: all three cases
+received real animated Metal frames, then settled with zero additional idle
+frames or callbacks. M8.4 is complete for window-scoped resource behavior. This
+does not establish process-wide OS wakeup behavior or the interactive
+VoiceOver/IME audit, which remains deferred in `rust-todo.md`.
 
 Focused checks, from `rust/`:
 

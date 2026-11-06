@@ -2,15 +2,16 @@
 
 Reviewed 2026-11-06. The C++ reference is unchanged from `82583e7`; implementation
 and example baseline is `c10bab6`, with the build/AX corrections recorded below.
-The [44-item checklist](rust-completion-checklist.md) is **39 checked, 5 open**.
-This is an evidence reconciliation, not final sign-off.
+The [44-entry checklist](rust-completion-checklist.md) is **41 complete, 2 M8
+gates open, 1 item deferred**. M5.5 is tracked in [the Rust TODO list](rust-todo.md)
+at the user's direction; this audit is not final sign-off.
 
 ## Requirement-by-requirement evidence
 
 `Checked` below records an implemented checklist item with its focused evidence.
 Native protocol checkpoints are documented in the checklist; ordinary headless
-harness skips are not native passes. Actual speech, IME placement and final
-foreground runs remain the explicit open gates below.
+harness skips are not native passes. VoiceOver/IME work is deferred as M5.5;
+the final foreground M8 runs remain open below.
 
 Core test paths are relative to `rust/crates/scars-ui/tests/`; renderer/native test
 paths are relative to `rust/crates/scars-window/tests/`. Examples run from `rust/` with
@@ -46,7 +47,7 @@ paths are relative to `rust/crates/scars-window/tests/`. Examples run from `rust
 | M5.2 Table semantics | Checked | Core `table_semantics`; native `table_accessibility` checkpoint and bounded lazy arrays |
 | M5.3 Control semantics | Checked | Core `control_semantics`; native `control_accessibility` checkpoint; `m5_semantics` |
 | M5.4 Native lifecycle/posts | Checked | Native `accessibility_lifecycle`, `accessibility_notifications`, `accessibility_focus` checkpoints |
-| M5.5 Interactive audit | **Open** | Actual VoiceOver speech and composing IME placement at actual backing scales 1 and 2; tab speech recheck pending |
+| M5.5 Interactive audit | **Deferred** | Incomplete; tracked in `rust-todo.md` per user direction and excluded from this M8 close-out |
 | M6.1 Format policy | Checked | [Grammar specification](rust-editable-formats.md); core `editable_formats`; `m6_formats` |
 | M6.2 Localization | Checked | Core `localized_values`; native localized-value checkpoint; `m6_locales` |
 | M6.3 Date picker | Checked | Core `date_picker`; native date checkpoint; `m6_date` |
@@ -56,12 +57,12 @@ paths are relative to `rust/crates/scars-window/tests/`. Examples run from `rust
 | M7.1 Mounted inspector | Checked | Core `inspector`; renderer `inspector_raster`; native inspector checkpoint; `m7_inspector` |
 | M7.2 Property overrides | Checked | Core `inspector`; renderer `inspector_raster`; renamed-consumer compilation |
 | M7.3 Full Lab/ergonomics | Checked | `lab` covers 28 samples on 7 retained pages; independent component state and source-level consumer checks |
-| M8.1 Visible native rendering | **Open** | Awake/foreground Metal, lifecycle, full-screen and native suite rerun |
+| M8.1 Visible native rendering | Checked | macOS 27.2 desktop suite passed Metal pixels/lifecycle; full-screen and secure-input suites passed |
 | M8.2 Visual matrix | Checked | Six Lab tests and 644 paired CPU scenes; both themes/scales/sizes, states, long/RTL/emoji text |
 | M8.3 Repeatable checks | Checked | `check_rust.py`, validator tests, standalone consumer, Linux core and checked CI workflow |
-| M8.4 Resources | **Open** | [Measured CPU/hidden evidence](rust-resources.md) passes; prepared visible idle-frame cases still need the desktop |
-| M8.5 Examples | **Open** | [37 headless examples / 156 PNGs](rust-example-regressions.md) and seven Todo tests pass; foreground examples remain unrun |
-| M8.6 Final sign-off | **Open** | This audit, minimum compiler and documentation work are prepared; the four preceding open gates still prevent sign-off |
+| M8.4 Resources | Checked | [Measured workload](rust-resources.md), focused retention tests, and visible idle-frame cases (26/28/29 frames then zero idle work) |
+| M8.5 Examples | **Open** | Current 161-step headless run passed, including 37 examples / 156 PNGs; foreground examples stopped at the focus guard |
+| M8.6 Final sign-off | **Open** | Audit and minimum compiler evidence are ready; M8.5 foreground smoke and final inventory sign-off remain |
 
 ## Option-family reconciliation
 

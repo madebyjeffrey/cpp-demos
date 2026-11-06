@@ -14,7 +14,7 @@ pub fn run(app: &Application) {
         let calls = State::new(0usize);
         let frames = Rc::new(Cell::new(0usize));
         let window = Window::builder(format!("Resource lifecycle: {mode}"))
-            .size(480., 240.)
+            .size(520., 400.)
             .on_draw({ let frames = frames.clone(); move |_, frame| {
                 frames.set(frames.get() + 1);
                 frame.canvas().clear(skia::Color::BLACK);
@@ -44,22 +44,39 @@ pub fn run(app: &Application) {
             .unwrap();
         host.focus(field.id).unwrap();
         host.insert_text("Pending query", None).unwrap();
+        // Let the native redraw callback rebuild and lay out the invalidated tree
+        // before querying geometry to synthesize the captured pointer press.
+        run_for(app, Duration::from_millis(80));
         let button = host
             .snapshot()
             .unwrap()
             .into_iter()
             .find(|n| n.key.as_deref() == Some("repeat"))
             .unwrap();
-        host.pointer(Pointer {
-            kind: PointerKind::Down,
-            position: Point {
-                x: button.bounds.x + 5.,
-                y: button.bounds.y + 5.,
-            },
-            button: 0,
-            modifiers: Modifiers::default(),
-        })
-        .unwrap();
+        let point = Point {
+            x: button.bounds.x + 5.,
+            y: button.bounds.y + 5.,
+        };
+        assert_eq!(
+            host.hit_test(point).unwrap(),
+            Some(button.id),
+            "{mode}: button {:?} outside hit area {:?} clipped by {:?}",
+            button.bounds,
+            button.bounds,
+            button.clip,
+        );
+        let hit = host
+            .pointer(Pointer {
+                kind: PointerKind::Down,
+                position: point,
+                button: 0,
+                modifiers: Modifiers::default(),
+            })
+            .unwrap();
+        assert!(
+            hit,
+            "{mode}: repeat control did not receive the pointer press"
+        );
         assert!(host.next_deadline().is_some());
         match mode {
             "hidden" => hidden.set(true),

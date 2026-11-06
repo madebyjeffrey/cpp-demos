@@ -11,7 +11,9 @@ that the corresponding behavior is finished.
 ## Scope and working rules
 
 The user confirmed **macOS components and the portable core**. Native Windows and
-Linux window backends are outside this goal. SCARS behavior is the reference;
+Linux window backends are outside this goal. M5.5 is explicitly deferred to
+[`rust-todo.md`](rust-todo.md) by the user and is not a gate for the current M8
+close-out; it remains incomplete and must not be reported as passed. SCARS behavior is the reference;
 Rust names, interfaces and visuals may improve without preserving C++ compatibility.
 Skia's native engine remains acceptable; SCARS component logic stays in Rust.
 
@@ -38,8 +40,8 @@ overall goal complete while an in-scope item remains open.
 | Values and tooling | Shared typed draft lifecycle, RGB/HSV/hex, calendars, localized civil/zoned editing, mounted inspector/property overrides and box/flex feedback | Final visual/interaction evidence in M8 |
 | Verification | Repeatable local/CI checks, core/CPU/native-protocol tests, example matrix and minimum-Rust compilation | Interactive audits, final visible GPU/full-screen/idle/example runs and inventory sign-off |
 
-The [release audit](rust-release-audit.md) reconciles all 44 items with concrete
-evidence and the five remaining gates. The inventory is implementation coverage;
+The [release audit](rust-release-audit.md) reconciles all 44 entries: 41 complete,
+two open M8 gates, and M5.5 deferred. The inventory is implementation coverage;
 it does not close native or interactive verification automatically.
 
 The main reference is the [current C++ public inventory](../scars/src/scars.cppm),
@@ -471,7 +473,7 @@ Implement semantics alongside M1–M4; this milestone closes their combined audi
 - [x] **M5.2 Table semantics:** columns, cells, headers, row/cell selection, editing and sort information; indexed queries must remain bounded and avoid creating the full table.
 - [x] **M5.3 Control/presentation semantics:** correct menu, tab, split, alert, validation, help and value roles/states/actions, rather than exposing every composition merely as generic groups/buttons.
 - [x] **M5.4 Lifecycle/notifications:** stable logical identity, native focus/selection/value/layout notifications and coordinate conversion; retained objects become inert after removal, unmount or close, including nested presentations.
-- [ ] **M5.5 Interactive audit:** record actual VoiceOver and IME sessions covering navigation, editing, popup/sheet transitions, password reveal and candidate placement at both backing scales. Fix issues found; keep unavailable checks open.
+- [deferred] **M5.5 Interactive audit:** record actual VoiceOver and IME sessions covering navigation, editing, popup/sheet transitions, password reveal and candidate placement at both backing scales. Track it in [`rust-todo.md`](rust-todo.md); it is incomplete and outside this M8 close-out.
 
 Evidence: semantic snapshot tests, native protocol/action tests and a short manual
 results record. Main implementation: [native semantics](../rust/crates/scars-window/src/macos/components/accessibility.rs)
@@ -573,8 +575,9 @@ Completion record:
   runnable example; existing dark/light previews apply. The earlier identity/posting
   checkpoint is `4df142a`. This proves AppKit emission, not external-client receipt.
 
-M5.5 interactive audit remains open. The current readiness probe reports an active
-screen and display-link callbacks, but no application/key-window ownership:
+M5.5 interactive audit is deferred by user request; its speech/IME work remains
+incomplete. An earlier readiness probe reported an active screen and display-link
+callbacks, but no application/key-window ownership:
 
 ```text
 active-displays=1 display-error=0 front=com.utmapp.UTM app-active=0 key-window=0 visible=1 callbacks=72 ready=0
@@ -950,10 +953,23 @@ M7.3 completion record (`8782764`):
 
 ## M8 — Release evidence and documentation
 
-- [ ] **M8.1 Native rendering:** rerun visible Metal pixel, lifecycle and full-screen suites on an awake foreground desktop; record failures accurately and fix genuine regressions.
+M8.1 native rendering completion record (2026-11-06):
+
+- On macOS 27.2, the native `desktop` suite passed visible Metal pixel checks,
+  window lifecycle, sheets, input, Skia and callback behavior. The separate
+  full-screen Space transition test passed. Secure-input and the native component,
+  accessibility, picker and inspector harnesses also passed in the full native
+  run. Manual VoiceOver/IME remains deferred under M5.5.
+- The first desktop attempt exposed an undersized M8.4 fixture window. It now uses
+  520×400 points, meeting the backend's default minimum; the rerun passed.
+- `python3 scripts/check_rust.py --suite native --offline` passed its first 19
+  steps. Its final M8.5 example step stopped at the foreground readiness guard;
+  that does not invalidate the separately passed native rendering checks.
+
+- [x] **M8.1 Native rendering:** rerun visible Metal pixel, lifecycle and full-screen suites on an awake foreground desktop; record failures accurately and fix genuine regressions.
 - [x] **M8.2 Visual/interaction matrix:** reproducible dark/light previews at 1×/2×, narrow/wide sizes, disabled/readonly/error/focused states and representative long/RTL/emoji text.
 - [x] **M8.3 Repeatable checks:** one documented local validation entry point and suitable CI checks for formatting, strict Clippy, core/macro/raster tests, external consumer compilation and portable-core compilation; native interactive checks remain explicit.
-- [ ] **M8.4 Resource behavior:** measure large collections and long editing sessions for retained objects/caches and idle wakeups; verify inactive/hidden/unmounted controls cancel work and settle.
+- [x] **M8.4 Resource behavior:** measure large collections and long editing sessions for retained objects/caches and idle wakeups; verify inactive/hidden/unmounted controls cancel work and settle.
 - [ ] **M8.5 Regression examples:** run the themed todo app and all milestone examples after the final interfaces settle; verify editing, filtering, persistence and external value updates still work.
 - [ ] **M8.6 Inventory sign-off:** close every in-scope inventory row and checklist item with evidence, update public docs/examples and remove stale completion claims. Record remaining optional extensions separately before completing the goal.
 
@@ -983,10 +999,9 @@ M8.2 completion record:
   Invalid raster scales and requesting a synthetic native scale are rejected.
   The [Lab guide](rust-lab.md) gives concise reproduction commands.
 - These are CPU raster and portable interaction results. The reported tab
-  utterance still needs an actual speech recheck. M5.5 and M8.1 remain open for
-  VoiceOver, real IME/display backing scales and visible Metal evidence.
+  utterance still needs an actual speech recheck under deferred M5.5.
 
-M8.4 resource evidence prepared; visible verification remains open:
+M8.4 resource behavior completion record:
 
 - `m8_resources` is a runnable terminal workload using real Skia layout/painting.
   Two measured runs use 100,000 rows each for list/table/tree, 128 visits and
@@ -1008,19 +1023,20 @@ M8.4 resource evidence prepared; visible verification remains open:
   latest text; its focused test, rebuilt example and strict all-target Clippy
   passed again after that refinement. Both reported measurements use this final
   executable. Native skips in the headless run do not count as native passes.
-- The foreground desktop suite includes prepared hidden-subtree, inactive-window
-  and unmounted-view cases. Each requires delivered animated Metal frames first,
-  then no frames/deadlines/callbacks after settling. They compile but have not run
-  while the desktop is locked. M8.4 remains unchecked until that visible evidence
-  passes. The [resource report](rust-resources.md) records commands and limits.
+- On the foreground desktop, the lifecycle cases delivered 26/28/29 Metal frames
+  before settling for hidden, inactive and unmounted states respectively, then
+  observed zero idle frames, deadlines or callbacks. This closes the visible
+  portion alongside the measured workload and focused retention tests above.
+  The [resource report](rust-resources.md) records commands and limits.
 
 M8.5 headless regression evidence prepared; native examples remain open:
 
-- The example runner classifies all 39 Cargo targets. The full headless entry
-  point passed all ten checks, including 37 executed examples (three terminal
-  demonstrations) and 156 dark/light, 1×/2× PNGs (78 verified pairs). Sheet content,
-  Arabic localization and inspector box/flex/popover variants also run. The
-  two native-only diagnostics, `stage1` and `windows`, are explicitly unrun.
+- The example runner classifies all 39 Cargo targets. After the crate move, the
+  headless example runner passed all 161 steps: 37 executed examples, including
+  three terminal demonstrations, and 156 dark/light 1×/2× PNGs (78 verified
+  pairs). Sheet content, Arabic localization and inspector box/flex/popover
+  variants also run. The two native-only diagnostics, `stage1` and `windows`, are
+  explicitly unrun pending the foreground run.
 - Seven Todo tests pass, including the mounted view in both themes: adding,
   editing/cancel/save, completion/filter controls, persistence/reload, recovery
   after a failed save, external input/item updates and retained keyed identity.
@@ -1040,16 +1056,16 @@ M8.5 headless regression evidence prepared; native examples remain open:
   read-only native planning and cancellation of a nested runner's separate child
   process group. The full entry point and CI now include example regression
   checks; native mode includes foreground example/sheet smoke runs.
-- The fresh readiness probe still reports the login window and zero active
-  displays. No native examples ran. M8.5 remains unchecked until those real
-  windowing runs pass; native, VoiceOver and IME evidence is not inferred from
-  successful CPU previews or model/view tests.
+- The native matrix stopped at its desktop guard after focus returned to Codex;
+  no native example was counted as run. M8.5 remains open until foreground smoke
+  runs pass. CPU previews and model/view tests do not count as native windowing
+  evidence.
 
 M8.6 audit and build evidence prepared; sign-off remains open:
 
-- The [release audit](rust-release-audit.md) reconciles all 44 checklist items
-  against concrete tests/examples and distinguishes 39 checked items from the
-  five open gates. An option-family table maps C++ fields to Rust options,
+- The [release audit](rust-release-audit.md) reconciles all 44 checklist entries
+  against concrete tests/examples: 41 complete, two open M8 gates, and M5.5
+  deferred to the TODO list. An option-family table maps C++ fields to Rust options,
   modifiers, model ownership and callbacks. The reference source is unchanged
   from `82583e7`; name coverage still maps 162 types and 47 modifiers/annotations.
 - Inventory/component documentation no longer defers completed native semantics,
@@ -1066,14 +1082,14 @@ M8.6 audit and build evidence prepared; sign-off remains open:
   matching metadata and runs all five gates. Ten validator tests pass; the
   primary/minimum CI matrix passes Actionlint. Remote CI execution is unclaimed.
 - The hidden native expansion-selector regression found and corrected the
-  unsupported inherited setter described under M5.5. Actual tab speech remains
-  unverified. M8.6 stays unchecked until M5.5/M8.1/M8.4/M8.5 are closed with real
-  foreground/interactive evidence and the final inventory sign-off is recorded.
+  unsupported inherited setter described under deferred M5.5. Actual tab speech
+  remains unverified and tracked in the TODO list. M8.6 stays unchecked until
+  M8.5 closes with real foreground evidence and final inventory sign-off
+  is recorded.
 - Final local reruns pass all ten headless gates and all five minimum-Rust gates,
   including dev/release source builds. The audit's 44 statuses match the checklist
-  and local documentation links resolve. A fresh desktop probe again reports
-  `active-displays=0`, `front=com.apple.loginwindow`, `ready=0`; no unavailable
-  foreground/interactive work is counted as passed.
+  and local documentation links resolve. No unavailable foreground or interactive
+  work is counted as passed.
 
 M8.3 completion record:
 
