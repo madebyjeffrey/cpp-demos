@@ -1050,6 +1050,97 @@ fn main() {
         assert_eq!(label.to_string(), "Root");
     }
     window.clear_view();
+    let combo = ui::ComboBox::new(
+        (0..5000)
+            .map(|i| ui::OptionItem::new(i.to_string(), format!("Choice {i}")))
+            .collect(),
+    )
+    .unwrap();
+    let combo_accepts = ui::State::new(Vec::<ui::ComboAccept>::new());
+    let combo = combo.on_accept(combo_accepts.handler(|s, v| s.update(|a| a.push(v))));
+    let combo_host = window
+        .set_view({
+            let combo = combo.clone();
+            move || {
+                ui::View::column(vec![
+                    combo.view("Choose a record"),
+                    ui::View::button("After combo", || {}).key("combo-after"),
+                ])
+            }
+        })
+        .unwrap();
+    unsafe {
+        let roots: Retained<NSArray<AnyObject>> = msg_send![native, accessibilityChildren];
+        let field = roots.objectAtIndex(0);
+        let role: Retained<NSString> = msg_send![&*field, accessibilityRole];
+        assert_eq!(role.to_string(), "AXComboBox");
+        let opened: bool = msg_send![&*field, accessibilityPerformPress];
+        assert!(opened);
+        let expanded: bool = msg_send![&*field, isAccessibilityExpanded];
+        assert!(expanded);
+        let linked: Retained<NSArray<AnyObject>> =
+            msg_send![&*field, accessibilityLinkedUIElements];
+        assert_eq!(linked.len(), 1);
+        let list = linked.objectAtIndex(0);
+        let parent: Retained<AnyObject> = msg_send![&*list, accessibilityParent];
+        assert!(std::ptr::eq(&*parent, &*field));
+        let children: Retained<NSArray<AnyObject>> = msg_send![&*field, accessibilityChildren];
+        assert_eq!(children.len(), 1);
+        let count: isize = msg_send![&*list, accessibilityRowCount];
+        assert_eq!(count, 5000);
+        let attribute = NSString::from_str("AXChildren");
+        let rows: Retained<NSArray<AnyObject>> = msg_send![&*list,accessibilityArrayAttributeValues:&*attribute,index:4321usize,maxCount:1usize];
+        let retired = rows.objectAtIndex(0);
+        let accepted: bool = msg_send![&*retired, accessibilityPerformPress];
+        assert!(accepted);
+        assert_eq!(combo.selection().as_deref(), Some("4321"));
+        assert_eq!(combo_accepts.get().len(), 1);
+        let stale: bool = msg_send![&*retired, isAccessibilityElement];
+        assert!(!stale);
+        let linked: Retained<NSArray<AnyObject>> =
+            msg_send![&*field, accessibilityLinkedUIElements];
+        assert!(linked.is_empty());
+        let expanded: bool = msg_send![&*field, isAccessibilityExpanded];
+        assert!(!expanded);
+        combo.set_query("").unwrap();
+        let _: () = msg_send![&*field,setAccessibilityFocused:true];
+        let send = |selector: objc2::runtime::Sel| {
+            let _: () = msg_send![native,doCommandBySelector:selector];
+            let _: Option<Retained<AnyObject>> = msg_send![native, accessibilityFocusedUIElement];
+        };
+        send(objc2::sel!(moveDown:));
+        assert!(combo.is_open());
+        send(objc2::sel!(moveDown:));
+        assert_eq!(combo.highlighted().as_deref(), Some("4322"));
+        let selected: Retained<NSArray<AnyObject>> =
+            msg_send![&*field, accessibilitySelectedChildren];
+        assert_eq!(selected.len(), 1);
+        let index: isize = msg_send![&*selected.objectAtIndex(0), accessibilityIndex];
+        assert_eq!(index, 4322);
+        let characters = NSString::from_str("\r");
+        let repeated=app_kit::NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(app_kit::NSEventType::KeyDown,foundation::NSPoint::ZERO,app_kit::NSEventModifierFlags::empty(),0.,window.native_window().windowNumber(),None,&characters,&characters,true,36).unwrap();
+        let _: () = msg_send![native,keyDown:&*repeated];
+        assert!(combo.is_open());
+        assert_eq!(combo_accepts.get().len(), 1);
+        send(objc2::sel!(insertNewline:));
+        assert_eq!(combo.selection().as_deref(), Some("4322"));
+        send(objc2::sel!(moveDown:));
+        send(objc2::sel!(insertTab:));
+        assert!(!combo.is_open());
+        let focus_key = combo_host
+            .snapshot()
+            .unwrap()
+            .iter()
+            .find(|n| Some(n.id) == combo_host.focused())
+            .unwrap()
+            .key
+            .clone();
+        assert_eq!(focus_key.as_deref(), Some("combo-after"));
+        let retained_field = field;
+        window.clear_view();
+        let stale: bool = msg_send![&*retained_field, isAccessibilityElement];
+        assert!(!stale);
+    }
     window.show();
     app.quit_after(std::time::Duration::from_millis(200));
     app.run().unwrap();

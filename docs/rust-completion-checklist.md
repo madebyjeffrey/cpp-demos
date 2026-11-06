@@ -34,7 +34,7 @@ overall goal complete while an in-scope item remains open.
 | Layout and basic controls | Inventory, constrained layout, rich text, style coverage and two-axis scrolling verified | Final cross-component visual/semantic audit in M5/M8 |
 | Editing | Shared buffer, visual navigation/gestures, search/password/numeric policies and held steppers | Localization/value-control expansion in M6; final interactive IME audit in M5 |
 | Presentation | Retained splits/tabs/wizards, hierarchical menus, configured portals, transactional alerts and native sheets | Final interactive and visible desktop audits in M5/M8 |
-| Collections | Configurable lists, bounded pinned edits, distinct row lifetimes and interactive lazy/deferred trees | Combo lifecycle, cell/column interactions and final semantics |
+| Collections | Configurable lists, bounded pinned edits, distinct row lifetimes and interactive lazy/deferred trees and virtual combo boxes | Cell/column interactions and final semantics |
 | Values and tooling | Typed drafts, sRGB/hex, calendar, ISO/zoned editing, picking/width overrides | Complete value-control policies and inspector/Lab coverage |
 | Verification | Core/CPU tests and native input/accessibility protocol tests | Interactive audits, final visible GPU/full-screen runs and repeatable checks |
 
@@ -301,7 +301,7 @@ Completion record:
 - [x] **M4.2 Virtual edit lifetime:** bounded realization/retention on large data; retain or explicitly pin active row edits through scrolling, and make removed/reinserted item lifetimes distinct.
 - [x] **M4.3 Tree model:** integrated lazy loading with expandable/loading/error metadata and safe model replacement; validate keys across collapsed branches and do not silently discard expansion errors.
 - [x] **M4.4 Tree interaction:** left/right expand/collapse and parent/child navigation, activation, selection and focus retention when branches change or disappear.
-- [ ] **M4.5 Combo box:** separate query and selection, selection/free-text modes, filtering, loading/empty states, keyboard highlight/accept/cancel and accessible popup relationships; replace the fixed suggestion cap with bounded realization where needed.
+- [x] **M4.5 Combo box:** separate query and selection, selection/free-text modes, filtering, loading/empty states, keyboard highlight/accept/cancel and accessible popup relationships; replace the fixed suggestion cap with bounded realization where needed.
 - [ ] **M4.6 Table model and columns:** keyed columns, width bounds, resize/reorder, sort descriptors and row/cell selection modes. Keep selection attached to logical keys rather than indices.
 - [ ] **M4.7 Table editing:** integrated cell activation/edit/commit/cancel, validation and readonly/custom content policies; preserve drafts through scrolling and reject stale commits after row/column/model changes.
 
@@ -370,7 +370,7 @@ Completion record (in progress):
   native smoke passes. Tree interaction is covered below; hierarchical native
   semantics/interactive auditing remain M5.
 
-- M4.4: `TreeOptions` configures selection and bounded row geometry/overscan.
+- M4.4 (`9acaee0`): `TreeOptions` configures selection and bounded row geometry/overscan.
   Left/Right close/open branches or visit enabled parents/children; shared list
   range/additive selection, typeahead, reveal and activation remain available.
   Disclosure/retry controls focus their owning row, keeping one row Tab stop.
@@ -388,6 +388,26 @@ Completion record (in progress):
   tests cover parent/child navigation, callbacks and stale proxy retirement.
   `m4_tree` demonstrates the interaction contracts; dark/light previews inspected
   and native smoke passes. Full hierarchy semantics and interactive audits remain M5.
+
+- M4.5: `ComboBox` separates the draft query, committed ID and highlighted result.
+  Configured selection/free-text modes, contains/prefix/no filtering, disabled
+  options, readonly/length policies, loading/empty text and row/popup heights replace
+  the capped four-argument helper. `combo.view(placeholder)` owns field and portal.
+- Keyboard highlight/reveal keeps focus in the field; Return or pointer/AX press
+  accepts, composition commits first, and repeated native Return is suppressed.
+  Escape/outside/blur/deactivate/removal restore the opening query without changing
+  the choice; Tab closes and traverses normally. Callbacks run after publication,
+  permit checked result replacement and suppress recursive notifications.
+- Suggestions reuse list virtualization without a fixed cap. The opaque popup matches
+  field width and fits/flips in the viewport. AXComboBox expansion, linked popup,
+  parent/child and bounded highlighted-child relationships are exposed; indexed
+  offscreen acceptance works and retained dismissed/unmounted objects become inert.
+- Evidence: seven focused portable tests cover model policies, callbacks, replacement,
+  composition, pointer/Tab/cancellation, geometry and bounded 100,000-option mounting.
+  Workspace tests, strict Clippy and portable Linux compilation pass. Native component
+  tests cover links, selection beyond the old cap, commands, repeated Return and stale
+  objects. `m4_combo` supplies the runnable example; dark/light open-popup previews
+  inspected and native smoke passes. Actual VoiceOver/IME auditing remains M5/M8.
 
 ## M5 — Accessibility semantics and native behavior
 

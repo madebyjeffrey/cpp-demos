@@ -46,6 +46,9 @@ impl Host {
         let Some(item) = model.item(index) else {
             return Ok(false);
         };
+        if let Some(accepted) = self.accept_combo_row(id, &item.key)? {
+            return Ok(accepted);
+        }
         if !model.select_with(&item.key, operation) {
             return Ok(false);
         }

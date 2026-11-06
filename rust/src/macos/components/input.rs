@@ -132,6 +132,35 @@ impl TextInputClient for Client {
             .unwrap_or(0)
     }
     fn intercept_key(&self, key: &KeyEvent) -> bool {
+        // AppKit command selectors omit the repeat flag; retain it for combo acceptance.
+        if key.down && key.repeat && key.key == Key::Enter {
+            let handled = self
+                .owner
+                .upgrade()
+                .and_then(|m| {
+                    m.run(|m, _| {
+                        let combo = m
+                            .host
+                            .snapshot()?
+                            .iter()
+                            .any(|n| Some(n.id) == m.host.focused() && n.combo.is_some());
+                        if combo {
+                            m.host.key(ui::KeyEvent {
+                                key: ui::Key::Enter,
+                                down: true,
+                                repeat: true,
+                                modifiers: Default::default(),
+                            })
+                        } else {
+                            Ok(false)
+                        }
+                    })
+                })
+                .unwrap_or(false);
+            if handled {
+                return true;
+            }
+        }
         if key.down && key.key == Key::Tab && key.modifiers.control {
             return self
                 .owner

@@ -1,42 +1,18 @@
 //! Portable collection models.
+mod combo;
+mod combo_input;
 pub(crate) mod input;
 mod list;
 mod pin;
 mod tree;
 mod tree_input;
-use crate::{Binding, View};
+use crate::View;
+pub use combo::*;
 pub use list::*;
 pub use pin::RowPin;
 pub(crate) use tree::TreeAction;
 pub use tree::*;
 
-/// Editable combo box: the same text binding remains usable for values outside the options.
-pub fn combo_box(
-    text: Binding<String>,
-    options: &[String],
-    popup: &crate::Popup,
-    key: &str,
-) -> (View, View) {
-    let show = popup.clone();
-    let field = View::row(vec![
-        View::text_field("Type or choose…", text.clone()).grow(1.),
-        View::button("▾", move || show.toggle()).width(34),
-    ])
-    .key(key);
-    let query = text.get().to_lowercase();
-    let items = options
-        .iter()
-        .enumerate()
-        .filter(|(_, s)| s.to_lowercase().contains(&query))
-        .map(|(index, option)| {
-            let value = option.clone();
-            let text = text.clone();
-            crate::MenuAction::new(option, move || text.set(value.clone())).key(index.to_string())
-        })
-        .take(100)
-        .collect();
-    (field, popup.menu(key, items))
-}
 #[derive(Clone)]
 pub struct TableModel {
     pub rows: ListModel,

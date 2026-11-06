@@ -242,7 +242,10 @@ impl Host {
         self.redraw();
     }
     pub fn focus(&self, id: NodeId) -> Result<bool, Error> {
-        let id = self.tree_row_owner(id).unwrap_or(id);
+        let id = self
+            .combo_focus_owner(id)
+            .or_else(|| self.tree_row_owner(id))
+            .unwrap_or(id);
         self.unmark_text(true)?;
         self.refresh()?;
         if !self.0.mounted.borrow().nodes.iter().any(|n| {
@@ -322,7 +325,12 @@ impl Host {
                     .borrow()
                     .descriptions
                     .get(&n.id)
-                    .is_some_and(|d| d.tree_action.is_some())
+                    .is_some_and(|d| {
+                        d.tree_action.is_some()
+                            || d.combo_action.is_some()
+                            || (d.collection_row.is_some()
+                                && self.combo_focus_owner(n.id).is_some())
+                    })
                 {
                     return false;
                 }
@@ -649,6 +657,9 @@ impl Host {
         if event.key == Key::Escape && self.0.tooltip.borrow().visible {
             self.dismiss_tooltip(crate::DismissReason::Escape, true);
             return Ok(true);
+        }
+        if let Some(handled) = self.combo_key(event)? {
+            return Ok(handled);
         }
         if let Some(handled) = self.menu_key(event)? {
             return Ok(handled);

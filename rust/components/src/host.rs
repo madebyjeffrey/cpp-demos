@@ -60,6 +60,10 @@ pub struct Node {
     pub(crate) scroll_axes: crate::ScrollAxes,
     pub(crate) scrollbars: bool,
     pub collection: Option<crate::ListModel>,
+    pub combo: Option<crate::ComboInfo>,
+    pub combo_popup: Option<crate::ComboBox>,
+    pub combo_owner: Option<String>,
+    pub combo_toggle: bool,
     pub tree_model: Option<crate::TreeModel>,
     pub tree_item: Option<crate::TreeItem>,
     pub label: String,
@@ -400,6 +404,9 @@ impl Host {
         let Some((d, value)) = target else {
             return Ok(false);
         };
+        if let Some(combo) = d.combo_action.as_ref().or(d.combo.as_ref()) {
+            return self.toggle_combo(id, combo);
+        }
         if let Some(action) = &d.tree_action {
             return self.tree_disclosure(id, action);
         }
@@ -660,6 +667,10 @@ fn mount(
         scroll_axes: d.scroll_axes,
         scrollbars: d.scrollbars,
         collection: d.collection.clone(),
+        combo: d.combo.as_ref().map(|m| m.info()),
+        combo_popup: d.combo_popup.clone(),
+        combo_owner: d.combo_popup.as_ref().map(|m| m.field_key()),
+        combo_toggle: d.combo_action.is_some(),
         tree_model: d.tree.clone(),
         tree_item: d.tree_item.clone(),
         help: d.tooltip.clone(),

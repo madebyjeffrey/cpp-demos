@@ -25,6 +25,11 @@ impl Tree<'_> {
                 .map(|c| self.desired[&nodes[*c].id].width)
                 .fold(0., f64::max)
         });
+        let width = if n.combo_owner.is_some() {
+            width.max(anchor.width)
+        } else {
+            width
+        };
         let height = children
             .iter()
             .map(|c| self.desired[&nodes[*c].id].height)

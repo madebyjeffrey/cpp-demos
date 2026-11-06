@@ -22,19 +22,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             TreeNode::new("engineering", "Engineering"),
         ],
     )])?;
-    let query = State::new(String::new());
-    let popup = Popup::new();
+    let combo = ComboBox::new(vec![
+        OptionItem::new("personal", "Personal"),
+        OptionItem::new("team", "Team"),
+        OptionItem::new("archive", "Archive"),
+    ])?;
     let editor = Popup::new();
     let draft = State::new(String::new());
     let edit = State::new(None::<CellEdit>);
     let message = State::new(String::new());
     common::run("Stage 5 · Collections", (900, 650), move || {
-        let (combo, combo_menu) = combo_box(
-            query.binding(),
-            &["Personal".into(), "Team".into(), "Archive".into()],
-            &popup,
-            "workspace-choice",
-        );
         let begin = {
             let table = table.clone();
             let editor = editor.clone();
@@ -74,12 +71,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         view! {layer{
             column(padding:24,gap:18){
                 label("A hundred thousand documents",font_size:28,bold:true,shrink:0);
-                row(shrink:0){embed(combo,grow:1);button("Edit selected…",on_click:begin);}
+                row(shrink:0){embed(combo.view("Workspace"),grow:1);button("Edit selected…",on_click:begin);}
                 row(grow:1,gap:20){panel(width:210,padding:12){label("BROWSE",bold:true);embed(tree.view(),grow:1);}embed(table.view(),grow:1);}
                 label("Only visible rows are mounted. Click a column to sort. Home/End jumps through the collection.",shrink:0);
                 label(message.get(),shrink:0);
             }
-            embed(combo_menu);
+
             embed(editor.modal("Edit document",view!{column{ text_field("Name",bind:draft);button("Save",on_click:save);}}));
         }}
     })

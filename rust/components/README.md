@@ -224,8 +224,8 @@ a flat metadata query, including hidden known nodes. `expand`/`collapse`/`toggle
 return results instead of discarding failures. `TableModel` adds keyed cell drafts and
 sorting: `begin_edit` snapshots the original cell, and `commit` rejects a removed
 row/column or an intervening cell change. The example edits in a popup so scrolling
-does not destroy a draft. `combo_box` preserves editable text beyond its suggested
-options and limits suggestions to 100 matches.
+does not destroy a draft. `ComboBox` owns separate query/selection and a virtual
+suggestion popup; `combo.view(placeholder)` needs no separate portal wiring.
 
 macOS exposes logical row proxies with stable identifiers across scrolling/sorts.
 Indexed `AXChildren`/`AXRows` queries realize only the requested range; offscreen
@@ -955,3 +955,65 @@ Eight focused interaction tests cover keyboard/selection/focus retention, model
 replacement inside callbacks, deferred/error states and bounded 100,000-child
 navigation. Native protocol tests exercise actual AppKit keys and focused AX objects.
 Hierarchical/offscreen native tree semantics and interactive VoiceOver auditing remain M5.
+
+
+## Completion M4 — combo boxes
+
+```rust
+let choice = ComboBox::new(vec![
+    OptionItem::new("local", "Local workspace"),
+    OptionItem::new("team", "Team workspace"),
+])?.on_accept(|accepted| println!("{:?}: {}", accepted.selection, accepted.text));
+// Inside view!:
+// embed(choice.view("Find a workspace"));
+```
+
+`ComboBox::with_options` accepts `ComboBoxOptions`: Selection/FreeText mode,
+Contains/Prefix/None filtering, auto-highlight, readonly/loading states,
+grapheme-counted draft length, row/popup heights and loading/empty text. IDs must
+be nonempty and unique; geometry/extents must be finite and positive. Filtering
+uses Unicode lowercase labels; it is not locale-sensitive collation. Disabled
+options remain visible but cannot highlight or commit.
+
+`query()` is a draft; `selection()` is the committed option ID. Editing filters and
+opens the popup without committing. `set_query` updates the draft without emitting
+`on_query`; `set_selection` validates an enabled option, copies its label and closes
+without emitting acceptance. `set_selection(None)` clears the choice/query.
+`set_items` validates atomically, preserves surviving choice/highlight keys and
+clears a removed/disabled choice without rewriting the draft. `info()` exposes
+query, selection, highlight, match count, open/loading/readonly state.
+
+Up/Down open and navigate; Home/End and Page keys navigate an open popup. Selection
+stays unchanged while suggestions highlight and reveal. Focus remains in the field;
+the arrow and suggestions add no Tab stops. Return accepts the enabled highlight;
+FreeText also accepts the draft with `selection: None` when no highlight exists.
+Loading blocks acceptance. Return commits marked text before a later acceptance;
+Escape first cancels composition, then cancels the popup. Repeated Return does not
+accept. Pointer/AX press accepts a suggestion, including indexed offscreen rows.
+
+A session remembers its opening query. `cancel`, Escape, outside dismissal, blur,
+deactivation or owner removal restore that query and keep the committed choice.
+Tab cancels and continues ordinary traversal. `show`, `accept` and `accept_key`
+provide programmatic equivalents. Acceptance is inert while closed/loading/readonly
+or when the requested option is missing/disabled. Changing readonly closes a session. Programmatic draft/choice changes
+do not emit user callbacks.
+
+`on_query`, `on_accept(ComboAccept)` and `on_cancel` run after publication, outside
+borrows. `on_query_with_model` supplies a weakly captured model for synchronous
+result replacement. Nested callback notifications are suppressed. For asynchronous
+sources, the application compares its request/query generation before calling
+`set_items`/`set_loading`; the component does not provide an executor.
+
+Suggestions use `ListModel` virtualization with no fixed result cap. The popup
+matches the field width, fits/flips within the viewport and paints an opaque body.
+macOS exposes AXComboBox with expansion state, linked popup, parent/child and single
+highlight relationships; indexed queries remain bounded and old popup proxies
+become inert after dismissal/unmount. Seven focused tests cover query/commit/cancel,
+filters/loading/readonly, IME, pointer/Tab, replacement/lifecycle, geometry and a
+100,000-option popup. Native protocol tests cover links, indexed acceptance beyond
+100 suggestions, commands and stale objects. Interactive VoiceOver/IME audit remains M5.
+
+`cargo run --example m4_combo` demonstrates both modes and runtime loading/results.
+Add `--open` for an initially open popup, `--light`, `--render file.png` or `--smoke`.
+The old four-argument `combo_box` tuple helper is replaced by the model-owned view;
+`stage5` uses the new interface too.

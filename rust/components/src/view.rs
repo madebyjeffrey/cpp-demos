@@ -59,7 +59,7 @@ impl Value {
         matches!(self, Self::Bool(true) | Self::Check(CheckState::Checked))
     }
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OptionItem {
     pub id: String,
     pub label: String,
@@ -138,6 +138,9 @@ pub(crate) struct Description {
     pub menu_path: Vec<String>,
     pub anchor: Option<String>,
     pub collection: Option<crate::ListModel>,
+    pub combo: Option<crate::ComboBox>,
+    pub combo_popup: Option<crate::ComboBox>,
+    pub combo_action: Option<crate::ComboBox>,
     pub tree: Option<crate::TreeModel>,
     pub tree_item: Option<crate::TreeItem>,
     pub tree_action: Option<crate::collections::TreeAction>,
@@ -193,6 +196,9 @@ impl View {
             menu_path: vec![],
             anchor: None,
             collection: None,
+            combo: None,
+            combo_popup: None,
+            combo_action: None,
             tree: None,
             tree_item: None,
             tree_action: None,

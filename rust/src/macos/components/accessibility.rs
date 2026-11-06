@@ -7,6 +7,8 @@ fn any<T: Message>(value: Retained<T>) -> Retained<AnyObject> {
 }
 fn semantic(n: &Node) -> bool {
     !n.hidden
+        && !n.combo_toggle
+        && !(n.kind == Kind::Modal && n.overlay_owner.is_some() && n.combo_owner.is_some())
         && !n.tab_strip
         && !matches!(
             n.kind,
@@ -32,6 +34,12 @@ fn tab_group(n: &Node, nodes: &[Node]) -> Option<NodeId> {
     None
 }
 fn parent(n: &Node, nodes: &[Node]) -> Option<NodeId> {
+    if let Some(key) = &n.combo_owner {
+        return nodes
+            .iter()
+            .find(|n| n.key.as_ref() == Some(key) && n.combo.is_some())
+            .map(|n| n.id);
+    }
     let mut id = n.parent;
     while let Some(p) = id {
         let node = nodes.iter().find(|n| n.id == p)?;
@@ -166,7 +174,8 @@ define_class!(
         #[unsafe(method_id(accessibilityRole))]
         fn role(&self) -> Option<Retained<NSString>> {
             self.node().map(|n| {
-                if n.menu_item.is_some() { unsafe { NSAccessibilityMenuItemRole.retain() } }
+                if n.combo.is_some() {unsafe {NSAccessibilityComboBoxRole.retain()}}
+                else if n.menu_item.is_some() { unsafe { NSAccessibilityMenuItemRole.retain() } }
                 else if n.menu_panel { unsafe { NSAccessibilityMenuRole.retain() } }
                 else if n.collection.is_some() {
                     unsafe { NSAccessibilityListRole.retain() }
@@ -185,7 +194,7 @@ define_class!(
         }
         #[unsafe(method(isAccessibilityExpanded))]
         fn expanded(&self) -> bool {
-            self.node().and_then(|n| n.menu_item).is_some_and(|m| m.expanded)
+            self.node().is_some_and(|n| n.combo.as_ref().is_some_and(|c|c.open) || n.menu_item.is_some_and(|m|m.expanded))
         }
         #[unsafe(method_id(accessibilityIdentifier))]
         fn identifier(&self) -> Option<Retained<NSString>> {
@@ -230,10 +239,19 @@ define_class!(
                 }
             })
         }
+        #[unsafe(method_id(accessibilityLinkedUIElements))]
+        fn linked(&self)->Option<Retained<NSArray<AnyObject>>> {
+            self.with(|m,_,n|{
+                let nodes=m.host.snapshot()?;
+                let linked:Vec<_>=if n.combo.is_some(){nodes.iter().filter(|p|p.kind!=Kind::Modal&&p.combo_owner.as_ref()==n.key.as_ref()).map(|p|any(element(m,p.id))).collect()}
+                else {n.combo_owner.as_ref().and_then(|key|nodes.iter().find(|p|p.key.as_ref()==Some(key)&&p.combo.is_some())).map(|p|vec![any(element(m,p.id))]).unwrap_or_default()};
+                Ok(NSArray::from_retained_slice(&linked))
+            })
+        }
         #[unsafe(method_id(accessibilityTabs))]
         fn tabs(&self)->Option<Retained<NSArray<AnyObject>>>{self.tab_elements(1)}
         #[unsafe(method_id(accessibilitySelectedChildren))]
-        fn selected_children(&self)->Option<Retained<NSArray<AnyObject>>>{self.tab_elements(0)}
+        fn selected_children(&self)->Option<Retained<NSArray<AnyObject>>>{self.combo_selected().or_else(||self.tab_elements(0))}
         #[unsafe(method_id(accessibilityContents))]
         fn contents(&self)->Option<Retained<NSArray<AnyObject>>>{self.tab_elements(2)}
         #[unsafe(method(accessibilityRowCount))]
@@ -498,6 +516,38 @@ define_class!(
     }
 );
 impl Element {
+    fn combo_selected(&self) -> Option<Retained<NSArray<AnyObject>>> {
+        self.with(|m, _, n| {
+            if n.combo.is_none() && n.combo_popup.is_none() {
+                return Ok(None);
+            }
+            let nodes = m.host.snapshot()?;
+            let list = if n.collection.is_some() {
+                Some(n)
+            } else {
+                nodes
+                    .iter()
+                    .find(|p| p.collection.is_some() && p.combo_owner.as_ref() == n.key.as_ref())
+            };
+            let result = list
+                .and_then(|n| {
+                    n.collection
+                        .as_ref()
+                        .and_then(|model| model.cursor().and_then(|key| model.index_of(&key)))
+                        .map(|index| {
+                            super::collection_accessibility::rows(
+                                self.ivars().owner.clone(),
+                                n,
+                                index,
+                                1,
+                            )
+                        })
+                })
+                .unwrap_or_else(NSArray::new);
+            Ok(Some(result))
+        })
+        .flatten()
+    }
     fn tab_elements(&self, part: u8) -> Option<Retained<NSArray<AnyObject>>> {
         self.with(|m, _, n| {
             if n.kind == Kind::Tab && (part != 2 || !n.value.selected()) {

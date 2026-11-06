@@ -396,6 +396,9 @@ impl Renderer {
             } else {
                 theme.secondary
             };
+            if n.combo_owner.is_some() && n.kind != Kind::Modal {
+                bg = bg.or(Some(theme.panel));
+            }
             if n.menu_panel {
                 bg = bg.or(Some(theme.panel));
             }
