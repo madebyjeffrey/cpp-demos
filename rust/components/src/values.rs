@@ -6,6 +6,42 @@ pub use jiff::{
     tz::TimeZone,
 };
 use std::{fmt, str::FromStr};
+// Civil editors must consume exactly their advertised grammar. Jiff's general
+// Temporal parsers also accept timestamps and can discard their extra fields.
+fn parse_date(text: &str) -> Result<Date, String> {
+    let date = text.parse::<Date>().map_err(|e| e.to_string())?;
+    if text != date.to_string() {
+        return Err("Use an ISO date: YYYY-MM-DD, without time or offset".into());
+    }
+    Ok(date)
+}
+fn parse_time(text: &str) -> Result<Time, String> {
+    let (clock, fraction) = text
+        .split_once('.')
+        .map_or((text, None), |(a, b)| (a, Some(b)));
+    let valid = matches!(clock.len(), 5 | 8)
+        && clock.bytes().enumerate().all(|(i, b)| {
+            if matches!(i, 2 | 5) {
+                b == b':'
+            } else {
+                b.is_ascii_digit()
+            }
+        })
+        && clock.as_bytes().get(6..8).is_none_or(|s| s < b"60")
+        && fraction.is_none_or(|s| {
+            clock.len() == 8 && (1..=9).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_digit())
+        });
+    if !valid {
+        return Err("Use HH:MM[:SS[.fraction]], without a date, offset or zone".into());
+    }
+    text.parse::<Time>().map_err(|e| e.to_string())
+}
+fn parse_datetime(text: &str) -> Result<DateTime, String> {
+    let (date, time) = text
+        .split_once('T')
+        .ok_or("Use an ISO local date/time: YYYY-MM-DDTHH:MM[:SS]")?;
+    Ok(parse_date(date)?.to_datetime(parse_time(time)?))
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Color(pub u32);
 impl Color {
@@ -133,11 +169,7 @@ impl DatePicker {
     pub fn new(value: Binding<Date>) -> Self {
         Self {
             month: State::new(value.get().first_of_month()),
-            draft: Draft::new(
-                value.clone(),
-                |s| s.parse::<Date>().map_err(|e| e.to_string()),
-                |v| v.to_string(),
-            ),
+            draft: Draft::new(value.clone(), parse_date, |v| v.to_string()),
             value,
         }
     }
@@ -195,18 +227,10 @@ impl DatePicker {
     }
 }
 pub fn time_draft(value: Binding<Time>) -> Draft<Time> {
-    Draft::new(
-        value,
-        |s| s.parse::<Time>().map_err(|e| e.to_string()),
-        |v| v.to_string(),
-    )
+    Draft::new(value, parse_time, |v| v.to_string())
 }
 pub fn datetime_draft(value: Binding<DateTime>) -> Draft<DateTime> {
-    Draft::new(
-        value,
-        |s| s.parse::<DateTime>().map_err(|e| e.to_string()),
-        |v| v.to_string(),
-    )
+    Draft::new(value, parse_datetime, |v| v.to_string())
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Resolution {
@@ -242,13 +266,23 @@ impl ZonedPicker {
                     "later" => jiff::tz::Disambiguation::Later,
                     _ => jiff::tz::Disambiguation::Reject,
                 };
-                if s.contains('[') {
+                if let Some((civil, zone)) = s.split_once('[') {
+                    if zone
+                        .strip_suffix(']')
+                        .is_none_or(|name| name.contains(['[', ']']))
+                    {
+                        return Err("Use one bracketed time zone".into());
+                    }
+                    let (date, time) = civil.split_once('T').ok_or("Use an ISO zoned date/time")?;
+                    parse_date(date)?;
+                    let clock_end = time.find(['+', '-', 'Z']).unwrap_or(time.len());
+                    parse_time(&time[..clock_end])?;
                     jiff::fmt::temporal::DateTimeParser::new()
                         .disambiguation(strategy)
                         .parse_zoned(s)
                         .map_err(|e| e.to_string())
                 } else {
-                    let local = s.parse::<DateTime>().map_err(|e| e.to_string())?;
+                    let local = parse_datetime(s)?;
                     source
                         .get()
                         .time_zone()

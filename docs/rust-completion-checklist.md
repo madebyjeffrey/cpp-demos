@@ -549,7 +549,7 @@ Completion record:
   tabs, selected children and splitters match their direct getters in native tests.
   Actual interactive/foreground and combined notification audits remain M5.4/M5.5/M8.
 
-- M5.4: generic proxies survive hidden retained pages, use globally unique native
+- M5.4 (`5133b26`): generic proxies survive hidden retained pages, use globally unique native
   identifiers and retire on actual removal/unmount/close. Nested dialogs preserve
   owner identity while suppressing inactive actions. Hit testing shares readable
   modal scope; custom list controls retain logical row parentage and their own focus.
@@ -592,9 +592,9 @@ Protocol composition tests and synthetic raster scales do not close this audit.
 
 ## M6 — Localization and complete value controls
 
-- [ ] **M6.1 Editable format policy:** specify supported locale/grammar combinations, display/edit round trips and unsupported-format behavior. Preserve an explicit ASCII/ISO mode; do not silently guess ambiguous grouping or dates.
+- [x] **M6.1 Editable format policy:** specify supported locale/grammar combinations, display/edit round trips and unsupported-format behavior. Preserve an explicit ASCII/ISO mode; do not silently guess ambiguous grouping or dates.
 - [ ] **M6.2 Number/date localization:** integrate the chosen Rust services with representative decimal-comma, grouped and non-Latin-digit cases; localized labels/formatting must match the advertised editable grammar and retain exact integers.
-- [ ] **M6.3 Date control:** bounds, disabled dates, custom validation, readonly/blur/submit policy, calendar keyboard navigation and synchronization after external value changes.
+- [ ] **M6.3 Date control:** bounds, disabled dates, custom validation, readonly/blur/submit policy, calendar keyboard navigation and synchronization after external value changes. Fix the narrow calendar grid's percentage-width-plus-gap overflow.
 - [ ] **M6.4 Time and datetime controls:** dedicated hour/minute/second interactions, 12/24-hour policy, step sizes, optional seconds, local/instant bounds and combined validation; verify DST gaps/overlaps and named-zone changes without corrupting drafts.
 - [ ] **M6.5 Color control:** HSV as well as RGB, optional alpha, readonly and explicit transactional/live-preview behavior; cancel restores the source color, including through a color-well popup.
 - [ ] **M6.6 Shared draft lifecycle:** consistent apply/blur/cancel, dirty/incomplete/invalid/out-of-range reporting, external-change handling and callbacks across all typed value controls.
@@ -604,7 +604,20 @@ validation/transaction and timezone tests. Main implementation:
 [values](../rust/components/src/values.rs), [drafts](../rust/components/src/draft.rs),
 [Unicode/localization services](../rust/components/src/text.rs).
 
-Completion record: pending.
+Completion record:
+
+- M6.1: [editable formats](rust-editable-formats.md) defines default ASCII/ISO
+  grammar, round trips, precision and unsupported-format behavior, plus the explicit
+  locale profiles/strict grouping and digit policies for M6.2. Civil editors now
+  reject discarded timestamp/offset/zone information and leap-second clamping;
+  named-zone edits validate the civil portion before resolution. Generic drafts
+  retain application-defined parsers. `m6_formats` is the concise runnable lab.
+- Evidence: four format-policy tests cover exact signed/unsigned integers, ambiguous
+  grouping/digits, date/time extremes/nanoseconds, suffix rejection and named-zone
+  input. Existing numeric/value tests, workspace tests, strict Clippy, portable Linux
+  compilation, formatting, inventory mapping and native component regressions pass.
+  Dark/light `m6_formats` previews inspected; its native smoke and the existing
+  `stage6` value-lab smoke pass. Interactive/visible GPU evidence remains M5.5/M8.
 
 ## M7 — Developer tools and application ergonomics
 

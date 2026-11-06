@@ -1351,3 +1351,16 @@ snapshots, idle quiescence and teardown. Internal diagnostics count calls to the
 real AppKit API; they do not establish external-client receipt. Actual VoiceOver/
 IME sessions at both backing scales remain M5.5. Layout payloads follow Apple's
 [notification API](https://developer.apple.com/documentation/appkit/nsaccessibility-swift.struct/notification/layoutchanged).
+
+## M6.1 — editable format policy
+
+[Editable formats](../../docs/rust-editable-formats.md) specifies the implemented
+ASCII/ISO grammar and the explicit locale profiles planned for M6.2. Civil editors
+consume their entire input: a date cannot silently discard a time, and a local
+time/datetime cannot discard an offset or zone. Leap seconds are rejected rather
+than clamped. Named-zone input still uses explicit gap/overlap resolution.
+
+`cargo run --example m6_formats` demonstrates exact integers, calendar dates and
+nanosecond time/local datetime drafts. Four portable tests cover ambiguity,
+integer precision, date/time extremes, suffix rejection and named-zone parsing.
+Localized display-only formatters do not change the default editing grammar.
