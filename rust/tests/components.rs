@@ -1141,6 +1141,80 @@ fn main() {
         let stale: bool = msg_send![&*retained_field, isAccessibilityElement];
         assert!(!stale);
     }
+    let table = ui::TableModel::with_columns(
+        vec![
+            ui::TableColumn::new("name", "Name"),
+            ui::TableColumn::new("team", "Team"),
+        ],
+        (0..5000)
+            .map(|i| {
+                ui::TableRow::new(i.to_string())
+                    .cell("name", format!("Row {i:04}"))
+                    .cell("team", "Team cell")
+            })
+            .collect(),
+    )
+    .unwrap();
+    table.set_selection_mode(ui::TableSelectionMode::Cells, true);
+    let table_host = window
+        .set_view({
+            let table = table.clone();
+            move || table.view()
+        })
+        .unwrap();
+    unsafe {
+        let name = find_label(native, "Name column").unwrap();
+        let pressed: bool = msg_send![&*name, accessibilityPerformPress];
+        assert!(pressed);
+        let pressed: bool = msg_send![&*name, accessibilityPerformPress];
+        assert!(pressed);
+        assert_eq!(table.row(0).unwrap().key, "4999");
+        let root = table_host
+            .snapshot()
+            .unwrap()
+            .iter()
+            .find(|n| n.table_model.is_some())
+            .unwrap()
+            .id;
+        table_host.select_collection_item(root, 0, false).unwrap();
+        let _: Option<Retained<AnyObject>> = msg_send![native, accessibilityFocusedUIElement];
+        let send = |code: u16| {
+            let text = NSString::from_str("");
+            let event=app_kit::NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(app_kit::NSEventType::KeyDown,foundation::NSPoint::ZERO,app_kit::NSEventModifierFlags::empty(),0.,window.native_window().windowNumber(),None,&text,&text,false,code).unwrap();
+            let _: () = msg_send![native,keyDown:&*event];
+            let _: Option<Retained<AnyObject>> = msg_send![native, accessibilityFocusedUIElement];
+        };
+        send(124);
+        send(125);
+        assert_eq!(table.cursor(), Some(ui::TableCell::new("4998", "team")));
+        let focused: Retained<AnyObject> = msg_send![native, accessibilityFocusedUIElement];
+        let label: Retained<NSString> = msg_send![&*focused, accessibilityLabel];
+        assert_eq!(label.to_string(), "Team cell");
+        let id = table_host.focused();
+        table.move_column("team", 0).unwrap();
+        let _: Option<Retained<AnyObject>> = msg_send![native, accessibilityFocusedUIElement];
+        assert_eq!(table_host.focused(), id);
+        table
+            .set_columns(vec![ui::TableColumn::new("name", "Name")])
+            .unwrap();
+        table
+            .set_columns(vec![
+                ui::TableColumn::new("team", "Team"),
+                ui::TableColumn::new("name", "Name"),
+            ])
+            .unwrap();
+        let stale: bool = msg_send![&*focused, isAccessibilityElement];
+        assert!(!stale);
+        let fresh: Retained<AnyObject> = msg_send![native, accessibilityFocusedUIElement];
+        let label: Retained<NSString> = msg_send![&*fresh, accessibilityLabel];
+        assert_eq!(label.to_string(), "Row 4998");
+        let resize = find_label(native, "Resize Name column").unwrap();
+        let _: () = msg_send![&*resize,setAccessibilityFocused:true];
+        let width = table.columns()[1].width;
+        send(124);
+        assert_eq!(table.columns()[1].width, width + 8.);
+    }
+    window.clear_view();
     window.show();
     app.quit_after(std::time::Duration::from_millis(200));
     app.run().unwrap();

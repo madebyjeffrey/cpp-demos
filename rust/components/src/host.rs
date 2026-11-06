@@ -60,6 +60,11 @@ pub struct Node {
     pub(crate) scroll_axes: crate::ScrollAxes,
     pub(crate) scrollbars: bool,
     pub collection: Option<crate::ListModel>,
+    pub table_model: Option<crate::TableModel>,
+    pub table_order: Vec<String>,
+    pub table_cell: Option<crate::TableCell>,
+    pub table_column: Option<String>,
+    pub table_resize: bool,
     pub combo: Option<crate::ComboInfo>,
     pub combo_popup: Option<crate::ComboBox>,
     pub combo_owner: Option<String>,
@@ -348,6 +353,7 @@ impl Host {
         drop(old);
         self.reconcile_capture();
         self.reconcile_fields();
+        self.reconcile_table_capture();
         crate::state::flush_cleanups();
         Ok(true)
     }
@@ -404,6 +410,26 @@ impl Host {
         let Some((d, value)) = target else {
             return Ok(false);
         };
+        if let Some(cell) = &d.table_cell {
+            return self.table_select_cell(id, cell, crate::ListSelection::Replace);
+        }
+        if let Some(header) = &d.table_header {
+            if header.resize
+                || header
+                    .model
+                    .columns()
+                    .iter()
+                    .any(|c| c.id == header.column && !c.sortable)
+            {
+                return Ok(false);
+            }
+            if header.model.column_token(&header.column) != Some(header.token) {
+                return Ok(false);
+            }
+            header.model.toggle_sort(&header.column, false)?;
+            self.redraw();
+            return Ok(true);
+        }
         if let Some(combo) = d.combo_action.as_ref().or(d.combo.as_ref()) {
             return self.toggle_combo(id, combo);
         }
@@ -667,6 +693,15 @@ fn mount(
         scroll_axes: d.scroll_axes,
         scrollbars: d.scrollbars,
         collection: d.collection.clone(),
+        table_order: d
+            .table
+            .as_ref()
+            .map(|t| t.columns().into_iter().map(|c| c.id).collect())
+            .unwrap_or_default(),
+        table_model: d.table.clone(),
+        table_cell: d.table_cell.as_ref().map(|a| a.cell.clone()),
+        table_column: d.table_header.as_ref().map(|a| a.column.clone()),
+        table_resize: d.table_header.as_ref().is_some_and(|a| a.resize),
         combo: d.combo.as_ref().map(|m| m.info()),
         combo_popup: d.combo_popup.clone(),
         combo_owner: d.combo_popup.as_ref().map(|m| m.field_key()),

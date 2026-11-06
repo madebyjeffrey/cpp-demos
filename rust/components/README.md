@@ -221,9 +221,9 @@ values and drafts stay outside builders.
 `TreeNode` describes eager/lazy/deferred branches; `TreeModel` validates all known
 keys and publishes loading/error metadata through checked requests. `TreeItem` is
 a flat metadata query, including hidden known nodes. `expand`/`collapse`/`toggle`
-return results instead of discarding failures. `TableModel` adds keyed cell drafts and
-sorting: `begin_edit` snapshots the original cell, and `commit` rejects a removed
-row/column or an intervening cell change. The example edits in a popup so scrolling
+return results instead of discarding failures. `TableModel` owns keyed rows/columns,
+checked widths/order/sort and row/cell selection. Its external cell drafts reject
+retired row/column lifetimes or an intervening cell change. The example edits in a popup so scrolling
 does not destroy a draft. `ComboBox` owns separate query/selection and a virtual
 suggestion popup; `combo.view(placeholder)` needs no separate portal wiring.
 
@@ -1017,3 +1017,71 @@ filters/loading/readonly, IME, pointer/Tab, replacement/lifecycle, geometry and 
 Add `--open` for an initially open popup, `--light`, `--render file.png` or `--smoke`.
 The old four-argument `combo_box` tuple helper is replaced by the model-owned view;
 `stage5` uses the new interface too.
+
+
+## Completion M4 — keyed tables and columns
+
+```rust
+let table = TableModel::with_columns(
+    vec![TableColumn::new("name", "Name").width(240.).limits(100., 500.),
+         TableColumn::new("status", "Status")],
+    vec![TableRow::new("draft-1").cell("name", "Notes").cell("status", "Draft")],
+)?;
+// In view!: embed(table.view(), grow: 1);
+```
+
+`TableRow` stores text by column ID; reordering columns never reinterprets positional
+cells. Missing values are empty strings; extra keyed values remain available if a
+column is later added. Row/column IDs must be nonempty and unique. `with_options`
+configures finite row/header heights, preferred/overscan rows, Rows/Cells selection
+and single/multiple selection. Columns carry title, finite width/min/max, resizable,
+sortable and alignment. New columns default to sortable and resizable.
+
+`columns`, `column_index`, `row_count`, `row(index)` and `row_index` query visual
+order; `text(row_key, column_key)` queries logical data. `set_rows`/`set_columns`
+validate before publication, preserve surviving keys and prune retired selection.
+`widths`/`set_widths` provide persisted width snapshots; `resize_column` clamps to
+bounds and respects resizability. `move_column(key, destination_index)` is checked.
+Width-only changes update geometry without rebuilding/sorting the dataset.
+
+`set_sort(Vec<SortDescriptor>)` validates unique sortable columns and applies a
+stable lexicographic string sort, in descriptor priority order. This is not numeric
+or locale collation. Clearing sort restores source row order. Header clicks cycle
+ascending/descending/none; Shift-click adds/cycles a descriptor. `on_sort` publishes
+accepted descriptors after model updates; `on_sort_with_model` supplies weak model
+context. Callbacks run outside borrows; nested sort notifications are suppressed.
+
+Drag a header to reorder or its right edge to resize. Resize grips accept Left/Right
+in eight-point steps and Home/End for limits. Alt-Left/Right reorders a focused
+header; Return/Space cycles sorting and Shift adds a descriptor. Escape or pointer
+Cancel rolls back an active resize. Blur/deactivation/removal end capture; external
+width/order/lifetime changes retire it without overwriting the new state.
+
+`TableSelection` holds row keys or `TableCell { row, column }` keys. `select_row` and
+`select_cell` accept the shared Replace/Toggle/Range/AddRange/Focus operations.
+Cell ranges are rectangles in current visual order, skipping disabled rows.
+`selection`, `selection_count`, `cursor`, `row_cursor`, `clear_selection`, `select_all`
+and `set_selection_mode` expose model policy. Changing mode clears selection.
+Selection remains attached to keys through sorting, resizing and reordering;
+removed/disabled rows and removed columns prune it. Header controls have their own
+Tab stops; the body has one roving row or cell stop. Arrows/Page/Home/End navigate and
+reveal the body; horizontal cell navigation keeps header/body scrolling aligned.
+
+Rows use the existing virtual list; columns use shared geometry in header and body,
+inside a horizontal scroller. Cell IDs include column lifetimes, preserving surviving
+controls across reordering while retiring removed/reinserted columns even with equal
+text. `begin_edit(row, visual_column_index)` and `edit_cell(&TableCell)` return an
+external keyed `CellEdit`; `commit` checks row/column lifetimes and original value.
+Integrated editor activation, drafts/validation/readonly/custom content remain M4.7.
+Full native table/column/cell semantics and interactive audits remain M5.
+
+`TableModel::new(headers, Vec<ListItem>)` remains a positional convenience with
+`column-N` IDs. The old public `rows`/`headers` fields are replaced by queries and
+checked mutations; `sort_by(index, descending)` now returns a Result and CellEdit's
+column is a logical key. `stage5` uses the updated interface.
+
+`cargo run --example m4_table` demonstrates 100,000 rows, both selection modes,
+resize/reorder and multi-sort (`--light`, `--render file.png`, `--smoke`). Eight focused
+tests cover validation, key/lifetime retention, sort stability, rectangle selection,
+geometry, keyboard/pointer capture and bounded realization. Native tests cover
+header sorting, cell navigation, retained/replaced focus and resize commands.

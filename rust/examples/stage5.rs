@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let edit = edit.clone();
             let draft = draft.clone();
             move || {
-                if let Some(key) = table.rows.selected().first()
+                if let Some(key) = table.selection().rows.first()
                     && let Some(cell) = table.begin_edit(key, 0)
                 {
                     draft.set(cell.text.clone());

@@ -119,6 +119,12 @@ selection/free-text modes, loading and a virtual 100,000-option popup. Build a
 callbacks keep application policy explicit. Add `--open` to preview suggestions.
 See the [combo contracts](../rust/components/README.md#completion-m4--combo-boxes).
 
+`cargo run --example m4_table` demonstrates keyed rows/columns, bounds-checked
+resize/reorder, sort descriptors and row/cell selection across 100,000 rows.
+Construct `TableColumn`s and keyed `TableRow::cell` values, then embed `table.view()`.
+Header drag/keyboard controls and shared scrolling preserve logical cell identity.
+See the [table contracts](../rust/components/README.md#completion-m4--keyed-tables-and-columns).
+
 `view!` supports ordinary expressions, `if`/`else`, keyed `for` loops, custom
 functions returning `View`, and `embed(view)` for an already-built value. Unknown
 properties fail compilation. Use stable keys for reordered items; unkeyed identity

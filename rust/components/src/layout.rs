@@ -248,6 +248,7 @@ impl Host {
         self.reconcile_overlays()?;
         self.advance_overlays_at(std::time::Instant::now());
         self.reconcile_split_capture();
+        self.reconcile_table_capture();
         self.reconcile_capture();
         self.reconcile_fields();
         if let Some((id, rect)) = reveal_caret {

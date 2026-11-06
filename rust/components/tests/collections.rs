@@ -53,10 +53,10 @@ fn selection_tracks_keys_sorting_and_edit_conflicts() {
     a.cells.push("1".into());
     let b = ListItem::new("b", "Apple");
     let table = TableModel::new(vec!["Name".into()], vec![a, b]);
-    table.rows.select("a", false);
-    table.sort_by(0, false);
-    assert_eq!(table.rows.index_of("a"), Some(1));
-    assert!(table.rows.selected().contains("a"));
+    table.select_row("a", ListSelection::Replace);
+    table.sort_by(0, false).unwrap();
+    assert_eq!(table.row_index("a"), Some(1));
+    assert!(table.selection().rows.contains("a"));
     let mut first = table.begin_edit("a", 0).unwrap();
     let mut second = first.clone();
     first.text = "First".into();
@@ -65,11 +65,10 @@ fn selection_tracks_keys_sorting_and_edit_conflicts() {
     assert!(table.commit(second).unwrap_err().0.contains("changed"));
     assert!(
         table
-            .rows
-            .set_items(vec![ListItem::new("x", "a"), ListItem::new("x", "b")])
+            .set_rows(vec![TableRow::new("x"), TableRow::new("x")])
             .is_err()
     );
-    assert!(table.rows.selected().contains("a"));
+    assert!(table.selection().rows.contains("a"));
 }
 #[test]
 fn tree_only_flattens_expanded_branches() {

@@ -370,9 +370,20 @@ impl Host {
                 PointerCursor::ResizeVertical
             });
         }
+        if self
+            .0
+            .interaction
+            .borrow()
+            .table_drag
+            .as_ref()
+            .is_some_and(|d| d.resize)
+        {
+            return Ok(PointerCursor::ResizeHorizontal);
+        }
         let hit = self.hit_test(point)?;
         let m = self.0.mounted.borrow();
         Ok(match m.nodes.iter().find(|n| Some(n.id) == hit) {
+            Some(n) if n.table_resize => PointerCursor::ResizeHorizontal,
             Some(n) if n.kind == Kind::TextField => PointerCursor::Text,
             Some(n) if n.kind == Kind::SplitDivider => {
                 if n.split

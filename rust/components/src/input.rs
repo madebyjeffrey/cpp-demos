@@ -53,6 +53,7 @@ pub(crate) struct Interaction {
     pub pressed: Option<NodeId>,
     pub repeat: Option<(NodeId, std::time::Instant)>,
     pub scroll_drag: Option<crate::scroll::ScrollDrag>,
+    pub table_drag: Option<crate::collections::TableDrag>,
     pub split_drag: Option<crate::split::SplitDrag>,
     pub drag_tick: Option<std::time::Instant>,
     pub hovered: Option<NodeId>,
@@ -73,6 +74,7 @@ impl Default for Interaction {
             pressed: None,
             repeat: None,
             scroll_drag: None,
+            table_drag: None,
             split_drag: None,
             drag_tick: None,
             hovered: None,
@@ -232,6 +234,7 @@ impl Host {
         if !active {
             i.pressed = None;
             i.scroll_drag = None;
+            i.table_drag = None;
             i.split_drag = None;
             i.drag_tick = None;
             i.repeat = None;
@@ -243,7 +246,8 @@ impl Host {
     }
     pub fn focus(&self, id: NodeId) -> Result<bool, Error> {
         let id = self
-            .combo_focus_owner(id)
+            .table_focus_owner(id)
+            .or_else(|| self.combo_focus_owner(id))
             .or_else(|| self.tree_row_owner(id))
             .unwrap_or(id);
         self.unmark_text(true)?;
@@ -273,6 +277,7 @@ impl Host {
             let mut i = self.0.interaction.borrow_mut();
             i.pressed = None;
             i.scroll_drag = None;
+            i.table_drag = None;
             i.split_drag = None;
             i.drag_tick = None;
             i.repeat = None;
@@ -284,6 +289,7 @@ impl Host {
         if previous != Some(id) && self.0.interaction.borrow().active {
             self.blur_action(previous);
         }
+        self.remember_table_focus(id);
         self.remember_collection_focus(id);
         self.remember_tab_focus(Some(id));
         self.advance_overlays_at(std::time::Instant::now());
@@ -298,6 +304,7 @@ impl Host {
         i.pending_row = None;
         i.pressed = None;
         i.scroll_drag = None;
+        i.table_drag = None;
         i.split_drag = None;
         i.drag_tick = None;
         i.repeat = None;
@@ -333,6 +340,9 @@ impl Host {
                     })
                 {
                     return false;
+                }
+                if let Some(stop) = self.table_tab_stop(n, &nodes) {
+                    return stop;
                 }
                 if n.kind == Kind::CollectionRow {
                     return self.collection_tab_stop(n, &nodes);
@@ -410,6 +420,9 @@ impl Host {
             return Ok(true);
         }
         if self.menu_pointer(event)? {
+            return Ok(true);
+        }
+        if self.table_pointer(event)? {
             return Ok(true);
         }
         if self.split_pointer(event, clicks)? {
@@ -706,6 +719,9 @@ impl Host {
             .find(|n| n.id == id)
             .cloned();
         let Some(node) = node else { return Ok(false) };
+        if let Some(handled) = self.table_header_key(id, event)? {
+            return Ok(handled);
+        }
         if let Some(handled) = self.collection_key(event)? {
             return Ok(handled);
         }

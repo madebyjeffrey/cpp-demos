@@ -23,7 +23,12 @@ impl Host {
         let id = self.focused()?;
         let m = self.0.mounted.borrow();
         let n = m.nodes.iter().find(|n| n.id == id)?;
-        let parent = if n.kind == Kind::CollectionRow {
+        let parent = if n.table_cell.is_some() {
+            drop(m);
+            return self
+                .table_container(id)
+                .and_then(|parent| self.list(parent).map(|model| (parent, model)));
+        } else if n.kind == Kind::CollectionRow {
             n.parent?
         } else if n.collection.is_some() {
             n.id
@@ -49,7 +54,10 @@ impl Host {
         if let Some(accepted) = self.accept_combo_row(id, &item.key)? {
             return Ok(accepted);
         }
-        if !model.select_with(&item.key, operation) {
+        let selected = self
+            .table_select_row(id, &item.key, operation)
+            .unwrap_or_else(|| model.select_with(&item.key, operation));
+        if !selected {
             return Ok(false);
         }
         model.reveal(index);
@@ -145,6 +153,41 @@ impl Host {
         if self.list(parent).as_ref() != Some(&model) {
             return;
         }
+        let table_cell = old
+            .descriptions
+            .get(&prior)
+            .and_then(|d| d.table_cell.as_ref());
+        if let Some(table) = self.table(parent) {
+            let cell_mode = table.options().selection_mode == crate::TableSelectionMode::Cells;
+            let columns_changed = old.nodes.iter().find(|n| n.id == parent).is_some_and(|n| {
+                n.table_order
+                    != table
+                        .columns()
+                        .iter()
+                        .map(|c| c.id.clone())
+                        .collect::<Vec<_>>()
+            });
+            if table_cell.is_some() || cell_mode && row == prior {
+                let retired = table_cell
+                    .is_some_and(|a| table.column_token(&a.cell.column) != Some(a.column_token));
+                if model.revision() != revision
+                    || columns_changed
+                    || retired
+                    || table_cell.is_some() && !cell_mode
+                    || cell_mode && row == prior
+                {
+                    if let Some(key) = table.cursor().map(|c| c.row).or_else(|| model.cursor())
+                        && let Some(index) = model.index_of(&key)
+                    {
+                        model.reveal(index);
+                        self.0.interaction.borrow_mut().pending_row = Some((parent, key));
+                    }
+                } else if self.focused().is_none() {
+                    self.0.interaction.borrow_mut().focus = Some(parent);
+                }
+                return;
+            }
+        }
         if row != prior {
             if self.focused().is_none() {
                 self.0.interaction.borrow_mut().focus = Some(parent);
@@ -191,6 +234,9 @@ impl Host {
         let Some((parent, model)) = self.focused_list() else {
             return Ok(None);
         };
+        if let Some(handled) = self.table_key(parent, event)? {
+            return Ok(Some(handled));
+        }
         if let Some(handled) = self.tree_key(parent, event)? {
             return Ok(Some(handled));
         }
