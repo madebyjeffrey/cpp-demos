@@ -593,8 +593,8 @@ Protocol composition tests and synthetic raster scales do not close this audit.
 ## M6 — Localization and complete value controls
 
 - [x] **M6.1 Editable format policy:** specify supported locale/grammar combinations, display/edit round trips and unsupported-format behavior. Preserve an explicit ASCII/ISO mode; do not silently guess ambiguous grouping or dates.
-- [ ] **M6.2 Number/date localization:** integrate the chosen Rust services with representative decimal-comma, grouped and non-Latin-digit cases; localized labels/formatting must match the advertised editable grammar and retain exact integers.
-- [ ] **M6.3 Date control:** bounds, disabled dates, custom validation, readonly/blur/submit policy, calendar keyboard navigation and synchronization after external value changes. Fix the narrow calendar grid's percentage-width-plus-gap overflow.
+- [x] **M6.2 Number/date localization:** integrate the chosen Rust services with representative decimal-comma, grouped and non-Latin-digit cases; localized labels/formatting must match the advertised editable grammar and retain exact integers.
+- [ ] **M6.3 Date control:** bounds, disabled dates, custom validation, readonly/blur/submit policy, calendar keyboard navigation and synchronization after external value changes. The narrow calendar grid overflow was corrected in M6.2.
 - [ ] **M6.4 Time and datetime controls:** dedicated hour/minute/second interactions, 12/24-hour policy, step sizes, optional seconds, local/instant bounds and combined validation; verify DST gaps/overlaps and named-zone changes without corrupting drafts.
 - [ ] **M6.5 Color control:** HSV as well as RGB, optional alpha, readonly and explicit transactional/live-preview behavior; cancel restores the source color, including through a color-well popup.
 - [ ] **M6.6 Shared draft lifecycle:** consistent apply/blur/cancel, dirty/incomplete/invalid/out-of-range reporting, external-change handling and callbacks across all typed value controls.
@@ -606,7 +606,7 @@ validation/transaction and timezone tests. Main implementation:
 
 Completion record:
 
-- M6.1: [editable formats](rust-editable-formats.md) defines default ASCII/ISO
+- M6.1 (`1a5fb39`): [editable formats](rust-editable-formats.md) defines default ASCII/ISO
   grammar, round trips, precision and unsupported-format behavior, plus the explicit
   locale profiles/strict grouping and digit policies for M6.2. Civil editors now
   reject discarded timestamp/offset/zone information and leap-second clamping;
@@ -618,6 +618,27 @@ Completion record:
   compilation, formatting, inventory mapping and native component regressions pass.
   Dark/light `m6_formats` previews inspected; its native smoke and the existing
   `stage6` value-lab smoke pass. Interactive/visible GPU evidence remains M5.5/M8.
+
+- M6.2: `EditLocale` is one checked setting shared by `Numeric` and `DatePicker`.
+  Five explicit profiles cover decimal-comma, strict optional three-digit grouping,
+  French narrow no-break spaces and Arabic-Indic digits/sign affixes. Unsupported
+  profiles/extensions fail construction. ASCII/ISO remains the default. ICU4X
+  supplies numeric output; integers parse/step without `f64`. Localized drafts,
+  bounds/errors, rounded display and readonly behavior share the existing paths.
+- Calendar field order/hints, month/week/action text, week start and Arabic grid
+  direction match the profile. Gregorian years 0001–9999 are supported; ISO keeps
+  the full year range. Calendar cells divide remaining row space after gaps,
+  correcting the narrow grid overflow. The [format contract](rust-editable-formats.md)
+  records exact separators, digit/sign rules and configuration-time draft reset.
+- Evidence: six portable tests cover supported/unsupported profiles, exact integer
+  limits, malformed/mixed input, float extremes/subnormals/signed zero, precision,
+  stepping, readonly/external values, date order/year limits and narrow calendar
+  geometry/actions. Native tests cover actual localized text, exact AX numbers,
+  staged edits, stepping, submission and invalid date preservation. Existing native
+  input/control/notification suites, workspace tests, strict Clippy, formatting,
+  inventory mapping and portable Linux compilation pass. `m6_locales` provides the
+  concise runnable lab; all five pages inspected in dark/light, native smoke passes.
+  Interactive VoiceOver/IME and final visible GPU evidence remain M5.5/M8.
 
 ## M7 — Developer tools and application ergonomics
 

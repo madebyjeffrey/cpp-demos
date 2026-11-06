@@ -1,8 +1,9 @@
-//! Explicit draft/commit values. Editable numbers use ungrouped ASCII syntax.
-use crate::{Binding, Repeat, State, View};
+//! Explicit draft/commit values. Numbers default to ASCII; checked locale profiles are opt-in.
+use crate::locale::ActionLabel;
+use crate::{Binding, EditLocale, Repeat, State, View};
 use std::{fmt::Display, rc::Rc, str::FromStr};
 type Parse<T> = Rc<dyn Fn(&str) -> Result<T, String>>;
-type ModelStatus<T> = Rc<dyn Fn(&T) -> ValidationStatus>;
+type ModelStatus<T> = Rc<dyn Fn(&T) -> Validation>;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ValidationStatus {
     Valid,
@@ -86,13 +87,10 @@ impl<T: Clone + PartialEq + 'static> Draft<T> {
         let text = self.binding().get();
         let current = self.value.get();
         let dirty = text != (self.format)(&current);
-        let status = if !dirty {
-            self.model_status
-                .as_ref()
-                .map_or_else(|| (self.classify)(&text), |status| status(&current))
-        } else {
-            (self.classify)(&text)
-        };
+        if !dirty && let Some(status) = &self.model_status {
+            return status(&current);
+        }
+        let status = (self.classify)(&text);
         Validation {
             status,
             message: if status == ValidationStatus::Valid {
@@ -158,6 +156,8 @@ impl<T: Clone + PartialEq + 'static> Draft<T> {
         self.notify();
     }
 }
+/// Implementors format finite values using ASCII numeric syntax; localized editing
+/// converts that text directly, without passing integer values through floating point.
 pub trait Number: Clone + Copy + PartialOrd + Display + FromStr + 'static {
     fn checked_step(self, step: Self, increase: bool) -> Option<Self>;
     fn positive(self) -> bool;
@@ -250,6 +250,71 @@ fn status<T: Number>(text: &str, min: T, max: T) -> ValidationStatus {
         Err(_) => ValidationStatus::Invalid,
     }
 }
+fn numeric_draft<T: Number>(
+    value: Binding<T>,
+    min: T,
+    max: T,
+    locale: &EditLocale,
+    digits: Option<usize>,
+) -> Draft<T> {
+    let (parse_locale, format_locale, status_locale, model_locale) = (
+        locale.clone(),
+        locale.clone(),
+        locale.clone(),
+        locale.clone(),
+    );
+    let mut draft = Draft::new(
+        value,
+        move |text| {
+            let ascii = parse_locale.number_input(text)?;
+            match status::<T>(&ascii, min, max) {
+                ValidationStatus::Valid => ascii
+                    .parse::<T>()
+                    .map_err(|_| parse_locale.incomplete_error().into()),
+                ValidationStatus::Incomplete => Err(parse_locale.incomplete_error().into()),
+                ValidationStatus::Invalid => Err(parse_locale.number_error().into()),
+                ValidationStatus::OutOfRange => {
+                    Err(parse_locale.range_error(&min.to_string(), &max.to_string()))
+                }
+            }
+        },
+        move |v| format_locale.number(&v.format(digits)),
+    );
+    draft.classify = Rc::new(move |text| {
+        status_locale
+            .number_input(text)
+            .map_or(ValidationStatus::Invalid, |ascii| {
+                status::<T>(&ascii, min, max)
+            })
+    });
+    draft.model_status = Some(Rc::new(move |v| {
+        let status = if !v.valid() {
+            ValidationStatus::Invalid
+        } else if *v < min || *v > max {
+            ValidationStatus::OutOfRange
+        } else if model_locale
+            .number_input(&model_locale.number(&v.format(digits)))
+            .is_ok_and(|s| s.parse::<T>().is_ok_and(|v| v.valid()))
+        {
+            ValidationStatus::Valid
+        } else {
+            ValidationStatus::Invalid
+        };
+        let message = match status {
+            ValidationStatus::Valid => None,
+            ValidationStatus::OutOfRange => {
+                Some(model_locale.range_error(&min.to_string(), &max.to_string()))
+            }
+            _ => Some(model_locale.number_error().into()),
+        };
+        Validation {
+            status,
+            message,
+            dirty: false,
+        }
+    }));
+    draft
+}
 #[derive(Clone)]
 pub struct Numeric<T: Number> {
     pub draft: Draft<T>,
@@ -257,6 +322,8 @@ pub struct Numeric<T: Number> {
     min: T,
     max: T,
     step: T,
+    locale: EditLocale,
+    digits: Option<usize>,
     read_only: bool,
     commit_on_blur: bool,
     repeat: Repeat,
@@ -269,36 +336,16 @@ impl<T: Number> Numeric<T> {
             min.valid() && max.valid() && step.valid() && step.positive() && min <= max,
             "Invalid numeric bounds/step"
         );
-        let mut draft = Draft::new(
-            value.clone(),
-            move |text| match status::<T>(text, min, max) {
-                ValidationStatus::Valid => text
-                    .parse::<T>()
-                    .map_err(|_| "Enter a complete number".into()),
-                ValidationStatus::Incomplete => Err("Enter a complete number".into()),
-                ValidationStatus::Invalid => {
-                    Err("Use a finite ASCII number without grouping".into())
-                }
-                ValidationStatus::OutOfRange => Err(format!("Enter a value from {min} to {max}")),
-            },
-            |v| v.format(None),
-        );
-        draft.classify = Rc::new(move |text| status::<T>(text, min, max));
-        draft.model_status = Some(Rc::new(move |v| {
-            if !v.valid() {
-                ValidationStatus::Invalid
-            } else if *v < min || *v > max {
-                ValidationStatus::OutOfRange
-            } else {
-                ValidationStatus::Valid
-            }
-        }));
+        let locale = EditLocale::ASCII;
+        let draft = numeric_draft(value.clone(), min, max, &locale, None);
         Self {
             draft,
             value,
             min,
             max,
             step,
+            locale,
+            digits: None,
             read_only: false,
             commit_on_blur: true,
             repeat: Repeat::default(),
@@ -309,13 +356,29 @@ impl<T: Number> Numeric<T> {
     /// Maximum significant digits for decimal display; integers always remain exact.
     pub fn significant_digits(mut self, digits: usize) -> Self {
         assert!((1..=17).contains(&digits), "Use 1–17 significant digits");
-        self.draft.format = Rc::new(move |v| v.format(Some(digits)));
-        let base = self.value.get();
-        self.draft.edit = State::new(Edit {
-            text: (self.draft.format)(&base),
-            base,
-        });
+        self.digits = Some(digits);
+        self.reformat();
         self
+    }
+    /// Configure editing before mounting; rebuilding the format restores the committed value.
+    pub fn locale(mut self, locale: EditLocale) -> Self {
+        self.locale = locale;
+        self.reformat();
+        self
+    }
+    fn reformat(&mut self) {
+        let draft = numeric_draft(
+            self.value.clone(),
+            self.min,
+            self.max,
+            &self.locale,
+            self.digits,
+        );
+        self.draft.parse = draft.parse;
+        self.draft.format = draft.format;
+        self.draft.classify = draft.classify;
+        self.draft.model_status = draft.model_status;
+        self.draft.edit = draft.edit;
     }
     pub fn read_only(mut self, value: bool) -> Self {
         self.read_only = value;
@@ -371,7 +434,7 @@ impl<T: Number> Numeric<T> {
             return None;
         }
         let current = if self.validation().dirty {
-            self.draft.binding().get().parse::<T>().ok()?
+            (self.draft.parse)(&self.draft.binding().get()).ok()?
         } else {
             self.value.get()
         };
@@ -453,14 +516,20 @@ impl View {
             Self::button("−", move || {
                 down.step(false);
             })
-            .accessible_label(format!("Decrease {label}"))
+            .accessible_label(format!(
+                "{} {label}",
+                number.locale.action(ActionLabel::Decrease)
+            ))
             .enabled(number.can_step(false))
             .repeat(number.repeat)
             .width(34),
             Self::button("+", move || {
                 up.step(true);
             })
-            .accessible_label(format!("Increase {label}"))
+            .accessible_label(format!(
+                "{} {label}",
+                number.locale.action(ActionLabel::Increase)
+            ))
             .enabled(number.can_step(true))
             .repeat(number.repeat)
             .width(34),
@@ -494,7 +563,8 @@ impl View {
         let mut children = vec![
             Self::label(&label),
             Self::row(vec![
-                Self::text_field("ASCII number", number.draft.binding())
+                Self::text_field(number.locale.number_hint(), number.draft.binding())
+                    .accessible_help(number.locale.number_hint())
                     .validation(number.validation())
                     .accessible_label(&label)
                     .read_only(number.read_only)

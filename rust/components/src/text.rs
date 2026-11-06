@@ -31,7 +31,7 @@ pub fn byte_offset(text: &str, utf16: usize) -> Option<usize> {
     (units == utf16).then_some(text.len())
 }
 
-/// Locale-aware integer display only. Parsing and editable field policy are later stages.
+/// Locale-aware integer display only. Editable controls use the checked `EditLocale` profiles.
 pub struct IntegerFormatter(DecimalFormatter);
 impl IntegerFormatter {
     /// Uses BCP 47 locale names and ICU4X's standard data fallback.

@@ -1,5 +1,6 @@
 //! Typed sRGB and ISO civil/zoned controls. Parsing never guesses a locale or DST policy.
-use crate::{Binding, Draft, State, View};
+use crate::locale::ActionLabel;
+use crate::{Binding, Draft, EditLocale, State, View};
 pub use jiff::{
     Zoned,
     civil::{Date, DateTime, Time},
@@ -8,7 +9,7 @@ pub use jiff::{
 use std::{fmt, str::FromStr};
 // Civil editors must consume exactly their advertised grammar. Jiff's general
 // Temporal parsers also accept timestamps and can discard their extra fields.
-fn parse_date(text: &str) -> Result<Date, String> {
+pub(crate) fn parse_date(text: &str) -> Result<Date, String> {
     let date = text.parse::<Date>().map_err(|e| e.to_string())?;
     if text != date.to_string() {
         return Err("Use an ISO date: YYYY-MM-DD, without time or offset".into());
@@ -79,6 +80,13 @@ pub fn value_field<T: Clone + PartialEq + 'static>(
     label: impl Into<String>,
     draft: &Draft<T>,
 ) -> View {
+    localized_value_field(label, draft, &EditLocale::ASCII)
+}
+fn localized_value_field<T: Clone + PartialEq + 'static>(
+    label: impl Into<String>,
+    draft: &Draft<T>,
+    locale: &EditLocale,
+) -> View {
     let label = label.into();
     let commit = draft.clone();
     let apply = draft.clone();
@@ -92,10 +100,10 @@ pub fn value_field<T: Clone + PartialEq + 'static>(
                 commit.commit();
             }),
         View::row(vec![
-            View::button("Apply", move || {
+            View::button(locale.action(ActionLabel::Apply), move || {
                 apply.commit();
             }),
-            View::button("Revert", move || cancel.cancel()),
+            View::button(locale.action(ActionLabel::Revert), move || cancel.cancel()),
         ]),
     ];
     if let Some(error) = draft.error() {
@@ -162,6 +170,7 @@ impl ColorPicker {
 #[derive(Clone)]
 pub struct DatePicker {
     value: Binding<Date>,
+    locale: EditLocale,
     pub draft: Draft<Date>,
     month: State<Date>,
 }
@@ -171,58 +180,94 @@ impl DatePicker {
             month: State::new(value.get().first_of_month()),
             draft: Draft::new(value.clone(), parse_date, |v| v.to_string()),
             value,
+            locale: EditLocale::ASCII,
         }
+    }
+    /// Configure editing/calendar text before mounting. ASCII/ISO remains explicit.
+    pub fn locale(mut self, locale: EditLocale) -> Self {
+        let (parse, format) = (locale.clone(), locale.clone());
+        self.draft = Draft::new(
+            self.value.clone(),
+            move |s| parse.date_input(s),
+            move |v| format.date(*v),
+        );
+        self.locale = locale;
+        self
     }
     pub fn view(&self) -> View {
         let month = self.month.get();
         let prev = self.month.clone();
         let next = self.month.clone();
-        let mut children = vec![View::row(vec![
-            View::button("‹", move || {
+        let mut header = vec![
+            View::button(if self.locale.rtl() { "›" } else { "‹" }, move || {
                 if let Ok(date) = prev.get().checked_add(jiff::Span::new().months(-1)) {
                     prev.set(date);
                 }
             })
-            .width(36),
-            View::label(format!("{}-{:02}", month.year(), month.month())).grow(1.),
-            View::button("›", move || {
+            .width(36)
+            .accessible_label(self.locale.action(ActionLabel::PreviousMonth)),
+            View::label(self.locale.month(month)).grow(1.).min_width(0.),
+            View::button(if self.locale.rtl() { "‹" } else { "›" }, move || {
                 if let Ok(date) = next.get().checked_add(jiff::Span::new().months(1)) {
                     next.set(date);
                 }
             })
-            .width(36),
-        ])];
-        children.push(View::row(
-            ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
-                .into_iter()
-                .map(|s| View::label(s).width(crate::percent(100. / 7.)))
-                .collect(),
-        ));
-        let offset = month.weekday().to_monday_zero_offset();
+            .width(36)
+            .accessible_label(self.locale.action(ActionLabel::NextMonth)),
+        ];
+        if self.locale.rtl() {
+            header.reverse();
+        }
+        let mut children = vec![View::row(header)];
+        let weekdays = self.locale.weekdays();
+        let mut labels = (0..7)
+            .map(|i| {
+                View::label(weekdays[(i + self.locale.week_start() as usize) % 7])
+                    .grow(1.)
+                    .basis(0)
+                    .min_width(0.)
+                    .text_align(crate::Align::Center)
+            })
+            .collect::<Vec<_>>();
+        if self.locale.rtl() {
+            labels.reverse();
+        }
+        children.push(View::row(labels).gap(4.));
+        let offset = (month.weekday().to_monday_zero_offset() - self.locale.week_start() + 7) % 7;
         for week in 0..6 {
             let mut cells = Vec::new();
             for day in 0..7 {
                 let number = week * 7 + day - offset + 1;
                 if number < 1 || number > month.days_in_month() {
-                    cells.push(View::label("").width(crate::percent(100. / 7.)));
+                    cells.push(View::label("").grow(1.).basis(0).min_width(0.));
                     continue;
                 }
                 let date = Date::new(month.year(), month.month(), number).unwrap();
                 let value = self.value.clone();
                 cells.push(
-                    View::button(number.to_string(), move || value.set(date))
-                        .width(crate::percent(100. / 7.))
+                    View::button(self.locale.day(number), move || value.set(date))
+                        .grow(1.)
+                        .basis(0)
+                        .min_width(0.)
+                        .enabled(self.locale.date_supported(date))
                         .bold(date == self.value.get())
-                        .accessible_label(date.to_string())
-                        .tooltip(date.to_string()),
+                        .accessible_label(self.locale.date(date))
+                        .tooltip(self.locale.date(date)),
                 );
+            }
+            if self.locale.rtl() {
+                cells.reverse();
             }
             children.push(View::row(cells).gap(4.));
             if (week + 1) * 7 - offset >= month.days_in_month() {
                 break;
             }
         }
-        children.push(value_field("Date · YYYY-MM-DD", &self.draft));
+        children.push(localized_value_field(
+            self.locale.date_hint(),
+            &self.draft,
+            &self.locale,
+        ));
         View::column(children)
     }
 }

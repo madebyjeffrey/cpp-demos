@@ -1355,7 +1355,7 @@ IME sessions at both backing scales remain M5.5. Layout payloads follow Apple's
 ## M6.1 — editable format policy
 
 [Editable formats](../../docs/rust-editable-formats.md) specifies the implemented
-ASCII/ISO grammar and the explicit locale profiles planned for M6.2. Civil editors
+ASCII/ISO grammar and checked locale profiles. Civil editors
 consume their entire input: a date cannot silently discard a time, and a local
 time/datetime cannot discard an offset or zone. Leap seconds are rejected rather
 than clamped. Named-zone input still uses explicit gap/overlap resolution.
@@ -1364,3 +1364,33 @@ than clamped. Named-zone input still uses explicit gap/overlap resolution.
 nanosecond time/local datetime drafts. Four portable tests cover ambiguity,
 integer precision, date/time extremes, suffix rejection and named-zone parsing.
 Localized display-only formatters do not change the default editing grammar.
+
+## M6.2 — explicit number/date localization
+
+```rust
+let locale = EditLocale::new("fr-FR")?;
+let amount = Numeric::new(value.binding(), -1000., 1000., 0.5).locale(locale.clone());
+let calendar = DatePicker::new(date.binding()).locale(locale);
+```
+
+`en-US`, `en-GB`, `de-DE`, `fr-FR` and `ar-EG` have explicit editable grammars;
+unsupported profiles/extensions return an error. `EditLocale::ASCII` is the default
+and preserves ISO dates and ungrouped ASCII numbers. Configure builders before
+mounting: changing locale/precision restores their committed value. Application
+labels stay application-owned; this does not supply a general translation catalog.
+
+ICU4X formats exact decimal text; integer parsing/stepping stays in the integer type.
+Grouping is optional and checked in groups of three; fractions/exponents cannot
+contain grouping. Arabic accepts its digits or ASCII digits with the same separators,
+rejects mixed digit sets and consumes only ICU's exact sign affixes or ASCII signs.
+Rounded display never overwrites an untouched precise model. Calendar hints, action
+labels, month/day text, field order, week start and Arabic grid direction match the
+selected profile. Localized Gregorian years are 0001–9999; ISO keeps the full range.
+Calendar cells share remaining row space after gaps and fit narrow widths.
+
+`cargo run --example m6_locales` opens the five-profile lab; `--locale ar-EG` selects
+its initial page. Six portable tests cover precision, grammar, stepping, external
+changes, date order, calendar labels/actions and narrow geometry. Run the native
+text/AX transport checks with
+`SCARS_WINDOW_DESKTOP_TESTS=1 cargo test -p scars-window --test localized_values --locked --offline`.
+Actual VoiceOver/IME sessions remain M5.5; complete date policies remain M6.3.

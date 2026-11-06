@@ -97,3 +97,8 @@ harness = false
 name = "accessibility_notifications"
 path = "tests/accessibility_notifications.rs"
 harness = false
+
+[[test]]
+name = "localized_values"
+path = "tests/localized_values.rs"
+harness = false
