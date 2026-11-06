@@ -1,0 +1,80 @@
+name: Rust validation
+
+'on':
+  push:
+    paths:
+      - 'rust/**'
+      - 'scripts/check_rust*.py'
+      - 'scripts/tests/test_check_rust.py'
+      - 'scars/src/scars.cppm'
+      - 'docs/rust-*.md'
+      - '.github/workflows/rust.yml'
+  pull_request:
+    paths:
+      - 'rust/**'
+      - 'scripts/check_rust*.py'
+      - 'scripts/tests/test_check_rust.py'
+      - 'scars/src/scars.cppm'
+      - 'docs/rust-*.md'
+      - '.github/workflows/rust.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUSTUP_TOOLCHAIN: '1.99.1'
+  FORCE_SKIA_BUILD: '1'
+  MACOSX_DEPLOYMENT_TARGET: '26.0'
+  # Keep fresh source builds within hosted-runner storage limits.
+  CARGO_PROFILE_DEV_DEBUG: '0'
+  CARGO_PROFILE_TEST_DEBUG: '0'
+
+jobs:
+  portable:
+    name: Portable core and macros
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust tools
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
+      - name: Run portable checks
+        run: python3 scripts/check_rust.py --suite portable
+      - name: Upload report and logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rust-portable
+          path: rust/target/validation/portable
+          retention-days: 14
+
+  macos:
+    name: macOS renderer and consumer
+    runs-on: macos-26
+    timeout-minutes: 150
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust tools and portable target
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt --component clippy --target x86_64-unknown-linux-gnu
+      - name: Ensure source-build tools
+        run: command -v ninja >/dev/null || brew install ninja
+      - name: Run headless checks
+        run: python3 scripts/check_rust.py
+      - name: Upload report, logs and Lab previews
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rust-macos-headless
+          path: rust/target/validation/headless
+          retention-days: 14

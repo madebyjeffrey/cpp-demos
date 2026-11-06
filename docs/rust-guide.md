@@ -211,21 +211,20 @@ inspection. [Window contracts](../rust/README.md) cover ownership and rendering.
 The [completion checklist](rust-completion-checklist.md) tracks the remaining
 behavior and validation work against the original SCARS inventory.
 
+Run from the repository root:
+
 ```sh
-cd rust
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --workspace --locked
-cargo check -p scars-ui --lib --target x86_64-unknown-linux-gnu --locked
-SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --locked --test components
-SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --locked --test desktop
-SCARS_WINDOW_FULLSCREEN_TESTS=1 cargo test --locked --test fullscreen
-SCARS_WINDOW_SECURE_INPUT_TESTS=1 cargo test --locked --test secure_input
+python3 scripts/check_rust.py --offline
+python3 scripts/check_rust.py --suite portable --offline
+# On an awake, unlocked foreground desktop, after the headless build:
+python3 scripts/check_rust.py --suite native --offline
 ```
 
-Native tests require an awake desktop with WindowServer/Metal access; ordinary
-Cargo tests skip those harnesses. Core/CPU tests run without a native window.
-Linux is a compile check for the portable core; its native backend is not implemented.
+The [validation guide](rust-validation.md) describes setup, suite scope, per-step
+logs/JSON reports, Lab artifacts and CI. Native harness skips in ordinary tests do
+not establish native passes. Actual VoiceOver speech and IME candidate placement
+remain explicit manual checks. Linux validates the portable core; its native
+window backend is not implemented.
 
 This is the first Rust implementation of the staged component system. Collection
 virtualization uses fixed row heights; durable per-row edit state belongs outside

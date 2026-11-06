@@ -18,6 +18,13 @@ tests; [component contracts](components/README.md) describe the current coverage
 The [full Lab](../docs/rust-lab.md) covers all control families in retained pages;
 use `cargo run --example lab --locked --offline -- --page values --size 440x740`.
 
+## Validation
+
+From the repository root, run `python3 scripts/check_rust.py --offline` for the
+headless suite. The [validation guide](../docs/rust-validation.md) covers first-run
+setup, portable/native modes, reports and CI. Native and interactive release
+checks remain explicit; a headless pass does not substitute for them.
+
 ## Source layout
 
 - `components/` is the portable reactive foundation; `macros/` implements its

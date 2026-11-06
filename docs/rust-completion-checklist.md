@@ -903,7 +903,7 @@ M7.2 completion record (`54606ad`):
   formatting and inventory checks pass. Native harness skips in the ordinary
   workspace run are not counted as passes. Actual M5.5/M8 audits remain.
 
-M7.3 completion record:
+M7.3 completion record (`8782764`):
 
 - `lab` now contains seven retained pages and 28 named samples covering the full
   control inventory: basic/choice/progress controls, typography/rich inline text,
@@ -941,12 +941,48 @@ M7.3 completion record:
 
 - [ ] **M8.1 Native rendering:** rerun visible Metal pixel, lifecycle and full-screen suites on an awake foreground desktop; record failures accurately and fix genuine regressions.
 - [ ] **M8.2 Visual/interaction matrix:** reproducible dark/light previews at 1×/2×, narrow/wide sizes, disabled/readonly/error/focused states and representative long/RTL/emoji text.
-- [ ] **M8.3 Repeatable checks:** one documented local validation entry point and suitable CI checks for formatting, strict Clippy, core/macro/raster tests, external consumer compilation and portable-core compilation; native interactive checks remain explicit.
+- [x] **M8.3 Repeatable checks:** one documented local validation entry point and suitable CI checks for formatting, strict Clippy, core/macro/raster tests, external consumer compilation and portable-core compilation; native interactive checks remain explicit.
 - [ ] **M8.4 Resource behavior:** measure large collections and long editing sessions for retained objects/caches and idle wakeups; verify inactive/hidden/unmounted controls cancel work and settle.
 - [ ] **M8.5 Regression examples:** run the themed todo app and all milestone examples after the final interfaces settle; verify editing, filtering, persistence and external value updates still work.
 - [ ] **M8.6 Inventory sign-off:** close every in-scope inventory row and checklist item with evidence, update public docs/examples and remove stale completion claims. Record remaining optional extensions separately before completing the goal.
 
-Completion record: pending.
+M8.3 completion record:
+
+- `python3 scripts/check_rust.py` is the documented local entry point. Headless
+  mode runs formatting, strict workspace/all-target Clippy, core/macro/raster/Lab
+  tests, the inventory mapping, renamed-consumer compilation and Linux core
+  compilation. Portable mode runs the applicable core/macro checks. Each mode
+  passed locally with `--offline`; native skips are explicitly outside those passes.
+- Per-step logs and atomic JSON reports record source/toolchain/platform/profile
+  metadata, exact commands, exit codes and timings. Headless runs emit the Lab
+  gallery. Failures stop later checks; timeouts/interruption retire the Cargo
+  process group. Five validator tests exercise child-process flag isolation,
+  failure/report propagation, descendant timeout cleanup, native-harness coverage
+  and planning without execution.
+- Native mode requires the foreground readiness probe, then serially runs visible
+  Metal/lifecycle, full-screen, secure-input, foreground-sheet and all opt-in
+  protocol harnesses with their explicit flags. Headless/portable modes strip
+  inherited native opt-ins. Actual VoiceOver/IME sessions remain unverified in
+  every automated report.
+- The GitHub Actions workflow uses the same entry point on Ubuntu 24.04 and macOS
+  26, with the verified Rust 1.99.1 toolchain and pinned official action commits.
+  Skia is source-built without target caching; reports/logs/gallery are uploaded.
+  Workflow syntax/schema passed `actionlint` 1.7.12. Commands passed locally; no
+  remote Actions execution or native/interactive CI pass is claimed.
+- The [validation guide](rust-validation.md) describes setup, commands, artifacts
+  and exact scope. The runnable command and emitted Lab examples demonstrate this
+  stage; no additional application or native plumbing is required.
+
+M8.1 readiness record, 2026-11-06:
+
+```text
+active-displays=0 display-error=0 front=com.apple.loginwindow app-active=0 key-window=0 visible=1 link-paused=0 callbacks=0 ready=0
+```
+
+The independent AppKit probe failed its awake/foreground gate. Visible native
+suites were not run or counted as passes. The user has been asked to wake/unlock
+the Mac; actual VoiceOver/IME and backing-scale sessions remain open. Independent
+release work continues while that desktop condition is unavailable.
 
 ## Explicit boundaries and follow-up extensions
 
