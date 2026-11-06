@@ -189,6 +189,8 @@ define_class!(
     unsafe impl NSAccessibility for Entry {
         #[unsafe(method(isAccessibilityElement))] fn live(&self)->bool{self.with(|_,_,_,_,_,_|true).unwrap_or(false)}
         #[unsafe(method_id(accessibilityRole))] fn role(&self)->Option<Retained<NSString>>{self.with(|_,_,_,_,_,_|unsafe{match self.ivars().part{Part::Headers=>NSAccessibilityGroupRole,Part::Row(..)=>NSAccessibilityRowRole,Part::Column(..)=>NSAccessibilityColumnRole,Part::Header(..)=>NSAccessibilityButtonRole,Part::Cell(..)=>NSAccessibilityCellRole}.retain()})}
+        #[unsafe(method_id(accessibilityRoleDescription))]
+        fn role_description(&self)->Option<Retained<NSString>>{self.accessibilityRole().and_then(|role|NSAccessibilityRoleDescription(&role,None))}
         #[unsafe(method_id(accessibilityIdentifier))] fn identifier(&self)->Option<Retained<NSString>>{self.with(|_,_,_,_,_,_|{let (root,kind,r,c)=self.ivars().part.identity(self.ivars().root);ns(&format!("{root}/table/{kind}/{r}/{c}"))})}
         #[unsafe(method_id(accessibilityLabel))] fn label(&self)->Option<Retained<NSString>>{self.with(|_,_,_,_,t,_|match &self.ivars().part{Part::Headers=>ns("Column headers"),Part::Row(k,_)=>ns(&{let row=t.row(t.row_index(k).unwrap()).unwrap();t.columns().iter().map(|c|row.cells.get(&c.id).map_or("",String::as_str)).collect::<Vec<_>>().join(" · ")}),Part::Column(k,_)|Part::Header(k,_)=>ns(&t.columns()[t.column_index(k).unwrap()].title),Part::Cell(c,..)=>ns(&t.columns()[t.column_index(&c.column).unwrap()].title)})}
         #[unsafe(method_id(accessibilityValue))] fn value(&self)->Option<Retained<AnyObject>>{self.cell_info().map(|c|any(ns(&c.text)))}

@@ -1304,3 +1304,39 @@ Combined notifications and actual interactive VoiceOver/IME sessions remain M5.4
 
 The native mappings follow Apple's [accessibility protocol](https://developer.apple.com/documentation/appkit/nsaccessibilityprotocol)
 and [role/subrole definitions](https://developer.apple.com/documentation/appkit/nsaccessibility-swift.struct/subrole/toggle).
+
+## M5.4 progress — native identity and posting lifecycle
+
+A queried generic accessibility element is retained for its mounted node's lifetime,
+including hidden retained tab pages. The cache prunes retired node IDs, rather than
+hidden nodes. Logical collection arrays remain lazy. Native identifiers include the
+mounted node ID, so equal application keys under different parents cannot collide.
+Held objects become inert after removal, unmount or close; a removed/reinserted view
+gets a new identity. Native proxies keep weak owners and do not retain application
+callbacks. Parent dialogs are temporarily inaccessible while a nested dialog is active,
+then recover their surviving identity.
+
+Hit testing filters through the same readable modal scope as attribute queries.
+In particular, a point outside a suggestion popup cannot return an inaccessible
+background control. Frame/range conversion uses AppKit's view/window/screen conversion
+APIs in logical points. Native tests move/resize a real window, round-trip frame
+coordinates, verify UTF-16 emoji ranges and reject split surrogate ranges. The recorded
+run used actual backing scale 1; it does not establish the separate scale-2 audit.
+
+Posting now runs on a coalesced main-runloop task instead of the draw callback.
+Invalidation and native events schedule one weak-owner task; retired mounts and
+closed/sheet-blocked surfaces skip it. The native lifecycle suite verifies two model
+writes produce one AppKit post call while the window is hidden and draw count stays
+zero, idle ticks do not repost, and unmount cancels pending work. The internal
+`scarsAccessibilityPostCount` diagnostic counts calls to the real AppKit function;
+it does not prove receipt by an external accessibility client.
+
+Run `SCARS_WINDOW_DESKTOP_TESTS=1 cargo test --test accessibility_lifecycle --locked --offline`.
+The existing `m5_semantics` example demonstrates retained tab editing and scoped alert
+transitions without application-side native plumbing.
+
+M5.4 remains open: granular selection/value/disclosure/row-count/destroyed notifications,
+logical focus targets, layout-change payloads and precise text/selection change
+classification still need implementation and evidence. Virtual datasets must not be
+fully enumerated for notification snapshots. External VoiceOver/IME sessions remain
+M5.5. Posting follows Apple's [notification API](https://developer.apple.com/documentation/appkit/nsaccessibility-swift.struct/notification/layoutchanged).

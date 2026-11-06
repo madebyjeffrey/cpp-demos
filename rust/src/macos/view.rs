@@ -14,6 +14,9 @@ define_class!(
     pub(super) struct ContentView;
     unsafe impl NSObjectProtocol for ContentView {}
     impl ContentView {
+        #[unsafe(method(scarsAccessibilityPostCount))]
+        fn accessibility_posts(&self)->u64{components::post_count()}
+
         #[unsafe(method_id(accessibilityChildren))]
         fn component_children(&self)->Option<Retained<NSArray<AnyObject>>> {with_surface(&self.weak(),components::children).flatten()}
         #[unsafe(method_id(accessibilityFocusedUIElement))]

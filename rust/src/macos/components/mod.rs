@@ -4,6 +4,8 @@ mod accessibility;
 mod collection_accessibility;
 mod control_accessibility;
 mod input;
+mod notification_dispatch;
+pub(crate) use notification_dispatch::post_count;
 mod row_array;
 mod table_accessibility;
 mod table_array;
@@ -24,6 +26,7 @@ pub(super) struct Mounted {
         >,
     >,
     table_cache: RefCell<table_accessibility::Cache>,
+    notifications_pending: Cell<bool>,
     generation: Cell<u64>,
     focus: Cell<Option<ui::NodeId>>,
     value: RefCell<String>,
@@ -65,66 +68,15 @@ impl Mounted {
         self.prune_cache()
     }
     fn prune_cache(&self) -> std::result::Result<(), ui::Error> {
+        // Hidden retained pages still own their node identity. Prune only retirement.
         let live = self
             .host
             .snapshot()?
             .into_iter()
-            .filter(|n| !n.hidden)
             .map(|n| n.id)
             .collect::<std::collections::HashSet<_>>();
         self.cache.borrow_mut().retain(|id, _| live.contains(id));
         Ok(())
-    }
-    fn notify(&self, surface: &Surface) {
-        let generation = self.host.generation();
-        let focus = self.host.focused();
-        let value = self
-            .host
-            .text_input()
-            .ok()
-            .flatten()
-            .map(|i| {
-                if i.secure {
-                    format!(
-                        "secure:{}:{:?}",
-                        ui::text::grapheme_boundaries(&i.text).len(),
-                        i.selection
-                    )
-                } else {
-                    format!("{}:{:?}", i.text, i.selection)
-                }
-            })
-            .unwrap_or_default();
-        let _ = self.prune_cache();
-        // SAFETY: Main-thread native objects and AppKit's exported notification names.
-        unsafe {
-            if self.generation.replace(generation) != generation {
-                NSAccessibilityPostNotification(
-                    surface.native_view(),
-                    NSAccessibilityLayoutChangedNotification,
-                );
-            }
-            if self.focus.replace(focus) != focus {
-                NSAccessibilityPostNotification(
-                    surface.native_view(),
-                    NSAccessibilityFocusedUIElementChangedNotification,
-                );
-            }
-            if *self.value.borrow() != value {
-                if let Some(id) = focus {
-                    let element = accessibility::element(self, id);
-                    NSAccessibilityPostNotification(
-                        &element,
-                        NSAccessibilityValueChangedNotification,
-                    );
-                    NSAccessibilityPostNotification(
-                        &element,
-                        NSAccessibilitySelectedTextChangedNotification,
-                    );
-                }
-                *self.value.borrow_mut() = value;
-            }
-        }
     }
     fn deactivate(&self) {
         self.alive.set(false);
@@ -176,6 +128,7 @@ impl Surface {
             cache: RefCell::new(Default::default()),
             row_cache: RefCell::new(Default::default()),
             table_cache: RefCell::new(Default::default()),
+            notifications_pending: Cell::new(false),
             generation: Cell::new(0),
             focus: Cell::new(None),
             value: RefCell::new(String::new()),
@@ -187,6 +140,7 @@ impl Surface {
                 && let Some(s) = m.surface.upgrade()
             {
                 s.request_redraw();
+                m.queue_notifications();
             }
         });
         let draw = mounted.clone();
@@ -225,7 +179,6 @@ impl Surface {
                     surface
                         .set_redraw_delay(draw.host.next_deadline())
                         .map_err(|e| ui::Error(e.to_string()))?;
-                    draw.notify(&surface);
                     Ok::<_, ui::Error>(())
                 })();
                 if let Err(err) = result {
@@ -259,6 +212,7 @@ impl Surface {
                     }
                     Ok(())
                 });
+                events.queue_notifications();
             })),
             on_close_request: mounted.previous.on_close_request.clone(),
             on_closed: mounted.previous.on_closed.clone(),
@@ -271,6 +225,7 @@ impl Surface {
         })));
         self.state.failed.set(false);
         self.request_redraw();
+        mounted.queue_notifications();
         Ok(host)
     }
     pub fn view_host(&self) -> Option<ui::Host> {

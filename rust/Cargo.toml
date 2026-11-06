@@ -87,3 +87,8 @@ harness = false
 name = "control_accessibility"
 path = "tests/control_accessibility.rs"
 harness = false
+
+[[test]]
+name = "accessibility_lifecycle"
+path = "tests/accessibility_lifecycle.rs"
+harness = false

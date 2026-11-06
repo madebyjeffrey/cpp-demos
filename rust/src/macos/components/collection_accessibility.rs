@@ -118,6 +118,8 @@ define_class!(
         fn role(&self) -> Option<Retained<NSString>> {
             self.with(|_, _, _, _, _| unsafe { NSAccessibilityRowRole.retain() })
         }
+        #[unsafe(method_id(accessibilityRoleDescription))]
+        fn role_description(&self)->Option<Retained<NSString>>{self.accessibilityRole().and_then(|role|NSAccessibilityRoleDescription(&role,None))}
         #[unsafe(method_id(accessibilityIdentifier))]
         fn identifier(&self) -> Option<Retained<NSString>> {
             self.with(|_, _, node, _, item| {

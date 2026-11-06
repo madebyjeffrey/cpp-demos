@@ -158,11 +158,17 @@ pub(crate) fn hit_test(s: &Rc<SurfaceState>, point: NSPoint) -> Option<Retained<
             x: local.x,
             y: local.y,
         };
+        let nodes = m.host.snapshot()?;
         Ok(m.host
             .scene()?
             .iter()
             .rev()
-            .find(|n| semantic(n) && n.clip.contains(p) && n.bounds.contains(p))
+            .find(|n| {
+                semantic(n)
+                    && super::control_accessibility::readable(m, n, &nodes)
+                    && n.clip.contains(p)
+                    && n.bounds.contains(p)
+            })
             .map(|n| {
                 super::table_accessibility::logical(m, n.id, false)
                     .or_else(|| super::collection_accessibility::logical(m, n.id))
@@ -270,7 +276,7 @@ define_class!(
         #[unsafe(method_id(accessibilityIdentifier))]
         fn identifier(&self) -> Option<Retained<NSString>> {
             self.node()
-                .map(|n| ns(&n.key.unwrap_or_else(|| n.id.to_string())))
+                .map(|n| ns(&format!("node/{}/{}",n.id,n.key.as_deref().unwrap_or(""))))
         }
         #[unsafe(method(accessibilityFrame))]
         fn frame(&self) -> NSRect {

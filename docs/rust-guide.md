@@ -143,7 +143,9 @@ See the [tree semantic contracts](../rust/components/README.md#completion-m5--tr
 `cargo run --example m5_semantics` is a compact settings example combining tabs,
 menus, validated fields and an alert. Numeric/value fields expose validation
 without extra wiring; ordinary fields accept `validation:` and `accessible_help:`.
-`--semantics` prints metadata. See the [control semantic contracts](../rust/components/README.md#completion-m5--control-and-presentation-semantics).
+`--semantics` prints metadata. Native identity, scoped hit testing, real screen
+coordinates and posting without drawing are exercised by `accessibility_lifecycle`
+(the broader notification audit is still open). See the [control semantic contracts](../rust/components/README.md#completion-m5--control-and-presentation-semantics).
 
 `view!` supports ordinary expressions, `if`/`else`, keyed `for` loops, custom
 functions returning `View`, and `embed(view)` for an already-built value. Unknown

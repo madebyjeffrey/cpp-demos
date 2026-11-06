@@ -521,7 +521,7 @@ Completion record:
   Dark/light previews inspected and native example smoke passes. Actual interactive
   VoiceOver/IME and combined notifications remain M5.4/M5.5.
 
-- M5.3: fields/editors, toggles/checks/radios/segments, steppers/sliders, tabs,
+- M5.3 (`7461f52`): fields/editors, toggles/checks/radios/segments, steppers/sliders, tabs,
   splits, menus, dialogs/alerts, popovers and color wells expose their native
   roles/subroles and current values/actions. Stepper button links and directional
   availability, split bounds/adjacent contents, choice selection and alert
@@ -548,6 +548,29 @@ Completion record:
   dark/light previews inspected and native smoke passes. Count/range queries for
   tabs, selected children and splitters match their direct getters in native tests.
   Actual interactive/foreground and combined notification audits remain M5.4/M5.5/M8.
+
+M5.4 progress (unchecked):
+
+- Generic proxies now survive hidden retained pages and use globally unique native
+  identifiers; actual node retirement, unmount and close make held objects inert.
+  Nested dialogs preserve owner identity while suppressing inactive actions.
+  Hit testing rejects controls outside the active readable scope. Logical row/cell
+  objects also supply standard role descriptions.
+- AppKit frame conversion is verified on a real moved/resized window at actual
+  backing scale 1, including UTF-16 emoji rectangles and invalid surrogate ranges.
+  Retained proxies do not keep application callbacks alive after host teardown.
+- Posting is coalesced on the main runloop independently of drawing. The native
+  lifecycle test observes actual AppKit post calls with zero draw callbacks, checks
+  idle quiescence and cancellation after unmount. This proves emission, not receipt
+  by VoiceOver. `m5_semantics` remains the runnable example for tabs and dialogs.
+- Evidence: the dedicated native lifecycle suite and existing component/control/
+  tree/table native suites pass. Workspace tests, strict Clippy, formatting and
+  inventory mapping and native settings-example smoke pass.
+- Remaining closure: precise logical focus/selection/value targets and typed row/cell
+  selection, disclosure, row-count and destruction notifications; layout-change
+  payloads; distinct text-versus-selection diffs, including same-length secure edits.
+  Snapshot cost must stay bounded by mounted/observed objects rather than the full
+  virtual dataset. Actual external-client/backing-scale sessions remain M5.5.
 
 ## M6 — Localization and complete value controls
 
