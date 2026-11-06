@@ -24,6 +24,7 @@ extern crate self as scars_ui;
 
 mod alert;
 mod collections;
+mod color;
 mod control_semantics;
 mod date;
 mod datetime;
@@ -92,3 +93,5 @@ pub use wizard::{
 };
 
 pub use zoned::{RepeatedTimePolicy, ZoneChange, ZonedPicker};
+
+pub use color::{ColorChannel, ColorInfo, ColorModel, ColorPicker, Hsv};

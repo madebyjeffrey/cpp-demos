@@ -246,6 +246,9 @@ impl Host {
             i.hovered = None;
         }
         drop(i);
+        if !active {
+            self.retire_all_colors();
+        }
         self.blur_action(lost_focus);
         self.redraw();
     }

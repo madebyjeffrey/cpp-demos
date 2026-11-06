@@ -131,6 +131,7 @@ impl Notifications {
             s.max.hash(&mut h)
         }
         n.color_well.map(|c| c.0).hash(&mut h);
+        n.color_preview.map(|c| c.0).hash(&mut h);
         n.calendar_day.map(|d| d.selected).hash(&mut h);
         if let Some(c) = &n.combo {
             c.query.hash(&mut h);

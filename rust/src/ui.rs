@@ -430,6 +430,9 @@ impl Renderer {
             if let Some(bg) = bg {
                 round(canvas, b, n.style.radius, bg, false);
             }
+            if let Some(color) = n.color_preview {
+                color_swatch(canvas, b, n.clip, n.style.radius, color.0);
+            }
             match n.kind {
                 Kind::Button if n.menu_item.is_some() || n.table_cell.is_some() => (),
                 Kind::Button
@@ -862,6 +865,32 @@ fn round(canvas: &skia::Canvas, r: Rect, radius: f64, color: u32, stroke: bool) 
         p.set_style(skia::PaintStyle::Stroke).set_stroke_width(1.);
     }
     canvas.draw_round_rect(skrect(r), radius as f32, radius as f32, &p);
+}
+fn color_swatch(canvas: &skia::Canvas, b: Rect, clip: Rect, radius: f64, color: u32) {
+    canvas.save();
+    canvas.clip_rrect(
+        skia::RRect::new_rect_xy(skrect(b), radius as f32, radius as f32),
+        None,
+        true,
+    );
+    canvas.draw_rect(skrect(b), &paint(0xffffffff));
+    let visible = b.intersection(clip);
+    for y in ((visible.y - b.y) / 8.).floor().max(0.) as usize
+        ..((visible.y + visible.height - b.y) / 8.).ceil().max(0.) as usize
+    {
+        for x in ((visible.x - b.x) / 8.).floor().max(0.) as usize
+            ..((visible.x + visible.width - b.x) / 8.).ceil().max(0.) as usize
+        {
+            if x % 2 == y % 2 {
+                canvas.draw_rect(
+                    skrect(Rect::new(b.x + x as f64 * 8., b.y + y as f64 * 8., 8., 8.)),
+                    &paint(0xffbfbfbf),
+                );
+            }
+        }
+    }
+    canvas.draw_rect(skrect(b), &paint(color));
+    canvas.restore();
 }
 
 fn draw_scrollbars(canvas: &skia::Canvas, clip: Rect, info: ScrollInfo, color: u32) {

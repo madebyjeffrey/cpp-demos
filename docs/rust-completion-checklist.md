@@ -606,7 +606,7 @@ sessions, composing IME candidate placement and actual scale 2 remain open.
 - [x] **M6.2 Number/date localization:** integrate the chosen Rust services with representative decimal-comma, grouped and non-Latin-digit cases; localized labels/formatting must match the advertised editable grammar and retain exact integers.
 - [x] **M6.3 Date control:** bounds, disabled dates, custom validation, readonly/blur/submit policy, calendar keyboard navigation and synchronization after external value changes. The narrow calendar grid overflow was corrected in M6.2.
 - [x] **M6.4 Time and datetime controls:** dedicated hour/minute/second interactions, 12/24-hour policy, step sizes, optional seconds, local/instant bounds and combined validation; verify DST gaps/overlaps and named-zone changes without corrupting drafts.
-- [ ] **M6.5 Color control:** HSV as well as RGB, optional alpha, readonly and explicit transactional/live-preview behavior; cancel restores the source color, including through a color-well popup.
+- [x] **M6.5 Color control:** HSV as well as RGB, optional alpha, readonly and explicit transactional/live-preview behavior; cancel restores the source color, including through a color-well popup.
 - [ ] **M6.6 Shared draft lifecycle:** consistent apply/blur/cancel, dirty/incomplete/invalid/out-of-range reporting, external-change handling and callbacks across all typed value controls.
 
 Evidence: extend the value lab; round-trip, calendar-boundary, exact-value,
@@ -708,7 +708,7 @@ M6.4 local datetime checkpoint (`4124481`):
   compilation, formatting and inventory mapping pass.
 - Zoned completion follows below. No interactive speech/candidate checks are closed here.
 
-M6.4 zoned completion record:
+M6.4 zoned completion record (`b2a52c0`):
 
 - `ZonedPicker` binds `Timestamp` and owns its display zone, avoiding Jiff's
   instant-only `Zoned` equality dropping zone-only changes. It reuses one civil
@@ -738,6 +738,38 @@ M6.4 zoned completion record:
   readonly and retired objects, with invisible-window assertions.
 - Actual speech, IME candidate placement and foreground/Metal runs remain M5.5/M8;
   no skipped or protocol-only check is counted as that evidence.
+
+M6.5 completion record:
+
+- `ColorPicker` now owns one RGB/HSV/hex draft, numeric component fields/sliders,
+  model switching, alpha policy and checkerboard preview. Public HSV conversions
+  operate on encoded sRGB; the session retains hue through gray/black and saturation
+  intent through black. Rounded display does not reparse untouched HSV values.
+  Hidden alpha is preserved and explicit alpha input is rejected when disabled.
+- Transactional edits wait for Apply/Enter. Explicit live preview retains baseline
+  and last-owned source/revision; Cancel rolls back only that preview. Apply
+  finalizes without equal writes. External changes, rejected/normalized setters
+  and reentrant callbacks remain authoritative. Lifecycle cleanup runs outside
+  construction/borrows for hide, disable, collapse, removal, deactivation, unmount,
+  configuration changes and controller drop. Theme changes retain the session.
+- The well now uses an anchored/fitted/scrollable popover. Apply closes after
+  finalization; Cancel, outside and Escape restore the source. Existing popup
+  dismissal observers are preserved, and replacement presentations retire prior
+  preview ownership. Host color actions accept group/child IDs and refuse Apply
+  during marked text. Readonly retains model, focus and text selection.
+  Natural measurement/reflow now honor an explicit scroll height cap; the popover
+  exposes the full editor when space permits and scrolls in constrained viewports.
+- Eleven focused core tests cover conversion/limits, exact/retained HSV intent,
+  alpha, shared input, both publication modes, source authority, readonly and
+  lifetime/popup generations. Raster checks verify actual straight-alpha compositing
+  and transparent RGB preservation. The hidden native harness covers text/sliders,
+  RGB/HSV identity, composition, alpha validation, popover actions/rollback,
+  readonly and native unmount. Workspace tests, strict Clippy, portable Linux
+  compilation, formatting and inventory mapping pass; targeted core/native checks
+  also pass after final popover styling. `m6_color` is the runnable example, with
+  `--well` for the open popover. Dark/light inline and open-well previews inspected.
+  Foreground/interactive evidence remains M5.5/M8; native protocol/raster evidence
+  does not close those gates.
 
 ## M7 — Developer tools and application ergonomics
 

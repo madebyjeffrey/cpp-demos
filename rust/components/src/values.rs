@@ -111,62 +111,6 @@ pub(crate) fn localized_value_field<T: Clone + PartialEq + 'static>(
     }
     View::column(children)
 }
-#[derive(Clone)]
-pub struct ColorPicker {
-    value: Binding<Color>,
-    pub draft: Draft<Color>,
-}
-impl ColorPicker {
-    pub fn new(value: Binding<Color>) -> Self {
-        Self {
-            draft: Draft::new(value.clone(), |s| s.parse(), |v| v.to_string()),
-            value,
-        }
-    }
-    pub fn view(&self) -> View {
-        let color = self.value.get();
-        let mut children = vec![
-            View::panel(vec![View::label(color.to_string())])
-                .background(color.0)
-                .height(48),
-        ];
-        for (index, label) in ["Red", "Green", "Blue", "Alpha"].into_iter().enumerate() {
-            let read = self.value.clone();
-            let write = self.value.clone();
-            let binding = Binding::new(
-                move || read.get().channels()[index] as f64,
-                move |v: f64| {
-                    let mut channels = write.get().channels();
-                    channels[index] = v.round().clamp(0., 255.) as u8;
-                    write.set(Color::rgba(
-                        channels[0],
-                        channels[1],
-                        channels[2],
-                        channels[3],
-                    ));
-                },
-            );
-            children.push(View::row(vec![
-                View::label(label).width(48),
-                View::slider(binding, 0., 255., 1.)
-                    .accessible_label(label)
-                    .grow(1.),
-            ]));
-        }
-        children.push(value_field("sRGB · #RRGGBBAA", &self.draft));
-        View::column(children)
-    }
-    pub fn well(&self, popup: &crate::Popup, key: &str) -> (View, View) {
-        let open = popup.clone();
-        let color = self.value.get();
-        let mut button = View::button(color.to_string(), move || open.show())
-            .key(key)
-            .background(color.0)
-            .accessible_label("Color");
-        std::rc::Rc::make_mut(&mut button.0).color_well = Some(color);
-        (button, popup.modal("Color", self.view()))
-    }
-}
 pub fn time_draft(value: Binding<Time>) -> Draft<Time> {
     Draft::new(value, parse_time, |v| v.to_string())
 }

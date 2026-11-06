@@ -194,3 +194,42 @@ inferred. Readonly disables editing, occurrence application and zone changes.
 Configure locale, bounds and validators before mounting. `binding`, `validation`,
 `commit`, `cancel`, callbacks, stepping and calendar inspection follow the civil
 control. `m6_zoned` demonstrates fold/gap setup, instant bounds and zone changes.
+
+## Color control
+
+`ColorPicker` shares one RGB/HSV/hex session. Byte inputs use finite whole ASCII
+values 0–255. HSV inputs use degrees 0–360 and saturation/value percentages 0–100.
+`Hsv` and `Color::hsv`/`from_hsv` instead use saturation/value fractions 0–1; invalid
+or nonfinite coordinates fail. Conversion uses encoded 8-bit sRGB and nearest-byte
+rounding with straight alpha. Hue survives gray/black, and saturation intent survives
+black separately from color bytes. Three-decimal field display does not overwrite
+untouched HSV precision when another field changes.
+
+Hex accepts only `#RRGGBB`/`#RRGGBBAA`, matching the `Color` parser. With alpha
+enabled, six digits mean opaque. With `alpha(false)`, six digits retain the source's
+alpha and explicit alpha input is rejected. Transparent values retain their RGB
+payload. Checkered swatches show the actual alpha composite in either theme.
+
+The default is transactional: fields/sliders update the shared draft and preview;
+Apply/Enter publishes a valid whole candidate, while Cancel/Escape restores it.
+Blur retains unfinished text. Composition confirms before a subsequent Enter
+submits; host Apply refuses while a color field has marked text. Invalid text stays
+editable and blocks model/slider changes and edits through the other representation.
+`Incomplete`, `Invalid`, `OutOfRange`, dirty state and rejected setters are exposed.
+Apply can retry a rejected setter; accepted normalization is read back.
+
+`live_preview(true)` publishes valid edits before Apply. Cancel requests restoration
+only while the source still matches the last owned preview/revision; external
+changes (including revisioned A→B→A) replace the draft and drop rollback ownership.
+Apply finalizes the preview without repeating an equal model write. Hide, disable,
+collapse, removal, deactivation, unmount and final controller drop retire unfinished
+sessions. Cleanup runs outside construction/borrows; reentrant application changes
+stay authoritative. Configure policy before mounting. Readonly retains selectable
+text while disabling color-changing controls; theme changes preserve the session.
+
+`well(&popup, key)` uses the same editor in an anchored, scrollable popover. Apply
+finalizes/closes, Cancel and outside/Escape dismissal roll back, and existing popup
+dismissal callbacks are retained. A replacement presentation retires the previous
+session. Retain one picker per independent editor session; multiple pickers can
+share a source. `info()` provides source/original/draft, HSV, model and validation.
+`m6_color` demonstrates inline transactional/live editors and a well.

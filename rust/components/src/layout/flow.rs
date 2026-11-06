@@ -315,7 +315,12 @@ impl Tree<'_> {
                 }
                 natural = extent + heading + s.padding.vertical();
                 if n.kind == Kind::Scroll && s.height == Length::Auto {
-                    natural = natural.min(height.unwrap_or(240.));
+                    let preferred = if s.max_height.is_finite() {
+                        s.max_height
+                    } else {
+                        240.
+                    };
+                    natural = natural.min(height.unwrap_or(preferred));
                 }
             }
             // Absolute content does not size its parent, but still needs width reflow.

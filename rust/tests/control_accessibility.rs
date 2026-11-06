@@ -371,8 +371,7 @@ fn main() {
         let pressed: bool = msg_send![&*well, accessibilityPerformPress];
         assert!(pressed);
         let dialog = find(native, "Color");
-        let subrole: Retained<NSString> = msg_send![&*dialog, accessibilitySubrole];
-        assert_eq!(subrole.to_string(), "AXDialog");
+        role(&dialog, "AXPopover");
         let _: bool = msg_send![&*dialog, accessibilityPerformCancel];
         assert!(!popup.open.get());
     }

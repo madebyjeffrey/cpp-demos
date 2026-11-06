@@ -243,8 +243,10 @@ ISO date/time drafts, named-zone editing and a live inspector. `cargo run --exam
 lab` provides a small control catalog. Both support `--light`, `--render file.png`
 and `--smoke`; render mode additionally accepts `--inspect` for bounds output.
 
-`ColorPicker` and its `well` composition share a typed `Color` binding. Hex editing
-accepts `#RRGGBB` or `#RRGGBBAA`; the stored u32 uses ARGB. `DatePicker` uses Gregorian
+`ColorPicker` and its `well` composition share a typed `Color` binding and one
+RGB/HSV/hex session. Transactional editing is the default; live preview is explicit
+and cancellation rolls back only owned previews. Hex accepts `#RRGGBB`/`#RRGGBBAA`;
+the stored u32 uses straight ARGB. See M6.5 below. `DatePicker` uses Gregorian
 calendar values. Time/local datetime editing uses explicit ISO syntax. Jiff supplies
 civil validation and a bundled timezone database in Rust, alongside ICU4X's Unicode
 and localized integer services. The lockfile pins the data version; upgrading it
@@ -1568,3 +1570,57 @@ rejected setters and callback authority. The hidden native `zoned_picker` harnes
 covers actual text/AX transport, policy/occurrence/zone actions, errors, retained
 field identity, composition-before-submit, readonly and retired objects. Actual
 VoiceOver/IME candidate and visible rendering evidence remain M5.5/M8.
+
+## M6.5 — color control
+
+```rust
+let picker = ColorPicker::new(paint.binding()); // transactional
+let preview = ColorPicker::new(other.binding())
+    .model(ColorModel::Hsv)
+    .alpha(false)
+    .live_preview(true);
+// In a builder: embed(picker.view());
+let (button, popover) = picker.well(&popup, "paint");
+```
+
+RGB/HSV fields, sliders and hex share a draft. Apply/Enter publishes the valid
+whole color; Cancel/Escape discards it. Blur retains unfinished text. Marked text
+confirms first, and `Host::apply_color(id)` refuses while a color field composes.
+`Host::cancel_color` and `color_validation` also accept the group or a descendant.
+Invalid text blocks switching models/sliders and the other input representation
+while leaving the offending fields editable. Rejected setters retain feedback and
+allow Apply to retry; accepted normalization and newer callback values win.
+
+RGB/alpha channels use whole bytes 0–255. Hue uses degrees 0–360; saturation/value
+fields and `ColorChannel` use percentages 0–100. Public `Hsv` uses fractions 0–1;
+`Color::hsv()`/`from_hsv()` convert encoded sRGB with nearest-byte rounding. Hue survives
+gray/black and saturation intent survives black; untouched precision survives rounded
+three-decimal field display. Hidden alpha is preserved; explicit alpha hex input
+fails when disabled. Checkered previews preserve transparent RGB payloads.
+
+`live_preview(true)` publishes valid edits but retains the original source until
+Apply finalizes the session. Cancel requests rollback only if the source/revision
+still matches the last owned preview. External changes reset the draft and drop
+ownership, including A→B→A with State or revisioned custom bindings. Reentrant
+setters/callbacks can supersede actions without a subsequent stale write.
+Hide/disable/collapse/removal/deactivation/unmount and controller drop retire
+unfinished sessions outside construction/borrows. Policy builders run before
+mounting; readonly disables edits while retaining selectable text. Theme changes
+preserve the session. Retain one picker per independent editor session.
+
+`well` opens the editor in an anchored popover with scrolling/fitting and focus
+restoration. Apply finalizes/closes; Cancel, outside and Escape cancel it. Existing
+Popup dismissal observers are retained, and a reopened generation cannot inherit
+the prior preview. This replaces the prototype's immediate channel writes and
+public `draft` with `binding()`, `validation()`, `info()`, `commit()`, `cancel()`,
+`set_component()`, `set_model()` and optional validation/submit/cancel callbacks.
+
+`cargo run --example m6_color` demonstrates transactional/live/alpha and well
+behavior. Focused core tests cover conversion, precision, shared editing, source
+authority and ownership/lifetime transitions. A raster test checks actual alpha
+compositing; hidden native tests cover RGB/HSV fields/sliders, retained identity,
+composition, alpha validation, popup rollback/Apply, readonly and unmount. Actual
+VoiceOver/IME candidate and visible GPU evidence remain M5.5/M8.
+
+Use `--well` to start with the color popover open. It sizes to its content up to
+the configured maximum height and scrolls when the viewport is constrained.

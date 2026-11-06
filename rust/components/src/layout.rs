@@ -251,6 +251,7 @@ impl Host {
         self.reconcile_table_capture();
         self.reconcile_capture();
         self.reconcile_fields();
+        self.reconcile_colors();
         if let Some((id, rect)) = reveal_caret {
             self.reveal_rect(id, rect);
         }
@@ -648,6 +649,8 @@ impl Tree<'_> {
         if n.kind == Kind::Scroll && s.height == Length::Auto {
             size.height = size.height.min(if available.height.is_finite() {
                 available.height
+            } else if s.max_height.is_finite() {
+                s.max_height
             } else {
                 240.
             });

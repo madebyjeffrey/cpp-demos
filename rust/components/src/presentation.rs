@@ -25,6 +25,22 @@ impl Popup {
         self.close = Some(std::rc::Rc::new(callback));
         self
     }
+    pub(crate) fn generation(&self) -> u64 {
+        self.menu.generation()
+    }
+    pub(crate) fn before_dismiss(
+        mut self,
+        callback: impl Fn(crate::DismissReason) + 'static,
+    ) -> Self {
+        let prior = self.close.take();
+        self.close = Some(std::rc::Rc::new(move |reason| {
+            callback(reason);
+            if let Some(prior) = &prior {
+                prior(reason);
+            }
+        }));
+        self
+    }
     pub fn button(&self, label: impl Into<String>, anchor: impl Into<String>) -> View {
         let popup = self.clone();
         View::button(label, move || popup.toggle()).key(anchor.into())
@@ -90,7 +106,11 @@ impl Popup {
         let close = self.clone();
         self.attach(View::popover(
             anchor,
-            vec![View::scroll(vec![body]).scrollbars(true)],
+            vec![
+                View::scroll(vec![body])
+                    .max_height(self.options.max_height)
+                    .scrollbars(true),
+            ],
             move || close.dismiss(),
         ))
     }

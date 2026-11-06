@@ -254,6 +254,7 @@ define_class!(
         fn role(&self) -> Option<Retained<NSString>> {
             self.node().map(|n| {
                 if n.color_well.is_some(){unsafe{NSAccessibilityColorWellRole.retain()}}
+                else if n.color_preview.is_some(){unsafe{NSAccessibilityImageRole.retain()}}
                 else if n.table_root.is_some() {unsafe {NSAccessibilityTableRole.retain()}}
                 else if n.menu.as_ref().is_some_and(|m|m.trigger){unsafe{NSAccessibilityMenuButtonRole.retain()}}
                 else if n.kind==Kind::Modal&&n.anchor.is_some()&&!n.menu_root&&n.combo_popup.is_none(){unsafe{NSAccessibilityPopoverRole.retain()}}

@@ -176,6 +176,11 @@ demonstrates joint overnight bounds without intermediate application writes.
 provides the same calendar/clock with instant bounds and explicit display-zone
 changes. `m6_zoned` demonstrates gaps/folds and KeepInstant versus KeepLocal.
 
+`ColorPicker::new(paint.binding())` stages RGB/HSV/hex changes until Apply/Enter.
+`live_preview(true)` publishes valid edits and rolls back only owned previews on
+Cancel. `alpha(false)` preserves hidden alpha. `m6_color` shows these policies and
+an anchored well; use one picker per independent editing session.
+
 See [component contracts](../rust/components/README.md) for layouts, controls,
 selection, popup placement, virtual models, deadlines, native semantics and
 inspection. [Window contracts](../rust/README.md) cover ownership and rendering.

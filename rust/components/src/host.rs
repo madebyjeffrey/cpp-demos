@@ -82,6 +82,8 @@ pub struct Node {
     pub help: String,
     pub validation: Option<crate::Validation>,
     pub color_well: Option<crate::Color>,
+    pub color_preview: Option<crate::Color>,
+    pub color_picker: Option<crate::ColorInfo>,
     pub focused: bool,
     pub pressed: bool,
     pub hovered: bool,
@@ -157,6 +159,16 @@ pub(crate) struct Inner {
 }
 impl Drop for Inner {
     fn drop(&mut self) {
+        let colors = self
+            .mounted
+            .get_mut()
+            .descriptions
+            .values()
+            .filter_map(|d| d.color_picker.clone())
+            .collect::<Vec<_>>();
+        for color in colors {
+            crate::state::cleanup(move || color.retire());
+        }
         let models = self
             .mounted
             .get_mut()
@@ -375,6 +387,7 @@ impl Host {
             }
         }
         self.retire_table_edits(&old);
+        self.retire_colors(&old);
         self.restore_collection_focus(prior_focus, &old);
         self.restore_calendar_focus(prior_focus, &old);
         drop(old);
@@ -473,6 +486,9 @@ impl Host {
             header.model.toggle_sort(&header.column, false)?;
             self.redraw();
             return Ok(true);
+        }
+        if let Some(action) = d.color_action {
+            return self.color_action(id, action);
         }
         if let Some(combo) = d.combo_action.as_ref().or(d.combo.as_ref()) {
             return self.toggle_combo(id, combo);
@@ -776,6 +792,8 @@ fn mount(
             .unwrap_or_else(|| d.tooltip.clone()),
         validation: d.validation.clone(),
         color_well: d.color_well,
+        color_preview: d.color_preview,
+        color_picker: d.color_picker.as_ref().map(crate::ColorPicker::info),
         label: if d.accessible.is_empty() {
             d.text.clone()
         } else {

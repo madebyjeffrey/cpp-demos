@@ -127,3 +127,8 @@ harness = false
 name = "zoned_picker"
 path = "tests/zoned_picker.rs"
 harness = false
+
+[[test]]
+name = "color_picker"
+path = "tests/color_picker.rs"
+harness = false
